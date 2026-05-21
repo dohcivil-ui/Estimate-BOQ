@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reference Prototype — Drawing Measurement Engine</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{--bg:#0d0f14;--panel:#14171f;--panel2:#1b1f29;--line:#2a3040;--ink:#e7ebf2;--muted:#8b94a7;--faint:#5b6376;--accent:#ff9e2c;--accent2:#38d6c8;--danger:#ff5d6c;--ok:#5ad17a;--mono:'Consolas',monospace;--ui:system-ui,sans-serif}
+  *{box-sizing:border-box;margin:0;padding:0}html,body{height:100%}
+  body{background:var(--bg);color:var(--ink);font-family:var(--ui);font-size:13px;overflow:hidden}
+  button{font-family:var(--ui);cursor:pointer;color:var(--ink);background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:6px 10px;font-size:12px}
+  button:hover{border-color:var(--faint)}button.on{background:var(--accent);color:#191100;border-color:var(--accent);font-weight:600}
+  input,select{font-family:var(--mono);background:#0c0e13;color:var(--ink);border:1px solid var(--line);border-radius:5px;padding:5px 7px;font-size:12px;width:100%}
+  .num{font-family:var(--mono)}
+  #app{display:grid;grid-template-rows:auto 1fr auto;height:100vh}
+  header{display:flex;align-items:center;gap:12px;padding:8px 14px;background:#11141b;border-bottom:1px solid var(--line)}
+  header .logo{font-weight:700}header .logo b{color:var(--accent)}
+  .toolbar{display:flex;gap:5px;flex-wrap:wrap}.tool{width:48px;padding:6px 2px;font-size:10px}
+  .sep{width:1px;height:30px;background:var(--line)}
+  main{display:grid;grid-template-columns:140px 1fr 340px;overflow:hidden}
+  .pages{background:var(--panel);border-right:1px solid var(--line);overflow-y:auto;padding:8px}
+  .pages h4,.side h4{font-size:10px;color:var(--faint);text-transform:uppercase;letter-spacing:1px;margin:4px 2px 8px}
+  .thumb{border:1px solid var(--line);border-radius:6px;margin-bottom:8px;overflow:hidden;cursor:pointer;background:#0c0e13}
+  .thumb.on{border-color:var(--accent)}.thumb canvas{display:block;width:100%}
+  .thumb .cap{font-size:10px;color:var(--muted);padding:3px 6px;font-family:var(--mono);display:flex;justify-content:space-between}
+  .stage{position:relative;background:#07080b;overflow:hidden}#cv{position:absolute;inset:0}
+  .empty{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:var(--faint)}
+  .drop{border:2px dashed var(--line);border-radius:14px;padding:30px 44px;text-align:center}.drop.hot{border-color:var(--accent)}
+  .hud{position:absolute;left:10px;bottom:10px;background:#0b0d12cc;border:1px solid var(--line);border-radius:7px;padding:6px 10px;font-family:var(--mono);font-size:11px;color:var(--muted);display:flex;gap:12px}
+  .hud b{color:var(--accent2)}
+  .scaletag{position:absolute;right:10px;top:10px;background:#0b0d12cc;border:1px solid var(--line);border-radius:7px;padding:6px 10px;font-family:var(--mono);font-size:11px}
+  .scaletag.unset{color:var(--danger)}.scaletag.set{color:var(--ok)}
+  .side{background:var(--panel);border-left:1px solid var(--line);display:flex;flex-direction:column;overflow:hidden}
+  .tabs{display:flex;border-bottom:1px solid var(--line)}.tabs button{flex:1;border:0;border-radius:0;border-bottom:2px solid transparent;background:transparent;color:var(--muted);padding:9px 4px}
+  .tabs button.on{color:var(--ink);border-bottom-color:var(--accent)}.pane{flex:1;overflow:auto;padding:10px;display:none}.pane.on{display:block}
+  table{width:100%;border-collapse:collapse;font-size:11px}th{text-align:left;color:var(--faint);font-size:10px;padding:6px;border-bottom:1px solid var(--line)}
+  td{padding:5px 6px;border-bottom:1px solid #1d2230}tr.row{cursor:pointer}tr.row:hover{background:#ffffff06}tr.row.sel{background:#38d6c81a}
+  .chip{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px}.t-r{text-align:right}.del{color:var(--danger);background:transparent;border:0}
+  .field{margin-bottom:8px}.field label{display:block;font-size:10px;color:var(--muted);margin-bottom:3px}.row2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .card{background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:10px;margin-bottom:10px}
+  .total{display:flex;justify-content:space-between;padding:10px;background:var(--panel2);border:1px solid var(--line);border-radius:9px;margin-top:6px}
+  .total .v{font-family:var(--mono);font-size:18px;font-weight:600;color:var(--accent)}
+  .hint{font-size:10px;color:var(--faint);line-height:1.5;margin:6px 0}.prim{background:var(--accent);color:#191100;border-color:var(--accent);font-weight:600}
+  footer{padding:5px 14px;background:#10131a;border-top:1px solid var(--line);font-family:var(--mono);font-size:11px;color:var(--muted)}
+  .modal-bg{position:fixed;inset:0;background:#000a;display:none;align-items:center;justify-content:center}.modal{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px;width:320px}
+  .banner{background:#2a1f0a;border-bottom:1px solid #5a4a1a;color:#ffcf8a;font-size:11px;padding:5px 14px;text-align:center}
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="banner">📎 Reference Prototype — ใช้อ้างอิงพฤติกรรม UI/UX เท่านั้น (ของจริงสร้างด้วย React+TS+Konva ตาม prompt.md)</div>
+  <header>
+    <div class="logo"><b>BOQ</b> Reference</div><div class="sep"></div>
+    <div class="toolbar" id="tools"></div>
+    <div style="flex:1"></div>
+    <button class="tool" id="bSnap">🧲</button><button class="tool" id="bFit">⛶</button>
+    <button class="prim" id="bLoad">＋ เปิดแบบ</button>
+    <input type="file" id="file" accept=".jpg,.jpeg,.png,.pdf" style="display:none">
+  </header>
+  <main>
+    <aside class="pages"><h4>หน้าแบบ</h4><div id="thumbs"></div></aside>
+    <section class="stage" id="stage">
+      <canvas id="cv"></canvas>
+      <div class="empty" id="empty"><div class="drop" id="drop"><div style="font-size:40px;opacity:.4">▣</div><div style="margin-top:8px">ลากไฟล์ PDF/JPG/PNG มาวาง</div></div></div>
+      <div class="scaletag unset" id="scaleTag">scale: ยังไม่ตั้ง</div>
+      <div class="hud"><span>x <b id="hx">–</b></span><span>y <b id="hy">–</b></span><span>zoom <b id="hz">100%</b></span></div>
+    </section>
+    <aside class="side">
+      <div class="tabs"><button class="on" data-p="m">วัด</button><button data-p="b">BOQ</button></div>
+      <div class="pane on" id="paneM"><h4>Measurements</h4><table id="mTable"><thead><tr><th>#</th><th>ชื่อ</th><th>ชนิด</th><th class="t-r">ปริมาณ</th><th></th></tr></thead><tbody></tbody></table><p class="hint" id="mHint">เลือกเครื่องมือแล้วคลิกบนแบบ (polygon: ดับเบิลคลิก/Enter ปิดรูป)</p></div>
+      <div class="pane" id="paneB">
+        <div class="card"><div class="field"><label>measurement</label><select id="bSrc"></select></div>
+          <div class="row2"><div class="field"><label>ราคา/หน่วย</label><input id="bPrice" value="0"></div><div class="field"><label>เผื่อเสีย %</label><input id="bWaste" value="0"></div></div>
+          <div class="field"><label>รายการ</label><input id="bDesc" placeholder="เช่น พื้นกระเบื้อง"></div>
+          <button class="prim" id="bAdd" style="width:100%">เพิ่มเข้า BOQ</button></div>
+        <table id="boqTable"><thead><tr><th>รายการ</th><th class="t-r">ปริมาณ</th><th>นก.</th><th class="t-r">รวม</th><th></th></tr></thead><tbody></tbody></table>
+        <div class="total"><span>รวม</span><span class="v num" id="grand">฿0.00</span></div>
+        <button class="prim" id="bExport" style="width:100%;margin-top:10px">⬇ Export Excel</button>
+        <p class="hint">คลิกแถว BOQ เพื่อ highlight measurement บนแบบ</p>
+      </div>
+    </aside>
+  </main>
+  <footer id="modeTxt">โหมด: เลือก · Enter ปิดรูป · Esc ยกเลิก · Del ลบ</footer>
+</div>
+<div class="modal-bg" id="scaleModal"><div class="modal"><h3 style="margin-bottom:12px">ตั้ง Scale</h3><p class="hint">ระยะที่ลาก = <b class="num" id="smPx">0</b> px</p><div class="row2"><div class="field"><label>ระยะจริง</label><input id="smReal" value="1.00"></div><div class="field"><label>หน่วย</label><select id="smUnit"><option value="m">m</option><option value="mm">mm</option></select></div></div><div style="display:flex;gap:8px;margin-top:6px"><button id="smCancel" style="flex:1">ยกเลิก</button><button class="prim" id="smOk" style="flex:1">ตั้งค่า</button></div></div></div>
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+const S={pages:[],pi:-1,tool:'select',snap:true,zoom:1,panX:0,panY:0,draft:null,sel:null,dragVtx:null,dragPan:null,hoverSnap:null,boq:[],idc:0};
+const COLORS=['#ff9e2c','#38d6c8','#5aa0ff','#c98bff','#ff7aa8','#7ad17a'];
+const TOOLS=[['select','▣'],['scale','⟂'],['line','╱'],['polygon','⬡'],['rect','▭'],['count','◉'],['pan','✋']];
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d'),stage=document.getElementById('stage'),empty=document.getElementById('empty'),$=id=>document.getElementById(id);
+const tb=$('tools');TOOLS.forEach(([k,ic])=>{const b=document.createElement('button');b.className='tool';b.dataset.k=k;b.textContent=ic;b.onclick=()=>setTool(k);tb.appendChild(b);});
+function setTool(k){S.tool=k;finishDraft(false);[...tb.children].forEach(b=>b.classList.toggle('on',b.dataset.k===k));cv.style.cursor=k==='pan'?'grab':k==='select'?'default':'crosshair';draw();}
+setTool('select');
+const toScr=p=>({x:p.x*S.zoom+S.panX,y:p.y*S.zoom+S.panY}),toPage=(ex,ey)=>({x:(ex-S.panX)/S.zoom,y:(ey-S.panY)/S.zoom});
+function curPage(){return S.pages[S.pi]||null;}
+$('bLoad').onclick=()=>$('file').click();$('file').onchange=e=>{if(e.target.files[0])loadFile(e.target.files[0]);};
+const drop=$('drop');['dragover','dragenter'].forEach(t=>stage.addEventListener(t,e=>{e.preventDefault();drop.classList.add('hot');}));['dragleave','drop'].forEach(t=>stage.addEventListener(t,e=>{e.preventDefault();drop.classList.remove('hot');}));
+stage.addEventListener('drop',e=>{if(e.dataTransfer.files[0])loadFile(e.dataTransfer.files[0]);});
+async function loadFile(f){const ext=f.name.split('.').pop().toLowerCase();if(['dwg','dwf'].includes(ext)){alert('DWG/DWF: export เป็น PDF ก่อน');return;}
+  if(ext==='pdf'){const buf=await f.arrayBuffer();const pdf=await pdfjsLib.getDocument({data:buf}).promise;for(let i=1;i<=pdf.numPages;i++){const pg=await pdf.getPage(i);const vp=pg.getViewport({scale:2});const c=document.createElement('canvas');c.width=vp.width;c.height=vp.height;await pg.render({canvasContext:c.getContext('2d'),viewport:vp}).promise;addPage(c);}}
+  else{const img=new Image();img.onload=()=>{const c=document.createElement('canvas');c.width=img.width;c.height=img.height;c.getContext('2d').drawImage(img,0,0);addPage(c);};img.src=URL.createObjectURL(f);}}
+function addPage(canvas){S.pages.push({img:canvas,w:canvas.width,h:canvas.height,ppm:null,measurements:[]});buildThumbs();if(S.pi<0){S.pi=0;empty.style.display='none';fit();}refresh();}
+function buildThumbs(){const w=$('thumbs');w.innerHTML='';S.pages.forEach((p,i)=>{const d=document.createElement('div');d.className='thumb'+(i===S.pi?' on':'');const tc=document.createElement('canvas');const r=124/p.w;tc.width=124;tc.height=p.h*r;tc.getContext('2d').drawImage(p.img,0,0,tc.width,tc.height);d.appendChild(tc);const cap=document.createElement('div');cap.className='cap';cap.innerHTML=`<span>หน้า ${i+1}</span><span>${p.ppm?'✓':'⚠'}</span>`;d.appendChild(cap);d.onclick=()=>{S.pi=i;S.sel=null;buildThumbs();fit();refresh();};w.appendChild(d);});}
+function resize(){const r=stage.getBoundingClientRect();cv.width=r.width;cv.height=r.height;draw();}window.addEventListener('resize',resize);
+function fit(){const p=curPage();if(!p)return;const z=Math.min((cv.width-40)/p.w,(cv.height-40)/p.h);S.zoom=z;S.panX=(cv.width-p.w*z)/2;S.panY=(cv.height-p.h*z)/2;draw();}
+$('bFit').onclick=fit;
+stage.addEventListener('wheel',e=>{e.preventDefault();const p=curPage();if(!p)return;const f=e.deltaY<0?1.12:1/1.12,mx=e.offsetX,my=e.offsetY,b=toPage(mx,my);S.zoom*=f;S.panX=mx-b.x*S.zoom;S.panY=my-b.y*S.zoom;draw();},{passive:false});
+function snapPoint(pp,ex,ey){S.hoverSnap=null;if(!S.snap)return pp;const p=curPage();if(!p)return pp;let best=null,bd=11;const con=v=>{const s=toScr(v);const d=Math.hypot(s.x-ex,s.y-ey);if(d<bd){bd=d;best={x:v.x,y:v.y};}};p.measurements.forEach(m=>(m.geometry.points||[]).forEach(con));if(S.draft)(S.draft.geometry.points||[]).forEach(con);if(best){S.hoverSnap=best;return best;}return pp;}
+function pathLen(pts){let L=0;for(let i=1;i<pts.length;i++)L+=Math.hypot(pts[i].x-pts[i-1].x,pts[i].y-pts[i-1].y);return L;}
+function polyArea(pts){let a=0;for(let i=0,n=pts.length;i<n;i++){const j=(i+1)%n;a+=pts[i].x*pts[j].y-pts[j].x*pts[i].y;}return Math.abs(a)/2;}
+function computeQty(m){const p=curPage();const ppm=p?p.ppm:null;const g=m.geometry,pts=g.points||[];if(m.type==='count')return{q:(g.markers||[]).length,u:'จุด'};if(!ppm)return{q:0,u:m.type==='line'?'m':'m²'};if(m.type==='line')return{q:pathLen(pts)/ppm,u:'m'};if(m.type==='polygon')return{q:polyArea(pts)/(ppm*ppm),u:'m²'};if(m.type==='rect'){const w=Math.abs(pts[2].x-pts[0].x)/ppm,h=Math.abs(pts[2].y-pts[0].y)/ppm;return{q:w*h,u:'m²'};}return{q:0,u:''};}
+const fmt=(n,d=2)=>Number(n).toLocaleString('th-TH',{minimumFractionDigits:d,maximumFractionDigits:d});
+let lastE={x:0,y:0};
+cv.addEventListener('mousedown',e=>{const p=curPage();if(!p)return;const ex=e.offsetX,ey=e.offsetY,pp=toPage(ex,ey);if(S.tool==='pan'){S.dragPan={x:ex,y:ey,px:S.panX,py:S.panY};return;}const sp=snapPoint(pp,ex,ey);
+  if(S.tool==='select'){const hv=hitVertex(ex,ey);if(hv){S.dragVtx=hv;return;}const m=hitM(ex,ey);S.sel=m?m.id:null;refresh();draw();return;}
+  if(S.tool==='scale'||S.tool==='line'){if(!S.draft||S.draft.type!==S.tool){S.draft={type:S.tool,geometry:{points:[{...sp}]}};}else{S.draft.geometry.points.push({...sp});if(S.draft.geometry.points.length>=2)finishDraft(true);}return;}
+  if(S.tool==='polygon'){if(!S.draft||S.draft.type!=='polygon'){S.draft={type:'polygon',geometry:{points:[{...sp}]}};}else S.draft.geometry.points.push({...sp});return;}
+  if(S.tool==='rect'){S.draft={type:'rect',geometry:{points:[{...sp},{...sp},{...sp},{...sp}]},_drag:true};return;}
+  if(S.tool==='count'){if(!S.draft||S.draft.type!=='count')S.draft={type:'count',geometry:{markers:[]}};S.draft.geometry.markers.push({...pp});draw();return;}});
+cv.addEventListener('mousemove',e=>{const ex=e.offsetX,ey=e.offsetY;lastE={x:ex,y:ey};const p=curPage();if(p){const pp=toPage(ex,ey);$('hx').textContent=pp.x.toFixed(0);$('hy').textContent=pp.y.toFixed(0);}$('hz').textContent=Math.round(S.zoom*100)+'%';
+  if(S.dragPan){S.panX=S.dragPan.px+(ex-S.dragPan.x);S.panY=S.dragPan.py+(ey-S.dragPan.y);draw();return;}
+  if(S.dragVtx){const sp=snapPoint(toPage(ex,ey),ex,ey);S.dragVtx.m.geometry.points[S.dragVtx.i]={...sp};if(S.dragVtx.m.type==='rect'){const pts=S.dragVtx.m.geometry.points,a=pts[0],c=pts[2];S.dragVtx.m.geometry.points=[{x:a.x,y:a.y},{x:c.x,y:a.y},{x:c.x,y:c.y},{x:a.x,y:c.y}];}refresh();draw();return;}
+  if(S.draft&&S.draft._drag){const sp=snapPoint(toPage(ex,ey),ex,ey),a=S.draft.geometry.points[0];S.draft.geometry.points=[{...a},{x:sp.x,y:a.y},{x:sp.x,y:sp.y},{x:a.x,y:sp.y}];draw();return;}
+  if(['line','polygon','scale'].includes(S.tool)&&S.draft){snapPoint(toPage(ex,ey),ex,ey);draw();return;}if(S.snap){snapPoint(toPage(ex,ey),ex,ey);draw();}});
+window.addEventListener('mouseup',()=>{if(S.dragPan)S.dragPan=null;if(S.dragVtx)S.dragVtx=null;if(S.draft&&S.draft._drag){if(S.draft.type==='rect'){commit(S.draft);S.draft=null;}}});
+cv.addEventListener('dblclick',()=>{if(S.tool==='polygon')finishDraft(true);});
+function finishDraft(c){if(!S.draft)return;const d=S.draft;if(c){if(d.type==='scale'&&d.geometry.points.length>=2){openScale(d);S.draft=null;draw();return;}const min=d.type==='polygon'?3:2;if((d.type==='count'&&d.geometry.markers.length)||(d.geometry.points&&d.geometry.points.length>=min)){if(d.type==='polygon')d.geometry.points.push(d.geometry.points[0]);commit(d);}}S.draft=null;draw();}
+function commit(d){const p=curPage();const col=COLORS[p.measurements.length%COLORS.length];const m={id:'m'+(++S.idc),type:d.type,geometry:d.geometry,color:col,label:({line:'เส้น',polygon:'พื้นที่',rect:'สี่เหลี่ยม',count:'นับ'})[d.type]+' '+(p.measurements.length+1),pageIdx:S.pi};p.measurements.push(m);S.sel=m.id;refresh();draw();}
+function hitVertex(ex,ey){const p=curPage();if(!p||!S.sel)return null;const m=p.measurements.find(x=>x.id===S.sel);if(!m||!m.geometry.points)return null;for(let i=0;i<m.geometry.points.length;i++){const s=toScr(m.geometry.points[i]);if(Math.hypot(s.x-ex,s.y-ey)<8)return{m,i};}return null;}
+function hitM(ex,ey){const p=curPage();if(!p)return null;for(let k=p.measurements.length-1;k>=0;k--){const m=p.measurements[k];if(m.type==='count'){if((m.geometry.markers||[]).some(mk=>{const s=toScr(mk);return Math.hypot(s.x-ex,s.y-ey)<9;}))return m;continue;}const pts=m.geometry.points||[];if((m.type==='polygon'||m.type==='rect')&&inPoly(ex,ey,pts))return m;for(let i=1;i<pts.length;i++){if(distSeg(ex,ey,toScr(pts[i-1]),toScr(pts[i]))<7)return m;}}return null;}
+function inPoly(ex,ey,pts){let c=false;for(let i=0,j=pts.length-1;i<pts.length;j=i++){const a=toScr(pts[i]),b=toScr(pts[j]);if(((a.y>ey)!=(b.y>ey))&&(ex<(b.x-a.x)*(ey-a.y)/(b.y-a.y)+a.x))c=!c;}return c;}
+function distSeg(px,py,a,b){const dx=b.x-a.x,dy=b.y-a.y,l2=dx*dx+dy*dy||1;let t=((px-a.x)*dx+(py-a.y)*dy)/l2;t=Math.max(0,Math.min(1,t));return Math.hypot(px-(a.x+t*dx),py-(a.y+t*dy));}
+window.addEventListener('keydown',e=>{if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT')return;if(e.key==='Enter')finishDraft(true);else if(e.key==='Escape'){S.draft=null;draw();}else if(e.key==='Backspace'&&S.draft&&S.draft.geometry.points){S.draft.geometry.points.pop();draw();}else if(e.key==='Delete'&&S.sel){const p=curPage();p.measurements=p.measurements.filter(m=>m.id!==S.sel);S.boq=S.boq.filter(b=>b.srcId!==S.sel);S.sel=null;refresh();draw();}});
+let scaleDraft=null;function openScale(d){scaleDraft=d;$('smPx').textContent=pathLen(d.geometry.points).toFixed(1);$('scaleModal').style.display='flex';}
+$('smCancel').onclick=()=>{$('scaleModal').style.display='none';scaleDraft=null;};
+$('smOk').onclick=()=>{const px=pathLen(scaleDraft.geometry.points);let real=parseFloat($('smReal').value)||1;if($('smUnit').value==='mm')real/=1000;curPage().ppm=px/real;$('scaleModal').style.display='none';scaleDraft=null;updTag();refresh();draw();buildThumbs();};
+function updTag(){const p=curPage(),t=$('scaleTag');if(p&&p.ppm){t.className='scaletag set';t.textContent='scale: '+p.ppm.toFixed(2)+' px/m ✓';}else{t.className='scaletag unset';t.textContent='scale: ยังไม่ตั้ง';}}
+function draw(){ctx.clearRect(0,0,cv.width,cv.height);const p=curPage();if(!p)return;ctx.save();ctx.translate(S.panX,S.panY);ctx.scale(S.zoom,S.zoom);ctx.drawImage(p.img,0,0);ctx.restore();p.measurements.forEach(m=>drawM(m,m.id===S.sel));if(S.draft)drawM(S.draft,true,true);if(S.hoverSnap){const s=toScr(S.hoverSnap);ctx.strokeStyle='#fff';ctx.lineWidth=1.5;ctx.strokeRect(s.x-6,s.y-6,12,12);}}
+function drawM(m,sel,draft){const col=draft?'#fff':(m.color||'#ff9e2c');if(m.type==='count'){(m.geometry.markers||[]).forEach((mk,i)=>{const s=toScr(mk);ctx.fillStyle=sel?'#38d6c8':col;ctx.beginPath();ctx.arc(s.x,s.y,7,0,7);ctx.fill();ctx.fillStyle='#191100';ctx.font='600 10px monospace';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(i+1,s.x,s.y);});return;}
+  const pts=(m.geometry.points||[]).map(toScr);if(!pts.length)return;const closed=['polygon','rect'].includes(m.type);let pv=[...pts];if(draft&&S.draft&&!S.draft._drag&&['line','polygon','scale'].includes(m.type))pv=[...pts,{x:lastE.x,y:lastE.y}];
+  if(closed){ctx.beginPath();pv.forEach((s,i)=>i?ctx.lineTo(s.x,s.y):ctx.moveTo(s.x,s.y));ctx.closePath();ctx.fillStyle=(sel?'#38d6c8':col)+'2e';ctx.fill();}
+  ctx.beginPath();pv.forEach((s,i)=>i?ctx.lineTo(s.x,s.y):ctx.moveTo(s.x,s.y));if(closed)ctx.closePath();ctx.strokeStyle=sel?'#38d6c8':col;ctx.lineWidth=sel?2.4:1.8;ctx.setLineDash(draft?[5,4]:[]);ctx.stroke();ctx.setLineDash([]);
+  pts.forEach(s=>{ctx.fillStyle=sel?'#38d6c8':col;ctx.beginPath();ctx.arc(s.x,s.y,sel?4:3,0,7);ctx.fill();});
+  if(m.type!=='scale'){const q=computeQty(m);let cx=0,cy=0;pts.forEach(s=>{cx+=s.x;cy+=s.y;});cx/=pts.length;cy/=pts.length;if(pts.length<=2){cy-=12;}const txt=q.q?fmt(q.q)+' '+q.u:'– (ตั้ง scale)';ctx.font='600 11px monospace';const w=ctx.measureText(txt).width+10;ctx.fillStyle='#0b0d12dd';ctx.fillRect(cx-w/2,cy-9,w,17);ctx.fillStyle=sel?'#38d6c8':col;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(txt,cx,cy);}}
+document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tabs button').forEach(x=>x.classList.remove('on'));b.classList.add('on');['m','b'].forEach(p=>$('pane'+p.toUpperCase()).classList.toggle('on',p===b.dataset.p));});
+function refresh(){updTag();renderM();renderSrc();renderBoq();}
+function renderM(){const p=curPage(),t=$('mTable').querySelector('tbody');t.innerHTML='';if(!p||!p.measurements.length){$('mHint').style.display='block';return;}$('mHint').style.display='none';p.measurements.forEach((m,i)=>{const q=computeQty(m);const tr=document.createElement('tr');tr.className='row'+(m.id===S.sel?' sel':'');tr.innerHTML=`<td class="num">${i+1}</td><td><span class="chip" style="background:${m.color}"></span>${m.label}</td><td>${m.type}</td><td class="t-r num">${q.q?fmt(q.q):'–'} ${q.u}</td><td><button class="del" data-d="${m.id}">✕</button></td>`;tr.onclick=e=>{if(e.target.dataset.d)return;S.sel=m.id;refresh();draw();};t.appendChild(tr);});t.querySelectorAll('[data-d]').forEach(b=>b.onclick=e=>{e.stopPropagation();p.measurements=p.measurements.filter(m=>m.id!==b.dataset.d);S.boq=S.boq.filter(x=>x.srcId!==b.dataset.d);refresh();draw();});}
+function findM(id){for(const p of S.pages){const m=p.measurements.find(x=>x.id===id);if(m)return m;}return null;}
+function renderSrc(){const sel=$('bSrc');const cur=sel.value;sel.innerHTML='';S.pages.forEach((p,pi)=>p.measurements.forEach(m=>{const q=computeQty(m);const o=document.createElement('option');o.value=m.id;o.textContent=`[ห.${pi+1}] ${m.label} — ${q.q?fmt(q.q):'–'} ${q.u}`;sel.appendChild(o);}));if([...sel.options].some(o=>o.value===cur))sel.value=cur;}
+$('bAdd').onclick=()=>{const m=findM($('bSrc').value);if(!m){alert('ไม่มี measurement');return;}const q=computeQty(m);const waste=parseFloat($('bWaste').value)||0,price=parseFloat($('bPrice').value)||0;const qty=q.q*(1+waste/100);S.boq.push({id:'b'+(++S.idc),srcId:m.id,desc:$('bDesc').value.trim()||m.label,qty,unit:q.u,price,page:m.pageIdx+1});$('bDesc').value='';$('bPrice').value='0';renderBoq();};
+function renderBoq(){const t=$('boqTable').querySelector('tbody');t.innerHTML='';let g=0;S.boq.forEach(b=>{const amt=b.qty*b.price;g+=amt;const tr=document.createElement('tr');tr.className='row'+(b.srcId===S.sel?' sel':'');tr.innerHTML=`<td>${b.desc}<div style="color:var(--faint);font-size:9px">ห.${b.page} ←${b.srcId}</div></td><td class="t-r num">${fmt(b.qty)} ${b.unit}</td><td class="t-r num">${fmt(b.price)}</td><td class="t-r num">${fmt(amt)}</td><td><button class="del" data-d="${b.id}">✕</button></td>`;tr.onclick=e=>{if(e.target.dataset.d)return;const m=findM(b.srcId);if(m){if(m.pageIdx!==S.pi){S.pi=m.pageIdx;buildThumbs();fit();}S.sel=m.id;refresh();draw();}};t.appendChild(tr);});t.querySelectorAll('[data-d]').forEach(x=>x.onclick=e=>{e.stopPropagation();S.boq=S.boq.filter(b=>b.id!==x.dataset.d);renderBoq();});$('grand').textContent='฿'+fmt(g);}
+$('bExport').onclick=()=>{if(!S.boq.length){alert('ไม่มี BOQ');return;}const wb=XLSX.utils.book_new();let g=0;const rows=S.boq.map((b,i)=>{const amt=b.qty*b.price;g+=amt;return[i+1,b.desc,Number(b.qty.toFixed(3)),b.unit,b.price,Number(amt.toFixed(2)),b.page,b.srcId];});rows.push([]);rows.push(['','','','','','รวม',Number(g.toFixed(2))]);const ws=XLSX.utils.aoa_to_sheet([['ลำดับ','รายการ','ปริมาณ','หน่วย','ราคา/นก.','รวม','หน้า','ref']].concat(rows));XLSX.utils.book_append_sheet(wb,ws,'BOQ');XLSX.writeFile(wb,'BOQ.xlsx');};
+$('bSnap').onclick=()=>{S.snap=!S.snap;$('bSnap').classList.toggle('on',S.snap);};$('bSnap').classList.add('on');
+resize();
+</script>
+</body>
+</html>

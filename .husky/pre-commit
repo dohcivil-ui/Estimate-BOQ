@@ -1,0 +1,7 @@
+#!/usr/bin/env sh
+# Gate: ความถูกต้องเชิงวิศวกรรมต้องผ่านก่อน commit — ห้าม bypass ด้วย --no-verify
+echo "▶ typecheck..."
+npm run --silent typecheck || { echo "✗ typecheck ไม่ผ่าน"; exit 1; }
+echo "▶ test:math..."
+npm run --silent test:math || { echo "✗ เทสต์คณิตศาสตร์ไม่ผ่าน ห้าม commit"; exit 1; }
+echo "✓ ผ่าน gate"
