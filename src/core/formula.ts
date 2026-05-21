@@ -1,22 +1,23 @@
 // src/core/formula.ts — PURE: measurement → quantity (spec §5.3). ห้าม import React/Konva
+// ทุก input pixel อยู่ใน canonical page-px space; unitPerPixel เป็นเมตร/canonical-page-pixel
 import { polylineLengthPx, polygonAreaPx2, type Pt } from './geometry';
 
-/** ความยาวจริง (เมตร) = pixelLength × unitPerPixel */
-export function lineQuantity(_pts: Pt[], _unitPerPixel: number): number {
-  throw new Error('not implemented'); // TODO(cc): polylineLengthPx × unitPerPixel
+/** ความยาวจริง (เมตร) = pixelLength × unitPerPixel — รองรับ line (2 จุด) และ polyline (n จุด) */
+export function lineQuantity(pts: Pt[], unitPerPixel: number): number {
+  return polylineLengthPx(pts) * unitPerPixel;
 }
 
 /** พื้นที่จริง (ม²) = polygonAreaPx2 × unitPerPixel² (ยกกำลังสอง!) */
-export function polygonQuantity(_pts: Pt[], _unitPerPixel: number): number {
-  throw new Error('not implemented'); // TODO(cc): polygonAreaPx2 × unitPerPixel**2
+export function polygonQuantity(pts: Pt[], unitPerPixel: number): number {
+  return polygonAreaPx2(pts) * unitPerPixel * unitPerPixel;
 }
 
 /** พื้นที่สี่เหลี่ยม (ม²) จาก width/height pixel */
-export function rectQuantity(_widthPx: number, _heightPx: number, _unitPerPixel: number): number {
-  throw new Error('not implemented'); // TODO(cc): w*h*unitPerPixel**2
+export function rectQuantity(widthPx: number, heightPx: number, unitPerPixel: number): number {
+  return widthPx * heightPx * unitPerPixel * unitPerPixel;
 }
 
 /** จำนวนนับ */
-export function countQuantity(_markerCount: number): number {
-  throw new Error('not implemented'); // TODO(cc): markerCount
+export function countQuantity(markerCount: number): number {
+  return markerCount;
 }

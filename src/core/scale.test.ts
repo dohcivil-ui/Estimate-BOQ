@@ -20,3 +20,18 @@ describe('scale: calibrate (200px = 5.00m)', () => {
     expect(s2.unitPerPixel).toBeCloseTo(0.025);
   });
 });
+
+// guard tests — กัน unitPerPixel/pixelPerUnit = Infinity/NaN ที่จะ poison BOQ ทุกบรรทัด
+describe('scale: invalid inputs guard', () => {
+  it('p1===p2 (pixelDistance=0) → throw', () => {
+    expect(() => calibrateScale({ x: 5, y: 5 }, { x: 5, y: 5 }, 5, 'm')).toThrow();
+  });
+  it('realDistance=0 → throw', () => {
+    expect(() => calibrateScale({ x: 0, y: 0 }, { x: 200, y: 0 }, 0, 'm')).toThrow();
+  });
+  it('normal calibration → unitPerPixel/pixelPerUnit finite', () => {
+    const s = calibrateScale({ x: 0, y: 0 }, { x: 200, y: 0 }, 5, 'm');
+    expect(Number.isFinite(s.unitPerPixel)).toBe(true);
+    expect(Number.isFinite(s.pixelPerUnit)).toBe(true);
+  });
+});
