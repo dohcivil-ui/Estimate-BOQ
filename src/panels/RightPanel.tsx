@@ -9,12 +9,22 @@ import {
   defaultFormulaIdFor,
   BOQ_PRESETS,
 } from '../stores/boqStore';
+import { useAIStore } from '../stores/aiStore';
+import { useRightPanelStore, type RightPanelTab } from '../stores/rightPanelStore';
 import { deleteMeasurementWithCascade } from '../services/measurementOps';
-import type { BOQItem, Measurement, MeasurementGeometry, WorkCategory, BOQUnit } from '../types';
+import { acceptSuggestion, rejectSuggestion } from '../ai/aiService';
+import { SUGGESTION_TYPE_LABEL } from '../ai/AIReviewAdapter';
+import type {
+  AISeverity,
+  AISuggestionRecord,
+  BOQItem,
+  Measurement,
+  MeasurementGeometry,
+  WorkCategory,
+  BOQUnit,
+} from '../types';
 
-type Tab = 'measurements' | 'boq' | 'ai';
-
-const TABS: { id: Tab; label: string; phase: number }[] = [
+const TABS: { id: RightPanelTab; label: string; phase: number }[] = [
   { id: 'measurements', label: 'Measurements', phase: 3 },
   { id: 'boq', label: 'BOQ', phase: 4 },
   { id: 'ai', label: 'AI', phase: 5 },
@@ -117,7 +127,8 @@ function useZoomToBBox() {
 }
 
 export function RightPanel() {
-  const [tab, setTab] = useState<Tab>('measurements');
+  const tab = useRightPanelStore((s) => s.tab);
+  const setTab = useRightPanelStore((s) => s.setTab);
 
   return (
     <div
@@ -154,11 +165,7 @@ export function RightPanel() {
       <div style={{ flex: 1, overflowY: 'auto' }}>
         {tab === 'measurements' && <MeasurementsTab />}
         {tab === 'boq' && <BOQTab />}
-        {tab === 'ai' && (
-          <p style={{ padding: 12, fontSize: 12, color: '#888' }}>
-            AI suggestions จะถูกเติมใน Phase 5 (mock)
-          </p>
-        )}
+        {tab === 'ai' && <AITab />}
       </div>
     </div>
   );
@@ -837,3 +844,234 @@ function FactorInput({
     />
   );
 }
+
+
+// ----------------------------------------------------------------------------
+// AI tab (spec §12.4)
+// ----------------------------------------------------------------------------
+function AITab() {
+  const suggestions = useAIStore((s) => s.suggestions);
+  const isRunning = useAIStore((s) => s.isRunning);
+  const lastError = useAIStore((s) => s.lastError);
+  const lastReviewedAt = useAIStore((s) => s.lastReviewedAt);
+  const clearSuggestions = useAIStore((s) => s.clearSuggestions);
+  const measurementsById = useMeasurementStore((s) => s.byId);
+  const selectMeasurements = useMeasurementStore((s) => s.select);
+  const setSelectedBOQ = useBOQStore((s) => s.setSelectedBOQ);
+  const zoomToBBox = useZoomToBBox();
+
+  if (isRunning) {
+    return (
+      <div style={{ padding: 16, fontSize: 12, color: "#aaa" }}>
+        AI กำลังตรวจสอบ payload… (mock)
+      </div>
+    );
+  }
+
+  if (lastError) {
+    return (
+      <div style={{ padding: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+        <div
+          style={{
+            background: "#3a1f1f",
+            color: "#ff8b6b",
+            border: "1px solid #8a3838",
+            borderRadius: 4,
+            padding: 8,
+            fontSize: 12,
+          }}
+        >
+          <b>AI service error</b>
+          <div style={{ marginTop: 4, color: "#e6b450" }}>{lastError}</div>
+          <div style={{ marginTop: 4, fontSize: 10, color: "#888" }}>
+            core measurement/BOQ ยังทำงานปกติ — กด AI Review อีกครั้งได้
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (suggestions.length === 0) {
+    return (
+      <p style={{ padding: 12, fontSize: 12, color: "#888" }}>
+        ยังไม่ได้ตรวจ — กดปุ่ม <b>AI Review</b> ที่ toolbar เพื่อส่ง payload (mock)
+      </p>
+    );
+  }
+
+  function focusSuggestion(s: AISuggestionRecord) {
+    const mids = s.targetMeasurementIds ?? [];
+    if (mids.length > 0) {
+      selectMeasurements(mids);
+      const ms = mids.map((id) => measurementsById[id]).filter((x): x is Measurement => !!x);
+      const bbox = combinedBBox(ms);
+      if (bbox) zoomToBBox(bbox);
+    }
+    if (s.targetBoqItemIds && s.targetBoqItemIds.length > 0) {
+      setSelectedBOQ(s.targetBoqItemIds[0]!);
+    }
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column" }}>
+      <div
+        style={{
+          padding: "6px 8px",
+          borderBottom: "1px solid #2a2a2a",
+          fontSize: 11,
+          color: "#888",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+        }}
+      >
+        <span>ตรวจล่าสุด: {lastReviewedAt ? new Date(lastReviewedAt).toLocaleTimeString() : "—"}</span>
+        <button
+          type="button"
+          onClick={clearSuggestions}
+          style={{
+            background: "transparent",
+            color: "#888",
+            border: "1px solid #333",
+            borderRadius: 3,
+            fontSize: 10,
+            padding: "2px 6px",
+            cursor: "pointer",
+          }}
+        >
+          ล้าง
+        </button>
+      </div>
+      {suggestions.map((s) => (
+        <SuggestionRow key={s.id} sg={s} onFocus={focusSuggestion} />
+      ))}
+    </div>
+  );
+}
+
+function severityColor(sev: AISeverity): { bg: string; fg: string; border: string } {
+  if (sev === "critical") return { bg: "#3a1f1f", fg: "#ff8b6b", border: "#8a3838" };
+  if (sev === "warning") return { bg: "#3a311f", fg: "#e6b450", border: "#8a6838" };
+  return { bg: "#1f2a3a", fg: "#5b9dff", border: "#385a8a" };
+}
+
+function SuggestionRow({
+  sg,
+  onFocus,
+}: {
+  sg: AISuggestionRecord;
+  onFocus: (s: AISuggestionRecord) => void;
+}) {
+  const palette = severityColor(sg.severity);
+  const isResolved = sg.status !== "pending";
+  const opacity = isResolved ? 0.55 : 1;
+  return (
+    <div
+      onClick={() => onFocus(sg)}
+      style={{
+        borderBottom: "1px solid #1f1f1f",
+        padding: "8px 10px",
+        background: palette.bg,
+        borderLeft: `3px solid ${palette.border}`,
+        cursor: "pointer",
+        opacity,
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          gap: 6,
+          alignItems: "center",
+          marginBottom: 3,
+          flexWrap: "wrap",
+        }}
+      >
+        <span
+          style={{
+            background: palette.border,
+            color: "#fff",
+            fontSize: 9,
+            padding: "1px 4px",
+            borderRadius: 2,
+            textTransform: "uppercase",
+            letterSpacing: 0.4,
+          }}
+        >
+          {sg.severity}
+        </span>
+        <span style={{ color: "#999", fontSize: 10 }}>
+          {SUGGESTION_TYPE_LABEL[sg.type]} · conf {Math.round(sg.confidence * 100)}%
+        </span>
+        {sg.status === "accepted" && (
+          <span style={{ color: "#7dd87d", fontSize: 10 }}>
+            ✓ accepted{sg.createdBOQItemId ? ` → ${sg.createdBOQItemId.slice(-6)}` : ""}
+          </span>
+        )}
+        {sg.status === "rejected" && (
+          <span style={{ color: "#888", fontSize: 10 }}>✕ rejected</span>
+        )}
+      </div>
+      <div style={{ color: palette.fg, fontSize: 11, fontWeight: 600, marginBottom: 3 }}>
+        {sg.title}
+      </div>
+      <div style={{ color: "#ccc", fontSize: 11, lineHeight: 1.4 }}>{sg.message}</div>
+      {sg.proposedBoqItem && (
+        <div
+          style={{
+            marginTop: 4,
+            padding: 4,
+            background: "rgba(0,0,0,0.25)",
+            border: "1px dashed #444",
+            borderRadius: 3,
+            fontSize: 10,
+            color: "#aaa",
+          }}
+        >
+          เสนอ: <b>{sg.proposedBoqItem.code}</b> · {sg.proposedBoqItem.description}{" "}
+          ({sg.proposedBoqItem.unit})
+        </div>
+      )}
+      {!isResolved && (
+        <div style={{ marginTop: 6, display: "flex", gap: 4 }}>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              acceptSuggestion(sg.id);
+            }}
+            style={{
+              background: "#284a7a",
+              color: "#fff",
+              border: "1px solid #5b9dff",
+              borderRadius: 3,
+              fontSize: 11,
+              padding: "3px 8px",
+              cursor: "pointer",
+            }}
+          >
+            Accept
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              rejectSuggestion(sg.id);
+            }}
+            style={{
+              background: "transparent",
+              color: "#888",
+              border: "1px solid #444",
+              borderRadius: 3,
+              fontSize: 11,
+              padding: "3px 8px",
+              cursor: "pointer",
+            }}
+          >
+            Reject
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+

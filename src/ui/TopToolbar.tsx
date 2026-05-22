@@ -12,6 +12,9 @@ import {
   downloadProjectJSON,
 } from '../services/persistence';
 import { exportProjectExcel } from '../services/excelExport';
+import { runAIReview } from '../ai/aiService';
+import { useAIStore } from '../stores/aiStore';
+import { useRightPanelStore } from '../stores/rightPanelStore';
 
 const TOOLS: { id: Tool; label: string; enabled: boolean; phase: 1 | 2 | 3 }[] = [
   { id: 'select', label: 'Select', enabled: true, phase: 1 },
@@ -34,6 +37,8 @@ export function TopToolbar() {
   const countCategory = useMeasurementStore((s) => s.countCategory);
   const setCountCategory = useMeasurementStore((s) => s.setCountCategory);
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
+  const aiIsRunning = useAIStore((s) => s.isRunning);
+  const setRightTab = useRightPanelStore((s) => s.setTab);
 
   const canUndo = past.length > 0;
   const canRedo = future.length > 0;
@@ -57,6 +62,12 @@ export function TopToolbar() {
     } catch (err) {
       setSaveStatus('load error: ' + String(err));
     }
+  }
+
+  async function handleAIReview() {
+    // เปลี่ยนแท็บไป AI ก่อน → UI โชว์ spinner ระหว่างรอ
+    setRightTab('ai');
+    await runAIReview('boq_review');
   }
 
   return (
@@ -193,8 +204,22 @@ export function TopToolbar() {
         <span style={{ fontSize: 11, color: '#7dd87d' }}>{saveStatus}</span>
       )}
       <span style={{ flex: 1 }} />
-      <button type="button" disabled style={{ padding: '4px 10px', fontSize: 12, color: '#666' }}>
-        AI Review
+      <button
+        type="button"
+        onClick={handleAIReview}
+        disabled={aiIsRunning}
+        title="AI Review (mock) — เสนอ BOQ ที่ขาด/ผิดปกติ"
+        style={{
+          padding: '4px 10px',
+          fontSize: 12,
+          color: aiIsRunning ? '#888' : '#fff',
+          background: aiIsRunning ? '#2a2a2a' : '#7d4dd8',
+          border: '1px solid #444',
+          borderRadius: 4,
+          cursor: aiIsRunning ? 'wait' : 'pointer',
+        }}
+      >
+        {aiIsRunning ? 'AI ตรวจสอบ…' : 'AI Review'}
       </button>
     </div>
   );
