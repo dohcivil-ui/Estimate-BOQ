@@ -3,6 +3,7 @@
 import { create } from 'zustand';
 import type { PagePoint, LengthUnit } from '../types';
 import { calibrateScale } from '../core/scale';
+import { useMeasurementStore } from './measurementStore';
 
 export type ScaleProfile = {
   pageId: string;
@@ -103,6 +104,9 @@ export const useScaleStore = create<ScaleState>((set, get) => ({
       },
       draft: { phase: 'idle' },
     }));
+    // กัน stale zero — recompute quantity ของ measurement ทุกชิ้นบนหน้านี้
+    // (ผ่าน formula.ts ที่เดียว — Golden Rule #3)
+    useMeasurementStore.getState().recomputeForPage(d.pageId, profile.unitPerPixel);
   },
 
   closeVerify: () => set({ draft: { phase: 'idle' } }),

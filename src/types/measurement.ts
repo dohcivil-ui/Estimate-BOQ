@@ -1,5 +1,6 @@
 // src/types/measurement.ts — Measurement data model (spec §8)
 import type { PagePoint } from './coords';
+import type { MeasurementBOQLink } from './boq';
 
 export type MeasurementType =
   | 'scale_reference'
@@ -29,17 +30,8 @@ export type MeasurementGeometry =
   | { kind: 'rectangle'; x: number; y: number; width: number; height: number }
   | { kind: 'lasso'; points: PagePoint[] };
 
-// Forward declaration; full BOQ link shape lives in spec §11 (Phase 4)
-export type MeasurementBOQLink = {
-  id: string;
-  measurementId: string;
-  boqItemId: string;
-  formulaId: string;
-  factor: number;
-  wasteFactor?: number;
-  quantityContribution: number;
-  note?: string;
-};
+// MeasurementBOQLink — see ./boq.ts (canonical declaration)
+export type { MeasurementBOQLink } from './boq';
 
 export type Measurement = {
   id: string;

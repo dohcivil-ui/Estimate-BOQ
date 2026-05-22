@@ -1,5 +1,6 @@
 import { useDrawingStore } from '../stores/drawingStore';
 import { useScaleStore } from '../stores/scaleStore';
+import { useMeasurementStore } from '../stores/measurementStore';
 
 export function ThumbnailPanel() {
   const pages = useDrawingStore((s) => s.pages);
@@ -7,6 +8,8 @@ export function ThumbnailPanel() {
   const setActivePage = useDrawingStore((s) => s.setActivePage);
   // subscribe ที่ map ทั้งก้อน — re-render เมื่อมี scale ใหม่
   const scalesByPageId = useScaleStore((s) => s.byPageId);
+  // นับ measurement live จาก measurementStore (badge update เมื่อ add/delete)
+  const measurementsByPageId = useMeasurementStore((s) => s.byPageId);
 
   return (
     <div
@@ -30,6 +33,7 @@ export function ThumbnailPanel() {
         {pages.map((p) => {
           const active = p.id === activePageId;
           const hasScale = !!scalesByPageId[p.id];
+          const liveCount = measurementsByPageId[p.id]?.length ?? p.measurementCount;
           return (
             <button
               key={p.id}
@@ -67,7 +71,7 @@ export function ThumbnailPanel() {
                   >
                     {hasScale ? '✓ scale' : '⚠ scale'}
                   </span>
-                  <span style={{ marginLeft: 6, color: '#999' }}>· {p.measurementCount} ม.</span>
+                  <span style={{ marginLeft: 6, color: '#999' }}>· {liveCount} ม.</span>
                 </span>
               </div>
             </button>

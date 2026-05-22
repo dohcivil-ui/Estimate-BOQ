@@ -6,22 +6,33 @@ import { ScaleDialog } from './ui/ScaleDialog';
 import { ThumbnailPanel } from './panels/ThumbnailPanel';
 import { RightPanel } from './panels/RightPanel';
 import { DrawingCanvas } from './canvas/DrawingCanvas';
+import { useCanvasSizeStore } from './stores/canvasSizeStore';
+import { autoLoadProject } from './services/persistence';
 
 export function App() {
   const canvasHostRef = useRef<HTMLDivElement | null>(null);
   const [size, setSize] = useState({ w: 800, h: 600 });
+  const setCanvasSize = useCanvasSizeStore((s) => s.setSize);
 
   useEffect(() => {
     const el = canvasHostRef.current;
     if (!el) return;
     const update = () => {
       const r = el.getBoundingClientRect();
-      setSize({ w: Math.max(100, Math.floor(r.width)), h: Math.max(100, Math.floor(r.height)) });
+      const w = Math.max(100, Math.floor(r.width));
+      const h = Math.max(100, Math.floor(r.height));
+      setSize({ w, h });
+      setCanvasSize(w, h);
     };
     update();
     const ro = new ResizeObserver(update);
     ro.observe(el);
     return () => ro.disconnect();
+  }, [setCanvasSize]);
+
+  // auto-load project ที่บันทึกไว้ (offline) — fire & forget
+  useEffect(() => {
+    autoLoadProject().catch((err) => console.warn('auto-load failed:', err));
   }, []);
 
   return (
