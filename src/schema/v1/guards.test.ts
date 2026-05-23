@@ -47,22 +47,52 @@ const calibById = new Map<string, Calibration>([
   [calibOnB.id, calibOnB],
 ]);
 
-// --- Sheet load: canonical px frozen ------------------------------------------
-describe('schema v1: Sheet load — canonical px frozen', () => {
-  it('width+height match → no throw', () => {
+// --- Sheet load: canonical px + sha256 frozen ---------------------------------
+describe('schema v1: Sheet load — canonical px + sha256 frozen', () => {
+  it('width+height+sha256 match → no throw', () => {
     expect(() =>
-      assertSheetMatchesRaster(sheetA, { widthPx: 1000, heightPx: 700 }),
+      assertSheetMatchesRaster(sheetA, {
+        widthPx: 1000,
+        heightPx: 700,
+        sha256: sheetA.sha256,
+      }),
     ).not.toThrow();
   });
   it('width mismatch → throw', () => {
     expect(() =>
-      assertSheetMatchesRaster(sheetA, { widthPx: 999, heightPx: 700 }),
-    ).toThrow(/raster size mismatch/);
+      assertSheetMatchesRaster(sheetA, {
+        widthPx: 999,
+        heightPx: 700,
+        sha256: sheetA.sha256,
+      }),
+    ).toThrow(/raster mismatch — dimensions/);
   });
   it('height mismatch → throw', () => {
     expect(() =>
-      assertSheetMatchesRaster(sheetA, { widthPx: 1000, heightPx: 800 }),
-    ).toThrow(/raster size mismatch/);
+      assertSheetMatchesRaster(sheetA, {
+        widthPx: 1000,
+        heightPx: 800,
+        sha256: sheetA.sha256,
+      }),
+    ).toThrow(/raster mismatch — dimensions/);
+  });
+  it('sha256 mismatch → throw (กันสลับ raster ขนาดเหมือนกัน)', () => {
+    expect(() =>
+      assertSheetMatchesRaster(sheetA, {
+        widthPx: 1000,
+        heightPx: 700,
+        sha256: 'c'.repeat(64),
+      }),
+    ).toThrow(/raster mismatch — sha256/);
+  });
+  it('dimensions + sha256 ทั้งคู่ผิด → throw (รวมใน message เดียว)', () => {
+    expect(() =>
+      assertSheetMatchesRaster(sheetA, {
+        widthPx: 999,
+        heightPx: 700,
+        sha256: 'c'.repeat(64),
+      }),
+    ).toThrow(/dimensions.*sha256/s);
   });
 });
 

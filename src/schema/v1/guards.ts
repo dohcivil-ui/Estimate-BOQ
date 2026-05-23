@@ -7,18 +7,42 @@
 
 import type { Sheet, Calibration, Measurement, Line } from './types';
 
-export type SheetRaster = { widthPx: number; heightPx: number };
+/**
+ * raster fingerprint ที่ caller (IO boundary) คำนวณแล้วส่งเข้ามาเทียบ:
+ *   - widthPx/heightPx จาก raster ที่ decode จริง
+ *   - sha256 = sha256 hex (lowercase) ของ raster bytes
+ * guard เพียงเทียบ — ไม่ hash เอง → ยังคง pure
+ */
+export type SheetRaster = {
+  widthPx: number;
+  heightPx: number;
+  sha256: string;
+};
 
 /**
- * Sheet load: raster ที่โหลดต้องมีขนาดตรงกับ Sheet ที่บันทึกไว้
- * (canonical px แช่แข็ง — geometry ที่เก็บอ้าง px ของ raster ตัวนี้ ห้ามขยับ)
+ * Sheet load: raster ที่โหลดต้องมีทั้งขนาด **และ** sha256 ตรงกับ Sheet ที่บันทึกไว้
+ * (canonical px แช่แข็ง — geometry ที่เก็บอ้าง px + bytes ของ raster ตัวนี้ ห้ามขยับ)
+ *
+ * mismatch ใดๆ → throw พร้อมระบุว่าฟิลด์ไหนไม่ตรง (กัน raster swap ขนาดเหมือนกัน
+ * แต่ bytes ต่าง = ปิดช่อง 🔴-1)
  */
 export function assertSheetMatchesRaster(sheet: Sheet, raster: SheetRaster): void {
+  const mismatches: string[] = [];
   if (sheet.widthPx !== raster.widthPx || sheet.heightPx !== raster.heightPx) {
+    mismatches.push(
+      `dimensions (sheet=${sheet.widthPx}×${sheet.heightPx}, ` +
+        `raster=${raster.widthPx}×${raster.heightPx})`,
+    );
+  }
+  if (sheet.sha256 !== raster.sha256) {
+    // ตัดแสดง 8 hex แรกพอ — log ไม่ต้องเปื้อน hash เต็ม
+    mismatches.push(
+      `sha256 (sheet=${sheet.sha256.slice(0, 8)}…, raster=${raster.sha256.slice(0, 8)}…)`,
+    );
+  }
+  if (mismatches.length > 0) {
     throw new Error(
-      `Sheet ${sheet.id} load: raster size mismatch ` +
-        `(sheet=${sheet.widthPx}x${sheet.heightPx}, ` +
-        `raster=${raster.widthPx}x${raster.heightPx}) — ` +
+      `Sheet ${sheet.id} load: raster mismatch — ${mismatches.join('; ')} — ` +
         `canonical px is frozen; re-import the page instead of swapping raster.`,
     );
   }
