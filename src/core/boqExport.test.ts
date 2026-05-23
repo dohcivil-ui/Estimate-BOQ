@@ -1,6 +1,7 @@
 // src/core/boqExport.test.ts — Layer 1 PURE roll-up: ปร.4/5ก/5ข/6
 import { describe, it, expect } from 'vitest';
 import {
+  ceilSatang,
   deriveLineAmounts,
   splitByKind,
   buildPr4,
@@ -37,6 +38,112 @@ function mkLine(
     origin: 'derived',
   };
 }
+
+// =============================================================================
+// ceilSatang — float-robust ceil to 2 dec
+// =============================================================================
+describe('ceilSatang: no-bump (float noise ห้ามดันขึ้น)', () => {
+  it('0.1 * 0.2 = 0.020000000000000004 → 0.02 (ไม่ใช่ 0.03)', () => {
+    expect(ceilSatang(0.1 * 0.2)).toBe(0.02);
+  });
+  it('7 * 0.07 = 0.49000000000000005 → 0.49', () => {
+    expect(ceilSatang(7 * 0.07)).toBe(0.49);
+  });
+  it('7000.00 → 7000.00', () => {
+    expect(ceilSatang(7000.0)).toBe(7000);
+  });
+  it('12000000.00 → 12000000.00', () => {
+    expect(ceilSatang(12_000_000.0)).toBe(12_000_000);
+  });
+  it('0 → 0', () => {
+    expect(ceilSatang(0)).toBe(0);
+  });
+});
+
+describe('ceilSatang: bump เศษจริง', () => {
+  it('1.001 → 1.01', () => {
+    expect(ceilSatang(1.001)).toBe(1.01);
+  });
+  it('0.3301 → 0.34', () => {
+    expect(ceilSatang(0.3301)).toBe(0.34);
+  });
+  it('2.671 → 2.68', () => {
+    expect(ceilSatang(2.671)).toBe(2.68);
+  });
+  it('0.330 → 0.33 (no fictitious bump จาก trailing zero)', () => {
+    expect(ceilSatang(0.33)).toBe(0.33);
+  });
+});
+
+describe('ceilSatang: magnitude-safe (>90M บาท — กัน spurious bump เพราะ MAX_SAFE_INTEGER)', () => {
+  it('300_000_000.37 → 300_000_000.37 (ค่าใหญ่ + สตางค์ลงตัว ห้ามดัน)', () => {
+    expect(ceilSatang(300_000_000.37)).toBe(300_000_000.37);
+  });
+  it('300_000_000.371 → 300_000_000.38 (เศษจริงค่าใหญ่ → ดันขึ้น)', () => {
+    expect(ceilSatang(300_000_000.371)).toBe(300_000_000.38);
+  });
+  it('360_000_000 → 360_000_000 (ค่าใหญ่ลงตัว — integer)', () => {
+    expect(ceilSatang(360_000_000)).toBe(360_000_000);
+  });
+});
+
+describe('ceilSatang: input guard', () => {
+  it('NaN → throw', () => {
+    expect(() => ceilSatang(Number.NaN)).toThrow();
+  });
+  it('Infinity → throw', () => {
+    expect(() => ceilSatang(Number.POSITIVE_INFINITY)).toThrow();
+  });
+  it('-1 → 0 (defensive: amount ในระบบ BOQ ห้ามติดลบ)', () => {
+    expect(ceilSatang(-1)).toBe(0);
+  });
+  it('-0.0001 → 0 (กัน -0 จาก 0*100-1e-4 = -0.0001)', () => {
+    expect(ceilSatang(-0.0001)).toBe(0);
+  });
+  it('Object.is(ceilSatang(0), 0) === true (กัน -0 bit-pattern)', () => {
+    // -0 และ +0 เปรียบกับ === ได้ true แต่ Object.is แยก ; toBe ใช้ Object.is ภายใน
+    expect(Object.is(ceilSatang(0), 0)).toBe(true);
+  });
+});
+
+// =============================================================================
+// roundRatchaklang — floor to whole baht, float-robust
+// =============================================================================
+describe('roundRatchaklang: no-drop (float noise ใต้ X.00 ห้ามตก X-1)', () => {
+  it('9097199.9999999 → 9097200 (= 7M × 1.2996 ใน IEEE)', () => {
+    expect(roundRatchaklang(9_097_199.9999999)).toBe(9_097_200);
+  });
+  it('9097200.00 → 9097200', () => {
+    expect(roundRatchaklang(9_097_200.0)).toBe(9_097_200);
+  });
+  it('7_000_000 × 1.2996 → 9_097_200 (end-to-end ผ่าน IEEE)', () => {
+    expect(roundRatchaklang(7_000_000 * 1.2996)).toBe(9_097_200);
+  });
+});
+
+describe('roundRatchaklang: floor เศษจริง (ตัดสตางค์ทิ้ง)', () => {
+  it('9097200.99 → 9097200', () => {
+    expect(roundRatchaklang(9_097_200.99)).toBe(9_097_200);
+  });
+  it('9097200.01 → 9097200', () => {
+    expect(roundRatchaklang(9_097_200.01)).toBe(9_097_200);
+  });
+  it('100.50 → 100', () => {
+    expect(roundRatchaklang(100.5)).toBe(100);
+  });
+  it('0.99 → 0', () => {
+    expect(roundRatchaklang(0.99)).toBe(0);
+  });
+  it('0 → 0', () => {
+    expect(roundRatchaklang(0)).toBe(0);
+  });
+});
+
+describe('roundRatchaklang: input guard', () => {
+  it('NaN → throw', () => {
+    expect(() => roundRatchaklang(Number.NaN)).toThrow();
+  });
+});
 
 // =============================================================================
 // deriveLineAmounts — math
@@ -209,6 +316,33 @@ describe('buildPr4: 2 หมวด หลาย line, grand = Σ ของทุ
 });
 
 // =============================================================================
+// per-line-ceil-then-sum ≠ sum-then-ceil
+//   3 lines, each materialUnitPrice=0.331 (qty=1) → per-line ceil = 0.34 each
+//   Σ per-line = 1.02 ; ผิดถ้าทำ sum-first-then-ceil = ceil(0.993) = 1.00
+// =============================================================================
+describe('buildPr4: per-line-ceil-then-sum ห้ามเป็น sum-then-ceil', () => {
+  const lines: PricedLine[] = [
+    mkLine('L1', 0.331, 'construction', { group: 'g' }),
+    mkLine('L2', 0.331, 'construction', { group: 'g' }),
+    mkLine('L3', 0.331, 'construction', { group: 'g' }),
+  ];
+  const r = buildPr4(lines);
+
+  it('แต่ละ line: ceilSatang(0.331) = 0.34', () => {
+    for (const l of lines) {
+      expect(deriveLineAmounts(l).materialAmount).toBe(0.34);
+    }
+  });
+  it('grand.material = 0.34 × 3 = 1.02 (per-line ceil ก่อนสรุป)', () => {
+    expect(r.grand.material).toBe(1.02);
+  });
+  it('regression: grand.material ห้ามเป็น 1.00 (= sum-then-ceil ที่ผิด)', () => {
+    // 0.331 + 0.331 + 0.331 = 0.993 → ถ้า ceil ทีหลังจะได้ 1.00 (ผิด)
+    expect(r.grand.material).not.toBe(1.0);
+  });
+});
+
+// =============================================================================
 // buildPr5k — Factor F ครั้งเดียวบน total (a0r0 test-verified)
 // =============================================================================
 describe('buildPr5k: Factor F คูณครั้งเดียวบน construction total (a0r0)', () => {
@@ -218,12 +352,12 @@ describe('buildPr5k: Factor F คูณครั้งเดียวบน cons
     includeVAT: true,
   };
 
-  it('total = 7M THB → factorF≈1.2996, ค่าก่อสร้าง = 7e6 × 1.2996', () => {
+  it('total = 7M THB → factorF≈1.2996, ค่าก่อสร้าง = ceilSatang(7e6 × 1.2996) = 9,097,200', () => {
     const r = buildPr5k(7_000_000, params);
     expect(r.factorF).toBeCloseTo(1.2996, 4);
     expect(r.costTotal).toBe(7_000_000);
     expect(r.verified).toBe(true);
-    expect(r.ค่าก่อสร้าง).toBeCloseTo(7_000_000 * 1.2996, 1);
+    expect(r.ค่าก่อสร้าง).toBe(9_097_200);
   });
 
   it('2 lines (4M + 3M) สรุปยอด 7M → ผลตรงกับ 1 line 7M (factor F ครั้งเดียว)', () => {
@@ -275,21 +409,21 @@ describe('buildPr5k: Factor F คูณครั้งเดียวบน cons
 // buildPr5kh — procurement VAT only (ไม่เข้า Factor F)
 // =============================================================================
 describe('buildPr5kh: procurement (VAT 7% เท่านั้น)', () => {
-  // ใช้ toBeCloseTo สำหรับ vat/ค่าก่อสร้าง — IEEE 100_000 × 0.07 = 7000.000000000001
-  it('1 line 100,000 → งาน=100k, vat≈7k, ค่าก่อสร้าง≈107k', () => {
+  // หลัง ceilSatang vat แล้ว ค่าควรเป็น integer เป๊ะ → toBe ได้
+  it('1 line 100,000 → งาน=100k, vat=7k (ceilSatang ลบ noise), ค่าก่อสร้าง=107k', () => {
     const r = buildPr5kh([mkLine('P1', 100_000, 'procurement')]);
     expect(r.งาน).toBe(100_000);
-    expect(r.vat).toBeCloseTo(7_000, 6);
-    expect(r.ค่าก่อสร้าง).toBeCloseTo(107_000, 6);
+    expect(r.vat).toBe(7_000);
+    expect(r.ค่าก่อสร้าง).toBe(107_000);
   });
-  it('หลาย line: 60k + 40k = 100k → vat≈7k, ค่าก่อสร้าง≈107k', () => {
+  it('หลาย line: 60k + 40k = 100k → vat=7k, ค่าก่อสร้าง=107k', () => {
     const r = buildPr5kh([
       mkLine('P1', 60_000, 'procurement'),
       mkLine('P2', 40_000, 'procurement'),
     ]);
     expect(r.งาน).toBe(100_000);
-    expect(r.vat).toBeCloseTo(7_000, 6);
-    expect(r.ค่าก่อสร้าง).toBeCloseTo(107_000, 6);
+    expect(r.vat).toBe(7_000);
+    expect(r.ค่าก่อสร้าง).toBe(107_000);
   });
   it('empty → ทุกฟิลด์ = 0', () => {
     const r = buildPr5kh([]);
@@ -327,28 +461,40 @@ describe('buildPr6: ROUND-TRIP รวม = Σconstruction×F + Σprocurement×1.
     const pr5kh = buildPr5kh(procurement);
     const pr6 = buildPr6(pr5k, pr5kh);
 
-    // คำนวณอิสระ (ไม่ผ่าน builder)
-    const expectedConstruction = 7_000_000 * 1.2996; // a0r0 7M VAT
-    const expectedProcurement = 100_000 * 1.07;
-    expect(pr6.รวม).toBeCloseTo(
-      expectedConstruction + expectedProcurement,
-      1,
-    );
-    // identity จนกว่า roundRatchaklang จะมีกฎทางการ
-    expect(pr6.ราคากลาง).toBe(pr6.รวม);
+    // หลัง ceilSatang ทั้ง 5ก/5ข ค่าเป็น integer แล้ว → exact compare ได้
+    expect(pr5k.ค่าก่อสร้าง).toBe(9_097_200); // ceilSatang(7M × 1.2996)
+    expect(pr5kh.ค่าก่อสร้าง).toBe(107_000); // 100k + ceilSatang(7000.000...01) = 100k + 7000
+    expect(pr6.รวม).toBe(9_204_200);
+    // ราคากลาง = floor (integer total → unchanged)
+    expect(pr6.ราคากลาง).toBe(9_204_200);
   });
 });
 
 // =============================================================================
-// roundRatchaklang — TODO รอกฎทางการ
+// buildPr6: ราคากลาง = floor ของ รวม (non-integer total case)
 // =============================================================================
-describe('roundRatchaklang: TODO (รอกฎปัดเศษกรมบัญชีกลาง)', () => {
-  it.todo(
-    'ใส่กฎปัดเศษราคากลาง กรมบัญชีกลาง เมื่อยืนยัน — ห้ามเดา',
-  );
-  it('ปัจจุบัน = identity (passthrough) จนกว่ากฎจะยืนยัน', () => {
-    expect(roundRatchaklang(123_456.789)).toBe(123_456.789);
-    expect(roundRatchaklang(0)).toBe(0);
-    expect(roundRatchaklang(7_000_000 * 1.2996)).toBe(7_000_000 * 1.2996);
+describe('buildPr6: ราคากลาง = floor ของ รวม (real fraction case)', () => {
+  it('procurement non-integer → ราคากลาง = floor(รวม), เต็มบาท ≤ รวม', () => {
+    const construction = mkLine('C', 7_000_000, 'construction');
+    const procurement = mkLine('P', 100_000.5, 'procurement');
+    const constTotal = deriveLineAmounts(construction).total;
+    const pr5k = buildPr5k(constTotal, {
+      advancePct: 0,
+      retentionPct: 0,
+      includeVAT: true,
+    });
+    const pr5kh = buildPr5kh([procurement]);
+    const pr6 = buildPr6(pr5k, pr5kh);
+
+    // ค่าก่อสร้าง 5ก = ceilSatang(7M × 1.2996) = 9,097,200
+    expect(pr5k.ค่าก่อสร้าง).toBe(9_097_200);
+    // ค่าก่อสร้าง 5ข = 100,000.50 + ceilSatang(7000.035) = 100,000.50 + 7000.04 = 107,000.54
+    expect(pr5kh.vat).toBeCloseTo(7000.04, 2);
+    expect(pr5kh.ค่าก่อสร้าง).toBeCloseTo(107_000.54, 2);
+
+    expect(pr6.รวม).toBeCloseTo(9_204_200.54, 2);
+    expect(pr6.ราคากลาง).toBe(9_204_200);
+    expect(pr6.ราคากลาง).toBeLessThanOrEqual(pr6.รวม);
+    expect(Number.isInteger(pr6.ราคากลาง)).toBe(true);
   });
 });

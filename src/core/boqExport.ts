@@ -10,6 +10,53 @@
 import { lookupFactorF } from './factorF';
 
 // =============================================================================
+// Rounding utilities — float-robust ceil/floor
+//
+// IEEE noise (เช่น 0.1*0.2 = 0.020000000000000004) ห้ามดันค่าผิดทาง:
+//   - ceilSatang: ดันขึ้นเฉพาะเศษ "จริง" (ไม่ใช่ ULP noise)
+//   - roundRatchaklang: ตัดสตางค์ทิ้ง แต่ X.00 ที่มี noise ใต้ (X.999999...) ต้องไม่ตก X-1
+//
+// เทคนิค: pre-round ที่ความละเอียดสูงกว่า (แต่ภายใน MAX_SAFE_INTEGER) เพื่อ absorb
+// ULP noise ก่อนเรียก Math.ceil/floor.
+// =============================================================================
+
+/**
+ * ceilSatang — ปัดขึ้น 2 ทศนิยม (สตางค์), float-robust + magnitude-safe
+ *   - 0.1*0.2 → 0.02 (ไม่ใช่ 0.03 จาก float noise)
+ *   - 1.001 → 1.01 (เศษจริง ดันขึ้น)
+ *   - 7000.00 → 7000.00 (no bump)
+ *   - 300_000_000.37 → 300_000_000.37 (no bump ที่ค่าใหญ่ — กัน spurious satang bump)
+ *
+ * เทคนิค: subtractive epsilon — `Math.ceil(x*100 - 1e-4) / 100`
+ *   1e-4 cent (= 1e-6 บาท) absorb IEEE ULP noise; ต่ำกว่าสตางค์มาก ไม่ suppress เศษจริง.
+ *   magnitude-safe ถึง x ≈ 9e13 บาท (x*100 ≤ MAX_SAFE_INTEGER ~9e15).
+ *
+ *   (วิธี pre-round ที่ precision สูง — `x*100*1e6` — ทำให้ผลคูณเกิน MAX_SAFE_INTEGER
+ *    เมื่อ x > ~90M, ดันสตางค์เกินจริงในงานหลักร้อยล้าน. แก้แล้ว.)
+ *
+ * Guard:
+ *   - non-finite → throw
+ *   - x ≤ 0 → คืน 0 (กัน -0 ที่เกิดจาก `0*100-1e-4 = -0.0001 → ceil = -0` ;
+ *     และ amount ในระบบ BOQ ห้ามติดลบ — defensive)
+ */
+export function ceilSatang(x: number): number {
+  if (!Number.isFinite(x)) {
+    throw new Error(`ceilSatang: input must be finite (got ${x})`);
+  }
+  if (x <= 0) return 0;
+  return Math.ceil(x * 100 - 1e-4) / 100;
+}
+
+/**
+ * floatClean — round nearest 2 ทศนิยม (สตางค์) เพื่อล้าง float noise จาก sum
+ *   ใช้กับ subtotals ที่เป็น "ผลรวมของค่าที่ปัดแล้ว" — ห้าม ceil/floor ซ้ำ
+ *   (จะเปลี่ยนผลรวมที่ควรจะเป๊ะ ให้เพี้ยน)
+ */
+function floatClean(x: number): number {
+  return Math.round(x * 100) / 100;
+}
+
+// =============================================================================
 // Types
 // =============================================================================
 
@@ -52,8 +99,9 @@ export type LineAmounts = {
 };
 
 export function deriveLineAmounts(line: PricedLine): LineAmounts {
-  const materialAmount = line.qty * line.materialUnitPrice;
-  const laborAmount = line.qty * line.laborUnitPrice;
+  // ceilSatang ที่จุดเกิดเศษจริง (qty × price); total = สองค่าที่ปัดแล้ว ห้าม ceil ซ้ำ
+  const materialAmount = ceilSatang(line.qty * line.materialUnitPrice);
+  const laborAmount = ceilSatang(line.qty * line.laborUnitPrice);
   return {
     materialAmount,
     laborAmount,
@@ -124,9 +172,19 @@ export function buildPr4(lines: PricedLine[]): Pr4Result {
     g.total += a.total;
   }
 
+  // subtotals = ผลรวมของค่าที่ปัดแล้ว → float-clean (round nearest 2 dec) ห้าม ceil ซ้ำ
   return {
-    groups: [...groupMap.values()],
-    grand: { material: grandMaterial, labor: grandLabor, total: grandTotal },
+    groups: [...groupMap.values()].map((g) => ({
+      ...g,
+      material: floatClean(g.material),
+      labor: floatClean(g.labor),
+      total: floatClean(g.total),
+    })),
+    grand: {
+      material: floatClean(grandMaterial),
+      labor: floatClean(grandLabor),
+      total: floatClean(grandTotal),
+    },
   };
 }
 
@@ -161,7 +219,8 @@ export function buildPr5k(
     costTotal: constructionCostTotal,
     factorF,
     verified,
-    ค่าก่อสร้าง: constructionCostTotal * factorF,
+    // ceilSatang ที่จุดเกิดเศษจริง (cost × factorF)
+    ค่าก่อสร้าง: ceilSatang(constructionCostTotal * factorF),
   };
 }
 
@@ -187,10 +246,12 @@ export function buildPr5kh(procurementLines: PricedLine[]): Pr5khResult {
   for (const line of procurementLines) {
     งาน += deriveLineAmounts(line).total;
   }
+  // ceilSatang ที่จุดเกิดเศษจริง (vat = งาน × 0.07) ; ค่าก่อสร้าง = งาน + vat (ไม่ ceil ซ้ำ)
+  const vat = ceilSatang(งาน * VAT_RATE);
   return {
     งาน,
-    vat: งาน * VAT_RATE,
-    ค่าก่อสร้าง: งาน * (1 + VAT_RATE),
+    vat,
+    ค่าก่อสร้าง: งาน + vat,
   };
 }
 
@@ -211,7 +272,8 @@ export type Pr6Result = {
 //   ยังไม่ระบุชัดในสเปก → ไม่เพิ่ม nullable overload ในรอบนี้.
 
 export function buildPr6(pr5k: Pr5kResult, pr5kh: Pr5khResult): Pr6Result {
-  const รวม = pr5k.ค่าก่อสร้าง + pr5kh.ค่าก่อสร้าง;
+  // float-clean รวม (sum of two at-satang values อาจมี IEEE noise)
+  const รวม = floatClean(pr5k.ค่าก่อสร้าง + pr5kh.ค่าก่อสร้าง);
   return {
     รวม,
     ราคากลาง: roundRatchaklang(รวม),
@@ -219,20 +281,24 @@ export function buildPr6(pr5k: Pr5kResult, pr5kh: Pr5khResult): Pr6Result {
 }
 
 // =============================================================================
-// roundRatchaklang — TODO(spec): กฎปัดเศษ "ราคากลาง" กรมบัญชีกลาง
+// roundRatchaklang — ปัดลงเต็มบาท (ตัดสตางค์ทิ้ง), float-robust
 // =============================================================================
 
 /**
- * roundRatchaklang — ปัดเศษ "ราคากลาง" ตามกฎทางการกรมบัญชีกลาง
+ * roundRatchaklang — floor เป็นเลขจำนวนเต็มบาท (ตัดสตางค์ทิ้ง), float-robust
  *
- * TODO: ใส่กฎปัดเศษราคากลาง กรมบัญชีกลาง เมื่อยืนยัน ; ห้ามเดา
- *   ความเป็นไปได้ที่ยังไม่ยืนยัน:
- *     - ปัดให้เหลือเลขนัยสำคัญ N (depend on magnitude?)
- *     - ปัดเป็นหลัก 100/1,000 บาท (ขึ้นกับขนาดงาน?)
- *     - กฎอื่น (เช่น ปัดลงเสมอ vs ปัดธรรมดา)
- *   ปัจจุบันคืน amount ตรงๆ (identity) — เพื่อไม่ให้ผลผิดก่อนกฎจะยืนยัน
- *   เมื่อยืนยันแล้ว ให้แก้ที่นี่ที่เดียว + อัปเดต tests จาก it.todo
+ * 🔴 X.00 ที่มี float noise ใต้ (เช่น 9097199.9999999 จาก 7M × 1.2996 ใน IEEE) ต้องได้
+ * 9097200 ไม่ใช่ 9097199. ใช้ pre-round ที่ 1e-4 baht (0.01 satang) ก่อน floor
+ * เพื่อ absorb noise จาก upstream multiplication.
+ *
+ * NOTE: ปัจจุบันเป็นกฎ "floor to baht" — ถ้ากฎกรมบัญชีกลางในอนาคตซับซ้อนกว่า
+ * (เช่น ปัดเป็น 100/1,000 บาท ขึ้นกับขนาดงาน) ให้แก้ที่นี่ที่เดียว + update tests.
  */
 export function roundRatchaklang(amount: number): number {
-  return amount;
+  if (!Number.isFinite(amount)) {
+    throw new Error(`roundRatchaklang: input must be finite (got ${amount})`);
+  }
+  // pre-round absorbs noise like 9097199.9999999 → 9097200; 9097200.99 stays at 9097200.99
+  const noiseFree = Math.round(amount * 1e4) / 1e4;
+  return Math.floor(noiseFree);
 }
