@@ -4,6 +4,7 @@ import {
   assertSheetMatchesRaster,
   assertMeasurementIntegrity,
   assertLineInvariant,
+  isCalibrationVerified,
 } from './guards';
 import { SCHEMA_VERSION } from './types';
 import type {
@@ -28,12 +29,14 @@ const sheetA: Sheet = {
 };
 const sheetB: Sheet = { ...sheetA, id: 'S-B', sha256: 'b'.repeat(64) };
 
+// fixtures default = unverified (anisotropy: null) — verifyScale ยังไม่ได้รัน
+// ใน tests ที่ทดสอบ "verified-perfect" จะ override เป็น 0 explicit
 const calibOnA: Calibration = {
   id: 'C-A',
   sheetId: 'S-A',
   upp: 0.01,
   sourceDim: { label: 'doorway', realM: 1 },
-  anisotropy: 0,
+  anisotropy: null,
   ts: '2026-05-23T00:00:00Z',
 };
 const calibOnB: Calibration = { ...calibOnA, id: 'C-B', sheetId: 'S-B' };
@@ -130,9 +133,13 @@ describe('schema v1: Measurement ↔ Calibration integrity', () => {
     );
   });
 
-  it('measurement.sheetId ไม่มีจริง → throw', () => {
+});
+
+// --- Dangling-ref guards (must throw, not silent) -----------------------------
+describe('schema v1: dangling references — assertMeasurementIntegrity throws', () => {
+  it('dangling sheetId (lookup ไม่มี) → throw', () => {
     const m: Measurement = {
-      id: 'M-3',
+      id: 'M-dangle-sheet',
       sheetId: 'S-MISSING',
       calibrationId: 'C-A',
       kind: 'length',
@@ -143,9 +150,9 @@ describe('schema v1: Measurement ↔ Calibration integrity', () => {
     );
   });
 
-  it('measurement.calibrationId ไม่มีจริง → throw', () => {
+  it('dangling calibrationId (lookup ไม่มี) → throw', () => {
     const m: Measurement = {
-      id: 'M-4',
+      id: 'M-dangle-calib',
       sheetId: 'S-A',
       calibrationId: 'C-MISSING',
       kind: 'length',
@@ -154,6 +161,86 @@ describe('schema v1: Measurement ↔ Calibration integrity', () => {
     expect(() => assertMeasurementIntegrity(m, sheetById, calibById)).toThrow(
       /calibrationId .* not found/,
     );
+  });
+
+  it('empty sheetById map → throw on sheetId first (สเปก: sheet existence ก่อน)', () => {
+    const empty = new Map<string, Sheet>();
+    const m: Measurement = {
+      id: 'M-empty-sheets',
+      sheetId: 'S-A',
+      calibrationId: 'C-A',
+      kind: 'length',
+      pointsPx: [],
+    };
+    expect(() => assertMeasurementIntegrity(m, empty, calibById)).toThrow(
+      /sheetId .* not found/,
+    );
+  });
+
+  it('empty calibrationById map → throw on calibrationId', () => {
+    const empty = new Map<string, Calibration>();
+    const m: Measurement = {
+      id: 'M-empty-calibs',
+      sheetId: 'S-A',
+      calibrationId: 'C-A',
+      kind: 'length',
+      pointsPx: [],
+    };
+    expect(() => assertMeasurementIntegrity(m, sheetById, empty)).toThrow(
+      /calibrationId .* not found/,
+    );
+  });
+
+  it('both maps empty → sheetId reported first (fail-fast at first missing ref)', () => {
+    const m: Measurement = {
+      id: 'M-empty-both',
+      sheetId: 'S-A',
+      calibrationId: 'C-A',
+      kind: 'length',
+      pointsPx: [],
+    };
+    expect(() =>
+      assertMeasurementIntegrity(m, new Map(), new Map()),
+    ).toThrow(/sheetId .* not found/);
+  });
+});
+
+// --- isCalibrationVerified — null vs 0 distinction ----------------------------
+describe('schema v1: isCalibrationVerified', () => {
+  it('anisotropy=null → false (ยังไม่ verify)', () => {
+    const c: Calibration = { ...calibOnA, anisotropy: null };
+    expect(isCalibrationVerified(c)).toBe(false);
+  });
+  it('anisotropy=0 → true (verify แล้ว, isotropic perfect — ต่างจาก null!)', () => {
+    const c: Calibration = { ...calibOnA, anisotropy: 0 };
+    expect(isCalibrationVerified(c)).toBe(true);
+  });
+  it('anisotropy=0.005 → true (verify แล้ว, deviation < 1% threshold)', () => {
+    const c: Calibration = { ...calibOnA, anisotropy: 0.005 };
+    expect(isCalibrationVerified(c)).toBe(true);
+  });
+  it('fixtures default (calibOnA) = unverified', () => {
+    expect(isCalibrationVerified(calibOnA)).toBe(false);
+  });
+});
+
+// --- TODO(gate-layer): assertMeasurementIntegrity ห้าม throw บน unverified calib
+//     เป็น warning ของ gate layer (data-safety v2+). ตรวจที่ schema layer = block UX flow.
+describe('schema v1: assertMeasurementIntegrity — unverified calibration is NOT a schema-layer error', () => {
+  it('measurement ใช้ calib ที่ anisotropy=null → ผ่าน (gate layer จะ warn เอง)', () => {
+    const m: Measurement = {
+      id: 'M-unverified-calib',
+      sheetId: 'S-A',
+      calibrationId: 'C-A', // calibOnA.anisotropy = null
+      kind: 'length',
+      pointsPx: [
+        { x: 0, y: 0 },
+        { x: 100, y: 0 },
+      ],
+    };
+    expect(() =>
+      assertMeasurementIntegrity(m, sheetById, calibById),
+    ).not.toThrow();
   });
 });
 

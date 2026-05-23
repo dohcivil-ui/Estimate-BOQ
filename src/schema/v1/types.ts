@@ -59,8 +59,14 @@ export type Calibration = {
     label: string;
     realM: number;
   };
-  /** |calibUpp / verifyUpp − 1| จาก verifyScale; 0 = ยังไม่ verify */
-  anisotropy: number;
+  /**
+   * |calibUpp / verifyUpp − 1| จาก verifyScale (formula.ts).
+   *   null = ยังไม่ผ่าน verifyScale (default ตอนสร้างใหม่)
+   *   0    = verify แล้ว และ isotropic perfectly
+   *   >0   = verify แล้ว มี deviation (≤0.01 ผ่าน; >0.01 verifyScale throw ตั้งแต่ formula layer)
+   * ห้ามใช้ 0 แทน null — ความแตกต่างนี้ load-bearing สำหรับ gate layer (ดู isCalibrationVerified)
+   */
+  anisotropy: number | null;
   ts: Timestamp;
 };
 

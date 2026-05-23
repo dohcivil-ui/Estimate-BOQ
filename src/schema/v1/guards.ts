@@ -92,3 +92,20 @@ export function assertLineInvariant(line: Line): void {
     );
   }
 }
+
+/**
+ * isCalibrationVerified — true ถ้า calibration ผ่าน verifyScale มาแล้ว
+ *   (anisotropy ถูก set เป็นตัวเลข, รวมถึง 0 = isotropic perfect)
+ *   false = ยังเป็น null (สร้างใหม่ ยังไม่ verify)
+ *
+ * PURE: อ่านฟิลด์เดียว, ไม่มี side effect.
+ *
+ * TODO(gate-layer): ในรอบนี้ assertMeasurementIntegrity **ไม่ throw** เมื่อ
+ *   measurement ใช้ calibration ที่ unverified — เป็น **warning** ของ
+ *   gate layer ภายหลัง (data-safety v2+ จะเพิ่ม collectGateWarnings ที่อ่าน
+ *   isCalibrationVerified แล้วรายงาน). อย่าเลื่อนมาเป็น throw ที่ schema layer
+ *   เพราะจะ block flow ของผู้ใช้ขณะกำลัง calibrate.
+ */
+export function isCalibrationVerified(calib: Calibration): boolean {
+  return calib.anisotropy !== null;
+}
