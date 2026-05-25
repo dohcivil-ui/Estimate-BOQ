@@ -1,0 +1,128 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body,
+  #root {
+    @apply h-full;
+  }
+
+  body {
+    @apply bg-bg-base text-ink-primary;
+    font-feature-settings: 'kern';
+  }
+
+  /* scrollbar เข้ากับธีมเข้ม */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #0b1220;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #1f2c44;
+    border-radius: 6px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #334155;
+  }
+}
+
+@layer components {
+  .panel {
+    @apply bg-bg-panel border-bg-border;
+  }
+
+  .kb {
+    @apply inline-block rounded border border-bg-border bg-bg-raised px-1 py-0 text-[10px] font-mono text-ink-secondary;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+ * Print stylesheet — สำหรับ "พิมพ์ BOQ" (window.print())
+ * - ซ่อน UI chrome ทั้งหมด เหลือเฉพาะ data-print-root
+ * - light theme + เส้นตารางสีดำ
+ * ═══════════════════════════════════════════════════════════════════════ */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 15mm 10mm;
+  }
+
+  html,
+  body {
+    background: white !important;
+    color: black !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  /* ซ่อนทุกอย่างยกเว้น path ลงไปถึง data-print-root */
+  body > *:not(:has([data-print-root])) {
+    display: none !important;
+  }
+
+  /* ข้าม container chrome ของ app */
+  [data-print-root] {
+    position: fixed !important;
+    inset: 0 !important;
+    background: white !important;
+    color: black !important;
+    padding: 0 !important;
+    width: auto !important;
+    max-width: none !important;
+    overflow: visible !important;
+    z-index: 999999 !important;
+  }
+
+  [data-print-root] * {
+    background: white !important;
+    color: black !important;
+    border-color: #475569 !important;
+    box-shadow: none !important;
+  }
+
+  /* ซ่อนปุ่ม/toolbar ในช่วง print */
+  [data-print-hide] {
+    display: none !important;
+  }
+
+  /* ตาราง — เส้นชัด สีเข้ม */
+  [data-print-root] table {
+    border-collapse: collapse !important;
+    width: 100% !important;
+    font-size: 11px !important;
+  }
+  [data-print-root] table th,
+  [data-print-root] table td {
+    border: 1px solid #1f2937 !important;
+    padding: 4px 6px !important;
+  }
+  [data-print-root] table thead {
+    background: #1e40af !important;
+  }
+  [data-print-root] table thead th {
+    background: #1e40af !important;
+    color: white !important;
+    font-weight: 700 !important;
+  }
+
+  /* totals area */
+  [data-print-totals] {
+    margin-top: 12px !important;
+    page-break-inside: avoid;
+  }
+
+  /* hide editable buttons (input cell button states) */
+  [data-print-root] button {
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+    color: inherit !important;
+    text-align: inherit !important;
+    pointer-events: none;
+  }
+}

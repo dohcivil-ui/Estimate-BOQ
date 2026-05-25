@@ -1,0 +1,284 @@
+/**
+ * BOQ table — editable แต่ละ cell (ชื่อ/หน่วย/qty/ราคา/เผื่อ/หมวด/notes)
+ */
+import { useState } from 'react';
+import { useBOQStore } from '@/stores/boqStore';
+import { useMeasurementStore } from '@/stores/measurementStore';
+import { adjustedQuantity, formatCurrency, rowAmount } from '@/core/boqCalc';
+import type { BOQItem } from '@/types/boq';
+
+const SOURCE_LABEL: Record<BOQItem['source'], { text: string; color: string }> = {
+  manual: { text: 'มือ', color: 'text-ink-muted' },
+  preset: { text: 'ว.809', color: 'text-accent' },
+  ai: { text: 'AI', color: 'text-warning' },
+  measurement: { text: 'วัด', color: 'text-success' },
+};
+
+export function BOQTable() {
+  const items = useBOQStore((s) => s.items);
+  const update = useBOQStore((s) => s.update);
+  const remove = useBOQStore((s) => s.remove);
+  const selectMeasurement = useMeasurementStore((s) => s.select);
+
+  if (items.length === 0) {
+    return (
+      <div className="rounded border border-dashed border-bg-border p-6 text-center text-xs text-ink-muted">
+        ยังไม่มีรายการ BOQ
+        <br />
+        เพิ่มจาก ว.809 / สร้างจากค่าวัด / นำเข้าจาก AI
+      </div>
+    );
+  }
+
+  return (
+    <div className="overflow-x-auto rounded border border-bg-border">
+      <table className="w-full text-xs">
+        <thead className="bg-bg-raised text-[10px] uppercase tracking-wider text-ink-muted">
+          <tr>
+            <th className="w-8 px-1 py-1.5 text-center">#</th>
+            <th className="px-1 py-1.5 text-left">หมวด</th>
+            <th className="px-1 py-1.5 text-left">รายการ</th>
+            <th className="w-14 px-1 py-1.5 text-center">หน่วย</th>
+            <th className="w-20 px-1 py-1.5 text-right">ปริมาณ</th>
+            <th className="w-14 px-1 py-1.5 text-right">เผื่อ%</th>
+            <th className="w-20 px-1 py-1.5 text-right">ราคา/หน่วย</th>
+            <th className="w-12 px-1 py-1.5 text-center">ประเภท</th>
+            <th className="w-24 px-1 py-1.5 text-right">จำนวนเงิน</th>
+            <th className="w-10 px-1 py-1.5 text-center">ที่มา</th>
+            <th className="w-6 px-1 py-1.5"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((it, idx) => (
+            <BOQRow
+              key={it.id}
+              item={it}
+              idx={idx}
+              onUpdate={(patch) => update(it.id, patch)}
+              onRemove={() => {
+                if (confirm(`ลบรายการ "${it.name}"?`)) remove(it.id);
+              }}
+              onJumpToMeasurement={
+                it.source === 'measurement' && it.sourceRef
+                  ? () => selectMeasurement(it.sourceRef!)
+                  : undefined
+              }
+            />
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function BOQRow({
+  item,
+  idx,
+  onUpdate,
+  onRemove,
+  onJumpToMeasurement,
+}: {
+  item: BOQItem;
+  idx: number;
+  onUpdate: (patch: Partial<BOQItem>) => void;
+  onRemove: () => void;
+  onJumpToMeasurement?: () => void;
+}) {
+  const amount = rowAmount(item);
+  const adjQty = adjustedQuantity(item);
+  const src = SOURCE_LABEL[item.source];
+  const bg = item.isMaterial ? 'bg-blue-500/5' : 'bg-amber-500/5';
+
+  return (
+    <tr className={`border-t border-bg-border ${bg} hover:bg-bg-hover`}>
+      <td className="px-1 py-1 text-center text-ink-muted">{idx + 1}</td>
+      <td className="px-1 py-1">
+        <Cell
+          value={item.category}
+          onCommit={(v) => onUpdate({ category: v })}
+          className="text-ink-secondary"
+        />
+      </td>
+      <td className="px-1 py-1">
+        <Cell
+          value={item.name}
+          onCommit={(v) => onUpdate({ name: v })}
+          className="text-ink-primary"
+        />
+      </td>
+      <td className="px-1 py-1 text-center">
+        <Cell
+          value={item.unit}
+          onCommit={(v) => onUpdate({ unit: v })}
+          className="text-center text-ink-secondary"
+        />
+      </td>
+      <td className="px-1 py-1 text-right">
+        <NumberCell
+          value={item.quantity}
+          onCommit={(n) => onUpdate({ quantity: n })}
+        />
+        {item.thickness != null && (
+          <div className="text-[10px] text-ink-muted">
+            ×{item.thickness.toFixed(3)} m = {adjQty.toFixed(3)}
+          </div>
+        )}
+      </td>
+      <td className="px-1 py-1 text-right">
+        <NumberCell
+          value={item.wastePct}
+          onCommit={(n) => onUpdate({ wastePct: n })}
+        />
+      </td>
+      <td className="px-1 py-1 text-right">
+        <NumberCell
+          value={item.unitPrice}
+          onCommit={(n) => onUpdate({ unitPrice: n })}
+        />
+      </td>
+      <td className="px-1 py-1 text-center">
+        <button
+          type="button"
+          onClick={() => onUpdate({ isMaterial: !item.isMaterial })}
+          className={`rounded px-1 py-0.5 text-[10px] ${
+            item.isMaterial
+              ? 'bg-blue-500/30 text-blue-300'
+              : 'bg-amber-500/30 text-amber-300'
+          }`}
+          title="กดเพื่อสลับวัสดุ/ค่าแรง"
+        >
+          {item.isMaterial ? 'วัสดุ' : 'ค่าแรง'}
+        </button>
+      </td>
+      <td className="px-1 py-1 text-right font-mono text-ink-primary">
+        {formatCurrency(amount)}
+      </td>
+      <td className={`px-1 py-1 text-center text-[10px] ${src.color}`}>
+        {onJumpToMeasurement ? (
+          <button
+            type="button"
+            onClick={onJumpToMeasurement}
+            className="underline-offset-2 hover:underline"
+            title="ดูค่าวัดต้นทาง"
+          >
+            {src.text}
+          </button>
+        ) : (
+          src.text
+        )}
+      </td>
+      <td className="px-1 py-1 text-center">
+        <button
+          type="button"
+          onClick={onRemove}
+          className="text-ink-muted hover:text-danger"
+          aria-label="ลบ"
+        >
+          ✕
+        </button>
+      </td>
+    </tr>
+  );
+}
+
+function Cell({
+  value,
+  onCommit,
+  className,
+}: {
+  value: string;
+  onCommit: (v: string) => void;
+  className?: string;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => {
+          onCommit(draft);
+          setEditing(false);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+          if (e.key === 'Escape') {
+            setDraft(value);
+            setEditing(false);
+          }
+        }}
+        className="w-full rounded border border-accent bg-bg-base px-1 py-0.5 text-xs text-ink-primary outline-none"
+      />
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        setDraft(value);
+        setEditing(true);
+      }}
+      className={`block w-full truncate rounded px-1 py-0.5 text-left hover:bg-bg-hover ${className ?? ''}`}
+      title="คลิกเพื่อแก้ไข"
+    >
+      {value || <span className="text-ink-muted">—</span>}
+    </button>
+  );
+}
+
+function NumberCell({
+  value,
+  onCommit,
+}: {
+  value: number;
+  onCommit: (n: number) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(String(value));
+
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        type="number"
+        step="any"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => {
+          const n = Number(draft);
+          if (isFinite(n)) onCommit(n);
+          setEditing(false);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+          if (e.key === 'Escape') {
+            setDraft(String(value));
+            setEditing(false);
+          }
+        }}
+        className="w-full rounded border border-accent bg-bg-base px-1 py-0.5 text-right text-xs text-ink-primary outline-none"
+      />
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        setDraft(String(value));
+        setEditing(true);
+      }}
+      className="block w-full rounded px-1 py-0.5 text-right font-mono text-xs text-ink-primary hover:bg-bg-hover"
+      title="คลิกเพื่อแก้ไข"
+    >
+      {value.toLocaleString('th-TH', {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 4,
+      })}
+    </button>
+  );
+}

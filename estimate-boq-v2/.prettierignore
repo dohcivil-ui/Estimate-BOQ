@@ -1,0 +1,10 @@
+node_modules
+dist
+dist-ssr
+*.tsbuildinfo
+.env
+.env.local
+.env.*.local
+
+# Supabase migrations have specific formatting (SQL keywords lowercase)
+supabase/migrations

@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🧪 ทดสอบ Workflow — อาคารฟอกไตเทียม</title>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0f1318;--p1:#161d27;--p2:#1c2535;--bd:#2a3548;--ac:#3b8bff;--ac2:#6aabff;--gn:#00d68f;--gn2:#00f5a0;--rd:#ff5c6a;--yw:#ffb800;--tx:#dce4f0;--dm:#6b7d96}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Sarabun',sans-serif;background:var(--bg);color:var(--tx);line-height:1.6;padding:20px;max-width:860px;margin:0 auto}
+h1{font-size:22px;font-weight:800;background:linear-gradient(90deg,var(--ac2),var(--gn2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:4px}
+.sub{font-size:12px;color:var(--dm);margin-bottom:20px}
+h2{font-size:16px;font-weight:700;color:var(--ac2);margin:24px 0 10px;padding:8px 12px;background:var(--p2);border-left:3px solid var(--ac);border-radius:0 6px 6px 0}
+h3{font-size:13px;font-weight:700;color:var(--yw);margin:14px 0 6px}
+.step{background:var(--p1);border:1px solid var(--bd);border-radius:8px;padding:14px;margin-bottom:10px;transition:border-color .2s}
+.step.done{border-color:var(--gn);background:rgba(0,214,143,.04)}
+.step.fail{border-color:var(--rd);background:rgba(255,92,106,.04)}
+.step-head{display:flex;align-items:center;gap:10px;margin-bottom:6px;cursor:pointer}
+.step-num{width:28px;height:28px;border-radius:50%;background:var(--p2);border:2px solid var(--bd);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:var(--dm);flex-shrink:0;transition:.2s}
+.step.done .step-num{background:var(--gn);border-color:var(--gn);color:#000}
+.step.fail .step-num{background:var(--rd);border-color:var(--rd);color:#fff}
+.step-title{font-weight:600;font-size:13px;flex:1}
+.btns{display:flex;gap:6px}
+.btn{padding:4px 12px;border-radius:5px;border:1px solid var(--bd);background:none;color:var(--tx);cursor:pointer;font:600 11px 'Sarabun';transition:.15s}
+.btn:hover{border-color:var(--ac);color:var(--ac2)}
+.btn.pass{border-color:var(--gn);color:var(--gn)}
+.btn.pass.active{background:var(--gn);color:#000}
+.btn.fail{border-color:var(--rd);color:var(--rd)}
+.btn.fail.active{background:var(--rd);color:#fff}
+.inst{font-size:12px;color:var(--dm);margin:4px 0 6px;padding-left:38px}
+.inst ol{padding-left:18px}
+.inst li{margin-bottom:2px}
+.expect{font-size:11px;color:var(--yw);margin:4px 0 4px 38px;padding:4px 8px;background:rgba(255,184,0,.08);border-radius:4px;border-left:2px solid var(--yw)}
+.note{width:100%;margin-top:6px;margin-left:38px;max-width:calc(100% - 38px);padding:6px 8px;border-radius:5px;border:1px solid var(--bd);background:var(--bg);color:var(--tx);font:12px 'Sarabun';resize:vertical;min-height:32px}
+.note:focus{outline:none;border-color:var(--ac)}
+.note::placeholder{color:var(--dm)}
+
+/* summary */
+.summary{background:var(--p2);border:1px solid var(--bd);border-radius:10px;padding:16px;margin-top:24px}
+.score{font-size:36px;font-weight:800;text-align:center;margin:8px 0}
+.score .pass-count{color:var(--gn2)}
+.score .total{color:var(--dm)}
+.bar{height:8px;background:var(--bg);border-radius:4px;overflow:hidden;margin:8px 0}
+.bar-fill{height:100%;background:linear-gradient(90deg,var(--gn),var(--gn2));border-radius:4px;transition:width .4s}
+
+/* bug section */
+.bug-area{margin-top:20px;background:var(--p1);border:1px solid var(--bd);border-radius:8px;padding:14px}
+.bug-area h3{margin-top:0;color:var(--rd)}
+.bug-input{display:flex;gap:6px;margin-bottom:8px}
+.bug-input input{flex:1;padding:6px 10px;border-radius:5px;border:1px solid var(--bd);background:var(--bg);color:var(--tx);font:13px 'Sarabun'}
+.bug-input input:focus{outline:none;border-color:var(--rd)}
+.bug-input button{padding:6px 14px;border-radius:5px;border:none;background:var(--rd);color:#fff;cursor:pointer;font:600 12px 'Sarabun'}
+.bug-list{list-style:none}
+.bug-list li{font-size:12px;padding:4px 0;border-bottom:1px solid var(--bd);display:flex;justify-content:space-between;align-items:center}
+.bug-list li span{flex:1}
+.bug-del{background:none;border:none;color:var(--rd);cursor:pointer;font-size:14px;padding:0 4px}
+
+/* print */
+.print-row{margin-top:16px;display:flex;gap:8px}
+.print-btn{padding:10px 24px;border-radius:6px;border:none;cursor:pointer;font:700 13px 'Sarabun';transition:.15s;display:flex;align-items:center;gap:6px}
+.print-btn.green{background:var(--gn);color:#000}.print-btn.green:hover{background:var(--gn2)}
+.print-btn.blue{background:var(--ac);color:#fff}.print-btn.blue:hover{background:var(--ac2);color:#000}
+
+@media print{
+  body{background:#fff;color:#000;padding:10px}
+  h1{-webkit-text-fill-color:#1a5fd4}
+  h2{background:#f0f0f0;border-color:#1a5fd4;color:#1a5fd4}
+  h3{color:#b58600}
+  .step{border-color:#ccc;background:#fff}
+  .step.done{border-color:#00a86b;background:#f0fff8}
+  .step.fail{border-color:#d00;background:#fff5f5}
+  .step-num{background:#eee;border-color:#ccc;color:#666}
+  .step.done .step-num{background:#00a86b;color:#fff}
+  .step.fail .step-num{background:#d00;color:#fff}
+  .inst,.expect{color:#333}
+  .note{border-color:#ccc;background:#fafafa;color:#000}
+  .btn,.print-row,.bug-input button{display:none}
+  .bug-list li{color:#000}
+  .summary{background:#f8f9fa;border-color:#ccc}
+  .score .pass-count{color:#00a86b}
+}
+</style>
+</head>
+<body>
+
+<h1>🧪 ทดสอบ Workflow จบรอบ</h1>
+<div class="sub">อาคารฟอกไตเทียม โรงพยาบาลสุมาลย์ · ทดสอบ cost-estimator-v2.html + Custom GPT · วันที่: <span id="today"></span></div>
+
+<div id="app"></div>
+
+<div class="bug-area">
+  <h3>🐛 Bug / ปัญหาที่พบ</h3>
+  <div class="bug-input">
+    <input id="bugInput" placeholder="พิมพ์ปัญหาที่พบ แล้วกด เพิ่ม..." onkeydown="if(event.key==='Enter')addBug()">
+    <button onclick="addBug()">+ เพิ่ม</button>
+  </div>
+  <ul class="bug-list" id="bugList"></ul>
+</div>
+
+<div class="bug-area" style="margin-top:10px">
+  <h3 style="color:var(--ac2)">💡 ข้อเสนอปรับปรุง</h3>
+  <div class="bug-input">
+    <input id="sugInput" placeholder="พิมพ์ข้อเสนอ แล้วกด เพิ่ม..." onkeydown="if(event.key==='Enter')addSug()">
+    <button style="background:var(--ac);" onclick="addSug()">+ เพิ่ม</button>
+  </div>
+  <ul class="bug-list" id="sugList"></ul>
+</div>
+
+<div class="summary" id="summary"></div>
+
+<div class="print-row">
+  <button class="print-btn green" onclick="window.print()">🖨️ พิมพ์ / บันทึก PDF</button>
+  <button class="print-btn blue" onclick="exportResult()">📋 คัดลอกผลทดสอบ</button>
+</div>
+
+<script>
+document.getElementById('today').textContent=new Date().toLocaleDateString('th-TH',{year:'numeric',month:'long',day:'numeric'});
+
+const steps=[
+  {id:'scale',title:'เปิด PDF + ตั้งสเกลถูกต้อง',
+   inst:'เปิด hemodyalysis_Architec.pdf → หน้า A-06 (แปลนพื้น 1:125)\nกด 📐 ตั้งสเกล → คลิก 2 จุดตามกริด ①→② = 5.00 ม.\nตรวจสอบ: วัด ①→⑥ ควรได้ ~26.00 ม.',
+   expect:'สเกลตั้งได้ วัดเส้นกริดได้ ±5%'},
+  {id:'area',title:'วัดพื้นที่อาคาร ~364 ตร.ม.',
+   inst:'เลือก ⬡ พื้นที่ → คลิกมุมอาคาร 4 จุด (A①→A⑥→C⑥→C①) → Enter\nตั้งชื่อ: พื้นที่อาคาร',
+   expect:'พื้นที่ ~364 ตร.ม. (26×14) ±5%'},
+  {id:'wall',title:'วัดเส้นรอบรูปผนังนอก ~80 ม.',
+   inst:'เลือก 📏 ความยาว → คลิกตามแนวผนังรอบอาคาร → Enter\nตั้งชื่อ: ผนังภายนอก',
+   expect:'ความยาว ~80 ม. → 2(26+14) ±5%'},
+  {id:'column',title:'นับเสา C1 ~35 จุด (จากแบบ S-03)',
+   inst:'เปิด hemodyalysis_Structure.pdf → หน้า S-03\nตั้งสเกลใหม่ → เลือก 🔢 นับจำนวน\nคลิกตำแหน่ง F1,C1 ทุกจุด → Enter → ตั้งชื่อ: เสา C1',
+   expect:'นับได้ ~35 จุด ±3'},
+  {id:'gptexport',title:'📋 ส่งออกค่าวัดไป GPT ครบ',
+   inst:'แท็บ วาด/วัด → ดู 📊 สรุปปริมาณรวม\nกดปุ่ม 📋 ส่งออกค่าวัดไป GPT → กด 📋 คัดลอก',
+   expect:'ข้อความมีรายการครบ ค่าตัวเลขถูก คัดลอกได้'},
+  {id:'gptcalc',title:'GPT คำนวณถูก + ส่ง JSON ออกมา',
+   inst:'เปิด Custom GPT → วางข้อความ + แนบรูป S-09\nเพิ่มข้อมูล: ฐาน F1 1.50×1.50 DB16, เสา C1 0.25×0.25 4-DB20 ฯลฯ\nGPT คำนวณ → พิมพ์ "ส่งออก JSON"',
+   expect:'GPT ถามยืนยัน → คำนวณ → ส่ง JSON ตรง format'},
+  {id:'aiimport',title:'🤖 นำเข้า JSON เข้า BOQ สำเร็จ',
+   inst:'คัดลอก JSON จาก GPT → แท็บ BOQ → กดปุ่ม 🤖 นำเข้าจาก AI\nวาง JSON → กด ✅ นำเข้า',
+   expect:'ข้อความสีเขียว "✅ นำเข้า XX รายการสำเร็จ" + BOQ ครบ'},
+  {id:'factorf',title:'ราคากลางแสดงถูก (Factor F ×)',
+   inst:'ตรวจดู BOQ: ค่าแรง/วัสดุ แยกถูก\nFactor F ถูกตั้งจาก JSON\nยอดรวมราคากลาง สมเหตุสมผล',
+   expect:'ราคากลาง = Direct Cost × Factor F'},
+  {id:'export',title:'Export Excel/PDF ข้อมูลครบ',
+   inst:'กรอกชื่อโครงการ/หน่วยงาน/สถานที่\nกด 📊 Excel → เปิดตรวจ\nกด 🖨️ PDF → Print Preview ตรวจ',
+   expect:'Excel มี 2 ชีต ยอดตรง · PDF หัวกระดาษครบ ภาษาไทยไม่แตก'},
+  {id:'saveload',title:'บันทึก/เปิดงาน ข้อมูลครบ',
+   inst:'กด 💾 บันทึกงาน → ได้ .json\nกด 📂 เปิดงาน → โหลดกลับ',
+   expect:'shapes + BOQ + สเกล + Factor F กลับมาครบ'}
+];
+
+let results={};
+let bugs=[];
+let sugs=[];
+
+function render(){
+  let h='';
+  steps.forEach((s,i)=>{
+    const r=results[s.id]||'';
+    const cls=r==='pass'?'done':r==='fail'?'fail':'';
+    h+=`<div class="step ${cls}" id="step-${s.id}">
+      <div class="step-head" onclick="toggle('${s.id}')">
+        <div class="step-num">${r==='pass'?'✓':r==='fail'?'✗':i+1}</div>
+        <div class="step-title">${s.title}</div>
+        <div class="btns">
+          <button class="btn pass ${r==='pass'?'active':''}" onclick="event.stopPropagation();mark('${s.id}','pass')">✅ ผ่าน</button>
+          <button class="btn fail ${r==='fail'?'active':''}" onclick="event.stopPropagation();mark('${s.id}','fail')">❌ ไม่ผ่าน</button>
+        </div>
+      </div>
+      <div class="inst"><ol>${s.inst.split('\n').map(l=>'<li>'+l+'</li>').join('')}</ol></div>
+      <div class="expect">ค่าที่ต้องได้: ${s.expect}</div>
+      <textarea class="note" placeholder="จดบันทึก / ปัญหาที่เจอ..." oninput="saveNote('${s.id}',this.value)">${getNoteVal(s.id)}</textarea>
+    </div>`;
+  });
+  document.getElementById('app').innerHTML=h;
+  renderSummary();
+}
+
+const notes={};
+function saveNote(id,v){notes[id]=v;save();}
+function getNoteVal(id){return notes[id]||'';}
+
+function mark(id,v){
+  results[id]=results[id]===v?'':v;
+  save();render();
+}
+
+function renderSummary(){
+  const total=steps.length;
+  const passed=Object.values(results).filter(v=>v==='pass').length;
+  const failed=Object.values(results).filter(v=>v==='fail').length;
+  const pct=Math.round(passed/total*100);
+  let color=pct>=80?'var(--gn2)':pct>=50?'var(--yw)':'var(--rd)';
+  document.getElementById('summary').innerHTML=`
+    <div style="font-size:12px;color:var(--dm);text-align:center">สรุปผลทดสอบ</div>
+    <div class="score"><span class="pass-count">${passed}</span><span class="total"> / ${total}</span></div>
+    <div class="bar"><div class="bar-fill" style="width:${pct}%;background:${color}"></div></div>
+    <div style="display:flex;justify-content:center;gap:20px;font-size:12px;margin-top:8px">
+      <span style="color:var(--gn)">✅ ผ่าน ${passed}</span>
+      <span style="color:var(--rd)">❌ ไม่ผ่าน ${failed}</span>
+      <span style="color:var(--dm)">⬜ ยังไม่ทดสอบ ${total-passed-failed}</span>
+    </div>
+    <div style="text-align:center;margin-top:8px;font-size:13px;font-weight:700;color:${color}">${pct>=100?'🎉 ผ่านครบ! ระบบพร้อมใช้งาน':pct>=80?'👍 เกือบครบ แก้อีกนิด':'⚠️ ยังต้องแก้ไข'}</div>`;
+}
+
+function addBug(){
+  const inp=document.getElementById('bugInput');
+  if(!inp.value.trim())return;
+  bugs.push(inp.value.trim());inp.value='';
+  renderBugs();save();
+}
+function addSug(){
+  const inp=document.getElementById('sugInput');
+  if(!inp.value.trim())return;
+  sugs.push(inp.value.trim());inp.value='';
+  renderSugs();save();
+}
+function delBug(i){bugs.splice(i,1);renderBugs();save();}
+function delSug(i){sugs.splice(i,1);renderSugs();save();}
+function renderBugs(){
+  document.getElementById('bugList').innerHTML=bugs.map((b,i)=>
+    `<li><span>🐛 ${b}</span><button class="bug-del" onclick="delBug(${i})">✕</button></li>`).join('');
+}
+function renderSugs(){
+  document.getElementById('sugList').innerHTML=sugs.map((s,i)=>
+    `<li><span>💡 ${s}</span><button class="bug-del" onclick="delSug(${i})">✕</button></li>`).join('');
+}
+
+function exportResult(){
+  let txt=`🧪 ผลทดสอบ Workflow — อาคารฟอกไตเทียม\nวันที่: ${new Date().toLocaleDateString('th-TH')}\n\n`;
+  steps.forEach((s,i)=>{
+    const r=results[s.id]||'ยังไม่ทดสอบ';
+    const icon=r==='pass'?'✅':r==='fail'?'❌':'⬜';
+    txt+=`${icon} ${i+1}. ${s.title} → ${r==='pass'?'ผ่าน':r==='fail'?'ไม่ผ่าน':'ยังไม่ทดสอบ'}`;
+    if(notes[s.id])txt+=`\n   📝 ${notes[s.id]}`;
+    txt+='\n';
+  });
+  if(bugs.length){txt+='\n🐛 Bug:\n';bugs.forEach((b,i)=>txt+=`${i+1}. ${b}\n`);}
+  if(sugs.length){txt+='\n💡 ข้อเสนอ:\n';sugs.forEach((s,i)=>txt+=`${i+1}. ${s}\n`);}
+  navigator.clipboard.writeText(txt).then(()=>alert('คัดลอกผลทดสอบแล้ว! วางในแชท Claude ได้เลย')).catch(()=>{
+    const ta=document.createElement('textarea');ta.value=txt;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();alert('คัดลอกแล้ว!');
+  });
+}
+
+// localStorage
+function save(){
+  localStorage.setItem('wf-test',JSON.stringify({results,notes,bugs,sugs}));
+}
+function load(){
+  try{const d=JSON.parse(localStorage.getItem('wf-test')||'{}');
+  if(d.results)results=d.results;if(d.notes)Object.assign(notes,d.notes);
+  if(d.bugs)bugs=d.bugs;if(d.sugs)sugs=d.sugs;}catch(e){}
+}
+
+load();render();renderBugs();renderSugs();
+</script>
+</body>
+</html>

@@ -1,0 +1,889 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ประมาณราคาก่อสร้าง v2 | ว.809 (14 พ.ย. 68)</title>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>if(window.pdfjsLib)pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
+<style>
+:root{--bg:#0c1017;--p1:#141a24;--p2:#1a2233;--bd:#263045;--ac:#2d7ff9;--ac2:#5ba0ff;--ac3:#1a5fd4;--gn:#00c47d;--gn2:#00e88e;--rd:#ff4757;--yw:#ffb800;--yw2:#ffd84d;--tx:#d8dee9;--dm:#7b8ba5;--br:#f0f4fc;--sh:0 2px 12px rgba(0,0,0,.35)}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Sarabun',sans-serif;background:var(--bg);color:var(--tx);font-size:13px;overflow:hidden;height:100vh}
+::-webkit-scrollbar{width:5px}::-webkit-scrollbar-thumb{background:var(--bd);border-radius:3px}
+.app{display:flex;height:100vh}
+
+/* PANEL */
+.pnl{width:370px;min-width:370px;background:var(--p1);border-right:1px solid var(--bd);display:flex;flex-direction:column}
+.pnl-hd{padding:12px 16px;border-bottom:1px solid var(--bd);background:linear-gradient(135deg,var(--p2),var(--p1))}
+.pnl-hd h1{font-size:15px;font-weight:800;background:linear-gradient(90deg,var(--ac2),var(--gn2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.pnl-hd p{font-size:10px;color:var(--dm);margin-top:2px}
+.tabs{display:flex;border-bottom:1px solid var(--bd);background:var(--p2)}
+.tabs button{flex:1;padding:9px 0;border:none;cursor:pointer;background:0;color:var(--dm);font:600 11px/1 'Sarabun',sans-serif;border-bottom:2px solid transparent;transition:.15s}
+.tabs button.on{color:var(--ac2);border-bottom-color:var(--ac);background:rgba(45,127,249,.06)}
+.tabs button:hover:not(.on){color:var(--tx)}
+.tc{flex:1;overflow:auto;padding:12px}
+
+/* COMMON */
+.sec{font-size:10px;color:var(--dm);font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px}
+.row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.b{padding:5px 12px;border-radius:5px;border:1px solid var(--bd);background:0;color:var(--tx);cursor:pointer;font:500 12px/1.2 'Sarabun';transition:.12s;display:inline-flex;align-items:center;gap:4px}
+.b:hover{border-color:var(--ac);color:var(--ac2)}
+.b.on{border:1.5px solid var(--ac);background:rgba(45,127,249,.12);color:var(--ac2);font-weight:700}
+.b.gn{border-color:var(--gn);background:rgba(0,196,125,.1);color:var(--gn2)}
+.b.rd{border-color:var(--rd);background:rgba(255,71,87,.1);color:#ff6b7a}
+.b.yw{border-color:var(--yw);background:rgba(255,184,0,.1);color:var(--yw2)}
+.inp{padding:5px 9px;border-radius:4px;border:1px solid var(--bd);background:var(--bg);color:var(--tx);font:13px 'Sarabun';width:100%}
+.inp:focus{outline:0;border-color:var(--ac)}
+.card{background:var(--p2);border:1px solid var(--bd);border-radius:8px;padding:10px;margin-bottom:6px;transition:border-color .12s}
+.card:hover{border-color:var(--dm)}
+.card.sel{border-color:var(--ac);box-shadow:0 0 0 1px rgba(45,127,249,.2)}
+.x{background:0;border:0;color:var(--rd);cursor:pointer;font-size:15px;padding:0 3px;line-height:1}
+.badge{display:inline-block;padding:2px 7px;border-radius:10px;font-size:10px;font-weight:700}
+.tag-area{background:rgba(45,127,249,.15);color:var(--ac2)}
+.tag-line{background:rgba(0,196,125,.15);color:var(--gn2)}
+.tag-cnt{background:rgba(255,92,240,.15);color:#ff5cf0}
+
+/* FILE */
+.fup{display:block;padding:10px;border:2px dashed var(--bd);border-radius:8px;text-align:center;cursor:pointer;color:var(--dm);transition:.2s;font-size:12px}
+.fup:hover{border-color:var(--ac);color:var(--ac2)}
+
+/* CALIB */
+.cbox{background:rgba(255,71,87,.06);border:1px solid rgba(255,71,87,.2);border-radius:8px;padding:10px;margin-bottom:10px}
+
+/* RATE ITEM */
+.ri{padding:6px 8px;margin-bottom:3px;border-radius:5px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;background:var(--bg);border:1px solid transparent;transition:.12s}
+.ri:hover{border-color:var(--ac);background:var(--p2)}
+.ri .nm{font-size:11.5px;font-weight:500}.ri .pr{font-size:10.5px;color:var(--dm)}
+.ri .plus{font-size:15px;color:var(--gn);flex-shrink:0;margin-left:6px}
+.cat-hd{font-size:12px;font-weight:700;color:var(--ac);margin-bottom:5px;padding-bottom:3px;border-bottom:1px solid var(--bd)}
+
+/* BOQ */
+.boq-c{background:var(--bg);border-radius:8px;padding:10px;border:1px solid var(--bd);margin-bottom:7px}
+.boq-n{font-weight:700;font-size:12px}.boq-r{font-size:10.5px;color:var(--dm);margin:3px 0 5px}
+.boq-rw{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.boq-t{text-align:right;font-size:13px;font-weight:800;margin-top:5px;color:var(--ac2)}
+.fill-b{padding:2px 7px;border-radius:4px;border:1px solid rgba(0,196,125,.3);background:rgba(0,196,125,.08);color:var(--gn);cursor:pointer;font:11px 'Sarabun'}
+.mat-row{display:flex;align-items:center;gap:5px;margin-top:4px}
+
+/* TOTAL */
+.tot{margin-top:14px;padding:14px;border-radius:10px;background:linear-gradient(135deg,rgba(45,127,249,.1),rgba(0,196,125,.07));border:1px solid rgba(45,127,249,.2)}
+.tot-l{font-size:11px;color:var(--dm)}.tot-v{font-size:24px;font-weight:800;color:var(--ac2);margin:4px 0}
+.tot-n{font-size:10px;color:var(--dm)}
+.tot-row{display:flex;justify-content:space-between;font-size:12px;margin-top:6px;padding-top:6px;border-top:1px solid var(--bd)}
+
+/* EXPORT */
+.exp-row{margin-top:10px;display:flex;gap:6px}
+.exp{padding:8px 16px;border-radius:6px;border:0;cursor:pointer;font:600 12px 'Sarabun';transition:.15s;display:flex;align-items:center;gap:5px}
+.exp-xl{background:var(--gn);color:#fff}.exp-xl:hover{background:var(--gn2);color:#000}
+.exp-csv{background:var(--ac);color:#fff}.exp-csv:hover{background:var(--ac2)}
+.exp-pr{background:var(--yw);color:#000}.exp-pr:hover{background:var(--yw2)}
+button:disabled{opacity:.4;cursor:not-allowed!important}
+select.inp{background:var(--bg);color:var(--tx);cursor:pointer}
+
+/* CANVAS */
+.cv-area{flex:1;position:relative;overflow:hidden}
+.tb{position:absolute;top:8px;left:8px;right:8px;z-index:10;display:flex;justify-content:space-between;align-items:center;background:rgba(20,26,36,.92);border-radius:8px;padding:5px 12px;border:1px solid var(--bd);backdrop-filter:blur(8px);font-size:11px}
+.cv-wrap{width:100%;height:100%;background:#080b10}
+canvas{display:block}
+.ph{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none}
+.ph .ic{font-size:56px;margin-bottom:12px;filter:grayscale(.3)}.ph .ti{font-size:17px;font-weight:700;color:var(--dm)}.ph .ds{font-size:12px;color:var(--dm);text-align:center;line-height:2;margin-top:6px}
+.bb{position:absolute;bottom:10px;left:10px;right:10px;z-index:10;background:rgba(20,26,36,.92);border-radius:8px;padding:8px 14px;border:1px solid rgba(255,184,0,.3);backdrop-filter:blur(8px);display:none;justify-content:space-between;align-items:center}
+
+/* HELP PANEL */
+.hlp{margin-top:14px;background:var(--bg);border-radius:8px;padding:10px;font-size:10.5px;line-height:1.9;color:var(--dm)}
+.hlp b{color:var(--tx);font-weight:600}
+.hlp .ht{font-weight:700;color:var(--br);margin-bottom:3px;font-size:11px}
+
+/* MATERIAL MODAL */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100;display:flex;align-items:center;justify-content:center}
+.modal{background:var(--p1);border:1px solid var(--bd);border-radius:12px;padding:20px;width:420px;max-height:80vh;overflow:auto;box-shadow:var(--sh)}
+.modal h3{font-size:14px;margin-bottom:12px;color:var(--br)}
+</style>
+</head>
+<body>
+<div class="app">
+<div class="pnl">
+  <div class="pnl-hd"><h1>🏗️ ประมาณราคาก่อสร้าง v2</h1><p>บัญชีค่าแรง ว.809 (14 พ.ย. 2568) กรมบัญชีกลาง — รองรับค่าวัสดุ + Export Excel</p></div>
+  <div class="tabs">
+    <button class="on" data-tab="draw" onclick="goTab('draw')">📐 วาด/วัด</button>
+    <button data-tab="boq" onclick="goTab('boq')">📋 BOQ</button>
+    <button data-tab="rates" onclick="goTab('rates')">💰 ค่าแรง</button>
+    <button data-tab="mat" onclick="goTab('mat')">🧱 ค่าวัสดุ</button>
+  </div>
+  <div class="tc" id="TC"></div>
+</div>
+<div class="cv-area">
+  <div class="tb">
+    <div style="display:flex;align-items:center;gap:8px"><span id="ZM" style="color:var(--dm)">🔍 100%</span><button class="b" style="padding:3px 7px;font-size:10px" onclick="rstView()">Reset</button><button class="b" style="padding:3px 9px;font-size:11px;border-color:var(--ac);color:var(--ac2)" onclick="showGuide()">❓ คู่มือ</button></div>
+    <div id="TN" style="font-weight:700;color:var(--ac2)">⬡ วาดพื้นที่</div>
+    <div id="CD" style="color:var(--dm)"></div>
+  </div>
+  <div class="cv-wrap" id="CW"><canvas id="CV"></canvas></div>
+  <div class="ph" id="PH"><div class="ic">📐</div><div class="ti">โปรแกรมประมาณราคาก่อสร้าง v2</div><div class="ds">เปิดไฟล์แบบ (JPG, PNG, <b>PDF</b>) จากแผงซ้าย<br>ตั้งสเกล → วาดพื้นที่/วัดระยะ → เพิ่มรายการ BOQ<br>อ้างอิงบัญชีค่าแรงงาน ว.809 ลว.14 พ.ย. 2568<br><br>🆕 v2: รองรับ PDF + Export Excel + คำนวณค่าวัสดุ</div></div>
+  <div class="bb" id="BB"><span id="BL"></span><span id="BV" style="font-size:15px;font-weight:800;color:var(--br)"></span></div>
+</div>
+</div>
+
+<script>
+// === STATE ===
+let img=null,imgEl=null,tool='polygon',dPts=[],shapes=[],selIdx=null;
+let sc=0,calD='1',snap=true,SR=12,cur=null,snP=null;
+let zm=1,px=0,py=0,pan=false,psx=0,psy=0;
+let tab='draw',boq=[],sRate='',sMat='';
+let pdfDoc=null,pdfPage=1,pdfTotal=0,pdfScale=2;
+let ortho=false,shiftDown=false;
+let snapEnd=true,snapMid=true,snapInt=true,snapPerp=false,snapNear=false;
+let dragV=null;
+let layers=[{name:'ทั่วไป',vis:true}],activeLayer='ทั่วไป',clip=null;
+let imgData=null,imgNatW=0,imgNatH=0,snapImg=false,imgThresh=130,loupe=false;
+let factorF=1.0,projName='',projOwner='',projLoc='';
+let imgRot=0; // rotation degrees
+
+// === MATERIAL DATABASE ===
+const MATS={
+  concrete:{label:'คอนกรีต',items:[
+    {id:'m1',name:'คอนกรีตผสมเสร็จ 180 ksc',unit:'ลบ.ม.',price:2250},
+    {id:'m2',name:'คอนกรีตผสมเสร็จ 210 ksc',unit:'ลบ.ม.',price:2350},
+    {id:'m3',name:'คอนกรีตผสมเสร็จ 240 ksc',unit:'ลบ.ม.',price:2450},
+    {id:'m4',name:'คอนกรีตผสมเสร็จ 280 ksc',unit:'ลบ.ม.',price:2650},
+    {id:'m5',name:'คอนกรีตผสมเสร็จ 320 ksc',unit:'ลบ.ม.',price:2850},
+    {id:'m6',name:'คอนกรีตผสมเสร็จ 350 ksc',unit:'ลบ.ม.',price:3050},
+  ]},
+  steel:{label:'เหล็กเสริม',items:[
+    {id:'m10',name:'เหล็กเส้นกลม SR24 ø6 มม.',unit:'ตัน',price:23500},
+    {id:'m11',name:'เหล็กเส้นกลม SR24 ø9 มม.',unit:'ตัน',price:22500},
+    {id:'m12',name:'เหล็กข้ออ้อย SD40 ø10 มม.',unit:'ตัน',price:24000},
+    {id:'m13',name:'เหล็กข้ออ้อย SD40 ø12 มม.',unit:'ตัน',price:23500},
+    {id:'m14',name:'เหล็กข้ออ้อย SD40 ø16 มม.',unit:'ตัน',price:23000},
+    {id:'m15',name:'เหล็กข้ออ้อย SD40 ø20 มม.',unit:'ตัน',price:22800},
+    {id:'m16',name:'เหล็กข้ออ้อย SD40 ø25 มม.',unit:'ตัน',price:22500},
+    {id:'m17',name:'ตะแกรงเหล็กสำเร็จ Wire Mesh',unit:'ตร.ม.',price:85},
+  ]},
+  masonry:{label:'วัสดุก่อ',items:[
+    {id:'m20',name:'อิฐมอญ ขนาดมาตรฐาน',unit:'ก้อน',price:1.2},
+    {id:'m21',name:'อิฐมวลเบา 7.5 ซม.',unit:'ก้อน',price:22},
+    {id:'m22',name:'อิฐมวลเบา 10 ซม.',unit:'ก้อน',price:28},
+    {id:'m23',name:'คอนกรีตบล็อก 7 ซม.',unit:'ก้อน',price:8},
+    {id:'m24',name:'คอนกรีตบล็อก 9 ซม.',unit:'ก้อน',price:10},
+    {id:'m25',name:'คอนกรีตบล็อก 19 ซม.',unit:'ก้อน',price:18},
+    {id:'m26',name:'ปูนฉาบสำเร็จ (ถุง 50 กก.)',unit:'ถุง',price:165},
+  ]},
+  roofing:{label:'หลังคา',items:[
+    {id:'m30',name:'กระเบื้องลอนคู่ 50x120 ซม.',unit:'แผ่น',price:50},
+    {id:'m31',name:'กระเบื้องคอนกรีต (ซีแพคโมเนีย)',unit:'แผ่น',price:28},
+    {id:'m32',name:'เหล็กรีดลอน Metal Sheet 0.40 มม.',unit:'ตร.ม.',price:180},
+    {id:'m33',name:'เหล็กรีดลอน Metal Sheet 0.47 มม.',unit:'ตร.ม.',price:220},
+    {id:'m34',name:'แปเหล็กตัวซี C100x50x20x2.3',unit:'เมตร',price:125},
+  ]},
+  tile:{label:'กระเบื้องปูพื้น/ผนัง',items:[
+    {id:'m40',name:'กระเบื้องเซรามิค 12x12 นิ้ว',unit:'ตร.ม.',price:220},
+    {id:'m41',name:'กระเบื้องเซรามิค 16x16 นิ้ว',unit:'ตร.ม.',price:280},
+    {id:'m42',name:'กระเบื้องเซรามิค 24x24 นิ้ว',unit:'ตร.ม.',price:350},
+    {id:'m43',name:'กระเบื้องแกรนิตโต้ 24x24 นิ้ว',unit:'ตร.ม.',price:420},
+    {id:'m44',name:'กระเบื้องผนัง 8x10 นิ้ว',unit:'ตร.ม.',price:200},
+  ]},
+  plaster:{label:'ปูนซีเมนต์/ทราย',items:[
+    {id:'m50',name:'ปูนซีเมนต์ปอร์ตแลนด์ (ถุง 50 กก.)',unit:'ถุง',price:155},
+    {id:'m51',name:'ทรายหยาบ',unit:'ลบ.ม.',price:550},
+    {id:'m52',name:'ทรายละเอียด',unit:'ลบ.ม.',price:650},
+    {id:'m53',name:'หินย่อย เบอร์ 1',unit:'ลบ.ม.',price:600},
+    {id:'m54',name:'หินย่อย เบอร์ 2',unit:'ลบ.ม.',price:580},
+  ]},
+  paint:{label:'สี',items:[
+    {id:'m60',name:'สีรองพื้นปูนใหม่ (ถัง 5 กล.)',unit:'ถัง',price:850},
+    {id:'m61',name:'สีน้ำอะครีลิค ภายใน (ถัง 5 กล.)',unit:'ถัง',price:950},
+    {id:'m62',name:'สีน้ำอะครีลิค ภายนอก (ถัง 5 กล.)',unit:'ถัง',price:1200},
+    {id:'m63',name:'สีน้ำมัน (ถัง 1 กล.)',unit:'ถัง',price:380},
+    {id:'m64',name:'สีกันสนิม (ถัง 1 กล.)',unit:'ถัง',price:350},
+  ]},
+  sanitary:{label:'สุขภัณฑ์',items:[
+    {id:'m70',name:'ส้วมนั่งราบ ชักโครก',unit:'ชุด',price:3500},
+    {id:'m71',name:'อ่างล้างหน้า แขวนผนัง',unit:'ชุด',price:1800},
+    {id:'m72',name:'ก๊อกอ่างล้างหน้า',unit:'ตัว',price:650},
+    {id:'m73',name:'ฝักบัวสายอ่อน',unit:'ชุด',price:450},
+    {id:'m74',name:'ซิงค์สแตนเลส 2 หลุม',unit:'ชุด',price:3200},
+  ]},
+};
+
+// === LABOR RATES (ว.809) ===
+const RATES={
+  structure:{label:'1. งานโครงสร้างวิศวกรรม',items:[
+    {id:'1.3.1a',name:'ขุดหลุมฐานรากถมคืน ดินทั่วไป (>100 ลบ.ม.)',unit:'ลบ.ม.',rate:121},
+    {id:'1.3.1b',name:'ขุดหลุมฐานรากถมคืน ดินทั่วไป (25-100 ลบ.ม.)',unit:'ลบ.ม.',rate:153},
+    {id:'1.3.1c',name:'ขุดหลุมฐานรากถมคืน ดินทั่วไป (<25 ลบ.ม.)',unit:'ลบ.ม.',rate:181},
+    {id:'1.3.2a',name:'ขุดหลุมฐานรากถมคืน ดินลูกรัง (>100 ลบ.ม.)',unit:'ลบ.ม.',rate:238},
+    {id:'1.3.2b',name:'ขุดหลุมฐานรากถมคืน ดินลูกรัง (25-100 ลบ.ม.)',unit:'ลบ.ม.',rate:292},
+    {id:'1.4',name:'ดินถม/ทรายปรับระดับ',unit:'ลบ.ม.',rate:121},
+    {id:'1.5a',name:'วัสดุรองก้นหลุม (อิฐหัก)',unit:'ลบ.ม.',rate:127},
+    {id:'1.5b',name:'วัสดุรองก้นหลุม (ทราย)',unit:'ลบ.ม.',rate:112},
+    {id:'1.6.1',name:'คอนกรีตหยาบ (ผสมเอง)',unit:'ลบ.ม.',rate:427},
+    {id:'1.6.2a',name:'คอนกรีตโครงสร้าง ทางเท้า/ถนน (ผสมเอง)',unit:'ลบ.ม.',rate:467},
+    {id:'1.6.2b',name:'คอนกรีตโครงสร้าง อาคารชั้นเดียว (ผสมเอง)',unit:'ลบ.ม.',rate:533},
+    {id:'1.6.2c',name:'คอนกรีตโครงสร้าง อาคารหลายชั้น (ผสมเอง)',unit:'ลบ.ม.',rate:581},
+    {id:'1.7a',name:'คอนกรีตผสมเสร็จ ทางเท้า/ถนน',unit:'ลบ.ม.',rate:329},
+    {id:'1.7b',name:'คอนกรีตผสมเสร็จ อาคารชั้นเดียว',unit:'ลบ.ม.',rate:421},
+    {id:'1.7c',name:'คอนกรีตผสมเสร็จ อาคารหลายชั้น',unit:'ลบ.ม.',rate:522},
+    {id:'1.8.1a',name:'แบบหล่อทั่วไป (≥5,000 ตร.ม.)',unit:'ตร.ม.',rate:144},
+    {id:'1.8.1b',name:'แบบหล่อทั่วไป (<5,000 ตร.ม.)',unit:'ตร.ม.',rate:163},
+    {id:'1.8.2a',name:'แบบหล่อเปลือยผิวเรียบ',unit:'ตร.ม.',rate:192},
+    {id:'1.8.3a',name:'แบบหล่อสูง 5-7 ม.',unit:'ตร.ม.',rate:192},
+    {id:'1.8.3b',name:'แบบหล่อสูง >7 ม.',unit:'ตร.ม.',rate:228},
+    {id:'1.9.1',name:'พื้นสำเร็จรูป 5-8 ซม.',unit:'ตร.ม.',rate:26},
+    {id:'1.9.2',name:'พื้นอัดแรงกลวง 10-13 ซม.',unit:'ตร.ม.',rate:36},
+    {id:'1.9.3',name:'พื้นอัดแรงกลวง 15-18 ซม.',unit:'ตร.ม.',rate:51},
+    {id:'1.9.4',name:'พื้นอัดแรงกลวง 20-23 ซม.',unit:'ตร.ม.',rate:62},
+    {id:'1.9.5',name:'พื้นอัดแรงกลวง 25-30 ซม.',unit:'ตร.ม.',rate:72},
+    {id:'1.10.1',name:'เหล็กเสริม ผิวเรียบ <10 มม.',unit:'ตัน',rate:4900},
+    {id:'1.10.2',name:'เหล็กเสริม 10-16 มม.',unit:'ตัน',rate:3900},
+    {id:'1.10.3',name:'เหล็กเสริม >16 มม.',unit:'ตัน',rate:3500},
+    {id:'1.10.4',name:'Wire Mesh',unit:'ตร.ม.',rate:6},
+    {id:'1.11.1',name:'เหล็กรูปพรรณ โครงหลังคา',unit:'กก.',rate:12},
+    {id:'1.11.2',name:'เหล็กรูปพรรณ TRUSS',unit:'กก.',rate:14},
+    {id:'1.11.3a',name:'เหล็กรูปพรรณ โครงสร้าง E60',unit:'กก.',rate:14},
+    {id:'1.11.3b',name:'เหล็กรูปพรรณ โครงสร้าง E70',unit:'กก.',rate:16},
+    {id:'1.12.1a',name:'โครงหลังคาไม้ ทรงจั่ว ≥75 ซม.',unit:'ตร.ม.',rate:110},
+    {id:'1.12.1b',name:'โครงหลังคาไม้ ทรงจั่ว <75 ซม.',unit:'ตร.ม.',rate:149},
+    {id:'1.12.2a',name:'โครงหลังคาไม้ ทรงปั้นหยา ≥75 ซม.',unit:'ตร.ม.',rate:149},
+  ]},
+  architecture:{label:'2. งานสถาปัตยกรรม',items:[
+    {id:'2.1.1a',name:'กระเบื้องลอนคู่ ทรงจั่ว',unit:'ตร.ม.',rate:46},
+    {id:'2.1.1b',name:'กระเบื้องลอนคู่ ทรงปั้นหยา',unit:'ตร.ม.',rate:51},
+    {id:'2.1.3',name:'กระเบื้องคอนกรีต (โมเนีย)',unit:'ตร.ม.',rate:76},
+    {id:'2.1.8a',name:'Metal Sheet ทรงเพิง/จั่ว/ปั้นหยา',unit:'ตร.ม.',rate:72},
+    {id:'2.1.8b',name:'Metal Sheet ทรงโค้ง',unit:'ตร.ม.',rate:82},
+    {id:'2.1.9',name:'หลังคาสังกะสี',unit:'ตร.ม.',rate:25},
+    {id:'2.2.3',name:'ฝ้ายิบซั่ม โครงเหล็ก ฉาบเรียบ',unit:'ตร.ม.',rate:77},
+    {id:'2.2.4',name:'ฝ้ายิบซั่ม โครง T-Bar',unit:'ตร.ม.',rate:53},
+    {id:'2.3a',name:'ก่ออิฐมอญ ครึ่งแผ่น',unit:'ตร.ม.',rate:104},
+    {id:'2.3b',name:'ก่ออิฐมอญ เต็มแผ่น',unit:'ตร.ม.',rate:195},
+    {id:'2.3c',name:'ก่ออิฐกลวง ครึ่งแผ่น',unit:'ตร.ม.',rate:91},
+    {id:'2.3d',name:'ก่ออิฐมวลเบา 7.5 ซม.',unit:'ตร.ม.',rate:73},
+    {id:'2.3e',name:'ก่ออิฐมวลเบา 10 ซม.',unit:'ตร.ม.',rate:76},
+    {id:'2.3f',name:'ก่ออิฐมวลเบา 15 ซม.',unit:'ตร.ม.',rate:85},
+    {id:'2.3g',name:'ก่อ คสล.บล็อก 7 ซม.',unit:'ตร.ม.',rate:93},
+    {id:'2.3h',name:'ก่อ คสล.บล็อก 9 ซม.',unit:'ตร.ม.',rate:100},
+    {id:'2.3i',name:'เสาเอ็น/ทับหลัง ครึ่งแผ่น',unit:'เมตร',rate:51},
+    {id:'2.3j',name:'เสาเอ็น/ทับหลัง เต็มแผ่น 15 ซม.',unit:'เมตร',rate:73},
+    {id:'2.3k',name:'ฉาบปูนโครงสร้าง ภายใน',unit:'ตร.ม.',rate:109},
+    {id:'2.3l',name:'ฉาบปูนโครงสร้าง ภายนอก',unit:'ตร.ม.',rate:132},
+    {id:'2.3m',name:'ฉาบปูนผนัง ภายใน',unit:'ตร.ม.',rate:96},
+    {id:'2.3n',name:'ฉาบปูนผนัง ภายนอก',unit:'ตร.ม.',rate:109},
+    {id:'2.3o',name:'ฉาบปูนทรายรองพื้น',unit:'ตร.ม.',rate:77},
+    {id:'2.4a',name:'เทปูนทรายปรับระดับ ขัดเรียบ',unit:'ตร.ม.',rate:75},
+    {id:'2.4b',name:'เทปูนทรายปรับระดับ ขัดมัน',unit:'ตร.ม.',rate:96},
+    {id:'2.4c',name:'พื้นเซรามิค 8x8, 12x12',unit:'ตร.ม.',rate:161},
+    {id:'2.4d',name:'พื้นเซรามิค 18x18, 20x20, 24x24',unit:'ตร.ม.',rate:178},
+    {id:'2.4e',name:'พื้นแกรนิตโต้ 12x12 - 16x16',unit:'ตร.ม.',rate:188},
+    {id:'2.4f',name:'พื้นแกรนิตโต้ 24x24 ขึ้นไป',unit:'ตร.ม.',rate:228},
+    {id:'2.4g',name:'พื้นหินอ่อน/แกรนิต 0.30x0.30',unit:'ตร.ม.',rate:181},
+    {id:'2.4h',name:'พื้นลามิเนต ≥100 ตร.ม.',unit:'ตร.ม.',rate:72},
+    {id:'2.5a',name:'ติดตั้งวงกบประตู',unit:'ตร.ม.',rate:103},
+    {id:'2.5b',name:'ติดตั้งบานประตูไม้',unit:'ตร.ม.',rate:108},
+    {id:'2.5c',name:'ติดตั้งบานประตูสำเร็จรูป',unit:'ตร.ม.',rate:77},
+    {id:'2.6a',name:'ส้วมนั่งราบ มีหม้อน้ำ',unit:'ชุด',rate:461},
+    {id:'2.6b',name:'ส้วมนั่งยอง ราดน้ำ',unit:'ชุด',rate:154},
+    {id:'2.6c',name:'อ่างล้างหน้าพร้อมอุปกรณ์',unit:'ชุด',rate:461},
+    {id:'2.6d',name:'ซิงค์ 2 หลุม',unit:'ชุด',rate:328},
+    {id:'2.8a',name:'ทาสีน้ำ ภายใน ≥5000 ตร.ม.',unit:'ตร.ม.',rate:29},
+    {id:'2.8b',name:'ทาสีน้ำ ภายใน <5000 ตร.ม.',unit:'ตร.ม.',rate:31},
+    {id:'2.8c',name:'ทาสีน้ำ ภายนอก ≥5000 ตร.ม.',unit:'ตร.ม.',rate:32},
+    {id:'2.8d',name:'ทาสีน้ำ ภายนอก <5000 ตร.ม.',unit:'ตร.ม.',rate:35},
+    {id:'2.8e',name:'ทาสีน้ำมัน ≥5000 ตร.ม.',unit:'ตร.ม.',rate:36},
+    {id:'2.8f',name:'ทาสีเหล็กกันสนิม ≥5000 ตร.ม.',unit:'ตร.ม.',rate:31},
+  ]},
+  plumbing:{label:'3. งานสุขาภิบาล/ดับเพลิง',items:[
+    {id:'3.7a',name:'ท่อ PVC ระบายน้ำ 1½"',unit:'เมตร',rate:31},
+    {id:'3.7b',name:'ท่อ PVC ระบายน้ำ 2"',unit:'เมตร',rate:41},
+    {id:'3.7c',name:'ท่อ PVC ระบายน้ำ 3"',unit:'เมตร',rate:77},
+    {id:'3.7d',name:'ท่อ PVC ระบายน้ำ 4"',unit:'เมตร',rate:103},
+    {id:'3.7e',name:'ท่อ PVC ระบายน้ำ 6"',unit:'เมตร',rate:205},
+    {id:'3.8a',name:'ท่อ PVC ประปา ½"',unit:'เมตร',rate:31},
+    {id:'3.8b',name:'ท่อ PVC ประปา ¾"',unit:'เมตร',rate:31},
+    {id:'3.8c',name:'ท่อ PVC ประปา 1"',unit:'เมตร',rate:31},
+    {id:'3.8d',name:'ท่อ PVC ประปา 2"',unit:'เมตร',rate:41},
+    {id:'3.9a',name:'ท่อ PP/HDPE 2"',unit:'เมตร',rate:41},
+    {id:'3.9b',name:'ท่อ PP/HDPE 4"',unit:'เมตร',rate:123},
+  ]},
+  electrical:{label:'4. งานไฟฟ้า/สื่อสาร',items:[
+    {id:'4.2a',name:'THW 1.5 sq.mm.',unit:'เมตร',rate:5},
+    {id:'4.2b',name:'THW 2.5 sq.mm.',unit:'เมตร',rate:7},
+    {id:'4.2c',name:'THW 4 sq.mm.',unit:'เมตร',rate:10},
+    {id:'4.2d',name:'THW 10 sq.mm.',unit:'เมตร',rate:16},
+    {id:'4.2e',name:'THW 16 sq.mm.',unit:'เมตร',rate:21},
+    {id:'4.2f',name:'THW 25 sq.mm.',unit:'เมตร',rate:26},
+    {id:'4.2g',name:'THW 35 sq.mm.',unit:'เมตร',rate:31},
+    {id:'4.38a',name:'PVC Conduit 20 mm.',unit:'เมตร',rate:24},
+    {id:'4.38b',name:'PVC Conduit 25 mm.',unit:'เมตร',rate:26},
+    {id:'4.53a',name:'Switch 1 Gang',unit:'ชุด',rate:82},
+    {id:'4.53b',name:'Switch 2 Gang',unit:'ชุด',rate:92},
+    {id:'4.53c',name:'เต้ารับเดี่ยว',unit:'ชุด',rate:92},
+    {id:'4.53d',name:'เต้ารับคู่ 2P+G',unit:'ชุด',rate:92},
+    {id:'4.58a',name:'Downlight 4-6"',unit:'ชุด',rate:118},
+    {id:'4.58b',name:'โคมเรืองแสง 1x36W',unit:'ชุด',rate:118},
+    {id:'4.58c',name:'โคมเรืองแสง 2x36W',unit:'ชุด',rate:154},
+  ]},
+  hvac:{label:'5. งานปรับอากาศ',items:[
+    {id:'5.1a',name:'แอร์ 9,000 BTU',unit:'ชุด',rate:1538},
+    {id:'5.1b',name:'แอร์ 12,000 BTU',unit:'ชุด',rate:1538},
+    {id:'5.1c',name:'แอร์ 18,000 BTU',unit:'ชุด',rate:1538},
+    {id:'5.1d',name:'แอร์ 24,000 BTU',unit:'ชุด',rate:1538},
+    {id:'5.1e',name:'แอร์ 36,000 BTU',unit:'ชุด',rate:2050},
+    {id:'5.2a',name:'พัดลมระบาย Wall 8"',unit:'ชุด',rate:410},
+    {id:'5.2b',name:'พัดลมระบาย Wall 10"',unit:'ชุด',rate:461},
+  ]},
+};
+
+// === HELPERS ===
+const F=(n)=>n.toLocaleString('th-TH',{minimumFractionDigits:2,maximumFractionDigits:2});
+const D=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+const E=(s)=>s.replace(/</g,'&lt;').replace(/&/g,'&amp;');
+function pArea(p){let a=0;for(let i=0;i<p.length;i++){const j=(i+1)%p.length;a+=p[i].x*p[j].y-p[j].x*p[i].y;}return Math.abs(a/2);}
+function pLen(p){let l=0;for(let i=1;i<p.length;i++)l+=D(p[i],p[i-1]);return l;}
+function dimLabel(a,b,text,color){const mx=(a.x+b.x)/2,my=(a.y+b.y)/2,ang=Math.atan2(b.y-a.y,b.x-a.x);let pa=ang-Math.PI/2;if(Math.sin(pa)>0)pa+=Math.PI;const off=13/zm,lx=mx+Math.cos(pa)*off,ly=my+Math.sin(pa)*off;c.save();c.translate(lx,ly);let ra=ang;if(ra>Math.PI/2)ra-=Math.PI;if(ra<-Math.PI/2)ra+=Math.PI;c.rotate(ra);c.font=`bold ${12/zm}px Sarabun`;c.textAlign='center';c.textBaseline='middle';const tw=c.measureText(text).width;c.fillStyle='rgba(0,0,0,.72)';c.fillRect(-tw/2-4/zm,-8/zm,tw+8/zm,15/zm);c.fillStyle=color;c.fillText(text,0,0);c.restore();c.textAlign='center';c.textBaseline='alphabetic';}
+function effQty(it){const base=it.qty||0,t=(it.unit==='ลบ.ม.'&&it.thick>0)?it.thick:1;return base*t;}
+function lineTotal(it){return effQty(it)*(1+(it.waste||0)/100)*it.rate;}
+function sumBOQ(){const tL=boq.filter(i=>!i.isMat).reduce((s,i)=>s+lineTotal(i),0),tM=boq.filter(i=>i.isMat).reduce((s,i)=>s+lineTotal(i),0);return{tL,tM,tD:tL+tM,tF:(tL+tM)*factorF};}
+
+// === CANVAS ===
+const cv=document.getElementById('CV'),c=cv.getContext('2d'),cw=document.getElementById('CW');
+function resize(){const r=cw.getBoundingClientRect(),d=devicePixelRatio||1;cv.width=r.width*d;cv.height=r.height*d;cv.style.width=r.width+'px';cv.style.height=r.height+'px';c.setTransform(d,0,0,d,0,0);draw();}
+window.addEventListener('resize',resize);
+function s2c(sx,sy){const r=cw.getBoundingClientRect();return{x:(sx-r.left-px)/zm,y:(sy-r.top-py)/zm};}
+function segInt(p1,p2,p3,p4){const d=(p2.x-p1.x)*(p4.y-p3.y)-(p2.y-p1.y)*(p4.x-p3.x);if(Math.abs(d)<1e-9)return null;const t=((p3.x-p1.x)*(p4.y-p3.y)-(p3.y-p1.y)*(p4.x-p3.x))/d,u=((p3.x-p1.x)*(p2.y-p1.y)-(p3.y-p1.y)*(p2.x-p1.x))/d;if(t>=0&&t<=1&&u>=0&&u<=1)return{x:p1.x+t*(p2.x-p1.x),y:p1.y+t*(p2.y-p1.y)};return null;}
+function allSegs(exclSi){const segs=[];shapes.forEach((s,si)=>{if(s.type==='calibrate'||si===exclSi||!layerVis(s))return;const ps=s.points,n=ps.length,lim=s.type==='polygon'?n:n-1;for(let i=0;i<lim;i++)segs.push([ps[i],ps[(i+1)%n]]);});return segs;}
+function projSeg(p,a,b){const dx=b.x-a.x,dy=b.y-a.y,L2=dx*dx+dy*dy;if(L2<1e-9)return{x:a.x,y:a.y,t:0};const t=((p.x-a.x)*dx+(p.y-a.y)*dy)/L2,tc=Math.max(0,Math.min(1,t));return{x:a.x+tc*dx,y:a.y+tc*dy,t:tc};}
+function fSnap(pt,exclSi){if(!snap)return null;let bn=null,bnd=SR/zm,bm=null,bmd=SR/zm,bi=null,bid=SR/zm,bp=null,bpd=SR/zm,bnr=null,bnrd=SR/zm;
+  if(snapEnd){const chkN=n=>{const d=D(pt,n);if(d<bnd){bnd=d;bn={x:n.x,y:n.y,t:'node'};}};shapes.forEach((s,si)=>{if(si===exclSi||!layerVis(s))return;s.points.forEach(chkN);});dPts.forEach(chkN);}
+  if(snapMid)shapes.forEach((s,si)=>{if(s.type==='calibrate'||si===exclSi||!layerVis(s))return;const ps=s.points,n=ps.length,lim=s.type==='polygon'?n:n-1;for(let i=0;i<lim;i++){const a=ps[i],c2=ps[(i+1)%n],m={x:(a.x+c2.x)/2,y:(a.y+c2.y)/2},d=D(pt,m);if(d<bmd){bmd=d;bm={x:m.x,y:m.y,t:'mid'};}}});
+  if(snapInt){const sg=allSegs(exclSi);for(let i=0;i<sg.length;i++)for(let j=i+1;j<sg.length;j++){const ip=segInt(sg[i][0],sg[i][1],sg[j][0],sg[j][1]);if(ip){const d=D(pt,ip);if(d<bid){bid=d;bi={x:ip.x,y:ip.y,t:'int'};}}}}
+  if(snapPerp&&dPts.length>0){const lp=dPts[dPts.length-1],sg=allSegs(exclSi);for(const[a,b]of sg){const f=projSeg(lp,a,b),d=D(pt,f);if(d<bpd){bpd=d;bp={x:f.x,y:f.y,t:'perp'};}}}
+  if(snapNear){const sg=allSegs(exclSi);for(const[a,b]of sg){const f=projSeg(pt,a,b),d=D(pt,f);if(d<bnrd){bnrd=d;bnr={x:f.x,y:f.y,t:'near'};}}}
+  let bimg=null;if(snapImg&&exclSi===undefined)bimg=imgSnap(pt);
+  return bn||bi||bp||bimg||bm||bnr;}
+function recalcShape(s){const lsc=s.sc||sc;if(s.type==='polygon'){s.areaSqm=pArea(s.points)/(lsc*lsc||1);s.label=F(s.areaSqm)+' ตร.ม.';}else if(s.type==='line'){s.lengthM=pLen(s.points)/(lsc||1);s.label=F(s.lengthM)+' ม.';}else if(s.type==='circle'){s.radius=D(s.points[0],s.points[1]);s.radiusM=s.radius/(lsc||1);s.areaSqm=Math.PI*s.radiusM*s.radiusM;s.circM=2*Math.PI*s.radiusM;s.label='⌀'+F(s.radiusM*2)+' ม.';}else if(s.type==='count'){s.count=s.points.length;s.label=s.count+' จุด';}}
+function addShape(s){s.layer=activeLayer;s.sc=sc;shapes.push(s);return shapes.length-1;}
+function layerVis(s){if(s.type==='calibrate')return true;const L=layers.find(l=>l.name===(s.layer||'ทั่วไป'));return !L||L.vis;}
+function captureImgData(){try{if(!imgEl){imgData=null;return;}const w=imgEl.naturalWidth||imgEl.width,hh=imgEl.naturalHeight||imgEl.height;const oc=document.createElement('canvas');oc.width=w;oc.height=hh;const octx=oc.getContext('2d',{willReadFrequently:true});octx.drawImage(imgEl,0,0);imgData=octx.getImageData(0,0,w,hh);imgNatW=w;imgNatH=hh;}catch(e){imgData=null;}}
+function imgSnap(pt){if(!imgData)return null;const cx=Math.round(pt.x),cy=Math.round(pt.y),R=Math.min(35,Math.max(3,Math.round(SR/zm))),d=imgData.data;let best=null,bd=(SR/zm)*(SR/zm);for(let dy=-R;dy<=R;dy++){const yy=cy+dy;if(yy<0||yy>=imgNatH)continue;for(let dx=-R;dx<=R;dx++){const xx=cx+dx;if(xx<0||xx>=imgNatW)continue;const i=(yy*imgNatW+xx)*4;if(d[i+3]<20)continue;const lum=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];if(lum<imgThresh){const dist=dx*dx+dy*dy;if(dist<bd){bd=dist;best={x:xx,y:yy};}}}}return best?{x:best.x,y:best.y,t:'img'}:null;}
+function applyOrtho(from,to){const dx=to.x-from.x,dy=to.y-from.y,ang=Math.atan2(dy,dx),sa=Math.round(ang/(Math.PI/4))*(Math.PI/4),len=Math.hypot(dx,dy);return{x:from.x+Math.cos(sa)*len,y:from.y+Math.sin(sa)*len};}
+function orthoOn(){return(ortho||shiftDown)&&dPts.length>0&&tool!=='select';}
+
+function draw(){
+  const r=cw.getBoundingClientRect(),d=devicePixelRatio||1;
+  c.setTransform(d,0,0,d,0,0);c.clearRect(0,0,r.width,r.height);
+  c.save();c.translate(px,py);c.scale(zm,zm);
+  if(imgEl){
+    if(imgRot!==0){const iw=imgEl.naturalWidth||imgEl.width,ih=imgEl.naturalHeight||imgEl.height;c.save();c.translate(iw/2,ih/2);c.rotate(imgRot*Math.PI/180);c.drawImage(imgEl,-iw/2,-ih/2);c.restore();}
+    else c.drawImage(imgEl,0,0);
+  }
+  shapes.forEach((s,i)=>{
+    if(!layerVis(s))return;
+    const sel=i===selIdx;c.beginPath();
+    if(s.type==='polygon'&&s.points.length){c.moveTo(s.points[0].x,s.points[0].y);for(let j=1;j<s.points.length;j++)c.lineTo(s.points[j].x,s.points[j].y);c.closePath();c.fillStyle=sel?'rgba(255,200,0,.35)':'rgba(45,127,249,.18)';c.fill();c.strokeStyle=sel?'#ffb300':'#2d7ff9';c.lineWidth=(sel?3:2)/zm;c.stroke();}
+    else if(s.type==='line'&&s.points.length){c.moveTo(s.points[0].x,s.points[0].y);for(let j=1;j<s.points.length;j++)c.lineTo(s.points[j].x,s.points[j].y);c.strokeStyle=sel?'#ffb300':'#00c47d';c.lineWidth=(sel?3:2)/zm;c.stroke();for(let j=0;j<s.points.length-1;j++){const a=s.points[j],b=s.points[j+1],segPx=D(a,b),sl=sc>0?(segPx/sc).toFixed(2)+' ม.':segPx.toFixed(0)+' px';dimLabel(a,b,sl,sel?'#ffd84d':'#5ff0b0');}}
+    else if(s.type==='circle'&&s.points.length>=1){c.arc(s.points[0].x,s.points[0].y,s.radius,0,Math.PI*2);c.fillStyle=sel?'rgba(255,200,0,.35)':'rgba(0,196,125,.16)';c.fill();c.strokeStyle=sel?'#ffb300':'#00c47d';c.lineWidth=(sel?3:2)/zm;c.stroke();c.beginPath();c.arc(s.points[0].x,s.points[0].y,3/zm,0,Math.PI*2);c.fillStyle=sel?'#ffb300':'#00c47d';c.fill();}
+    else if(s.type==='count'){s.points.forEach((p,k)=>{c.beginPath();c.arc(p.x,p.y,7/zm,0,Math.PI*2);c.fillStyle=sel?'rgba(255,179,0,.85)':'rgba(255,92,240,.85)';c.fill();c.strokeStyle='#fff';c.lineWidth=1.5/zm;c.stroke();c.fillStyle='#fff';c.font=`bold ${8/zm}px Sarabun`;c.textAlign='center';c.textBaseline='middle';c.fillText(k+1,p.x,p.y);});c.textBaseline='alphabetic';}
+    else if(s.type==='calibrate'&&s.points.length===2){c.moveTo(s.points[0].x,s.points[0].y);c.lineTo(s.points[1].x,s.points[1].y);c.strokeStyle='#ff4757';c.lineWidth=2.5/zm;c.setLineDash([8/zm,4/zm]);c.stroke();c.setLineDash([]);}
+    if(s.type!=='count'||sel)s.points.forEach(p=>{const rr=sel?6/zm:4/zm;c.beginPath();c.arc(p.x,p.y,rr,0,Math.PI*2);c.fillStyle=sel?'#ffb300':'#fff';c.fill();c.strokeStyle=sel?'#7a4f00':'#333';c.lineWidth=(sel?2:1.5)/zm;c.stroke();});
+    if(s.label&&s.type!=='line'){const cx=s.points.reduce((a,p)=>a+p.x,0)/s.points.length,cy=s.points.reduce((a,p)=>a+p.y,0)/s.points.length;c.font=`bold ${13/zm}px Sarabun`;c.fillStyle=sel?'#ffb300':'#2d7ff9';c.textAlign='center';const txt=s.name?s.name+' ('+s.label+')':s.label;const tw=c.measureText(txt).width;c.fillStyle='rgba(255,255,255,.82)';c.fillRect(cx-tw/2-3/zm,cy-9/zm,tw+6/zm,16/zm);c.fillStyle=sel?'#c47b00':'#1a5fd4';c.fillText(txt,cx,cy+3/zm);}
+    if(s.type==='line'&&s.name){const cx=s.points.reduce((a,p)=>a+p.x,0)/s.points.length,cy=s.points.reduce((a,p)=>a+p.y,0)/s.points.length;c.font=`bold ${12/zm}px Sarabun`;c.textAlign='center';const tw=c.measureText(s.name).width;c.fillStyle='rgba(255,255,255,.82)';c.fillRect(cx-tw/2-3/zm,cy-9/zm,tw+6/zm,16/zm);c.fillStyle=sel?'#c47b00':'#1a5fd4';c.fillText(s.name,cx,cy+3/zm);}
+  });
+  if(dPts.length&&tool==='circle'&&cur){const ctr=dPts[0],p=snP||cur,rad=D(ctr,p);c.beginPath();c.arc(ctr.x,ctr.y,rad,0,Math.PI*2);c.fillStyle='rgba(255,100,0,.1)';c.fill();c.strokeStyle='#ff6600';c.lineWidth=2/zm;c.stroke();c.beginPath();c.moveTo(ctr.x,ctr.y);c.lineTo(p.x,p.y);c.strokeStyle='#ff6600';c.setLineDash([5/zm,3/zm]);c.stroke();c.setLineDash([]);c.beginPath();c.arc(ctr.x,ctr.y,4/zm,0,Math.PI*2);c.fillStyle='#ff6600';c.fill();const rl=sc>0?'R '+(rad/sc).toFixed(2)+' ม.':'R '+rad.toFixed(0)+' px';c.font=`bold ${12/zm}px Sarabun`;c.textAlign='center';c.textBaseline='middle';const tw=c.measureText(rl).width;c.fillStyle='rgba(0,0,0,.78)';c.fillRect((ctr.x+p.x)/2-tw/2-5/zm,(ctr.y+p.y)/2-19/zm,tw+10/zm,15/zm);c.fillStyle='#ffd84d';c.fillText(rl,(ctr.x+p.x)/2,(ctr.y+p.y)/2-11.5/zm);c.textBaseline='alphabetic';}
+  if(dPts.length){c.beginPath();c.moveTo(dPts[0].x,dPts[0].y);for(let i=1;i<dPts.length;i++)c.lineTo(dPts[i].x,dPts[i].y);if(cur&&tool!=='select'&&tool!=='circle'&&tool!=='count'){const p=snP||cur;c.lineTo(p.x,p.y);}if(tool==='polygon'){c.fillStyle='rgba(255,100,0,.12)';c.fill();}if(tool!=='circle'){c.strokeStyle=tool==='calibrate'?'#ff4757':'#ff6600';c.lineWidth=2/zm;if(tool==='calibrate')c.setLineDash([8/zm,4/zm]);c.stroke();c.setLineDash([]);}dPts.forEach(p=>{c.beginPath();c.arc(p.x,p.y,5/zm,0,Math.PI*2);c.fillStyle='#ff6600';c.fill();c.strokeStyle='#fff';c.lineWidth=1.5/zm;c.stroke();});}
+  // Live dimension while dragging
+  if(dPts.length&&cur&&tool!=='select'&&tool!=='circle'&&tool!=='count'){const last=dPts[dPts.length-1],p=snP||cur,segPx=D(last,p);const lab=sc>0?(segPx/sc).toFixed(2)+' ม.':segPx.toFixed(0)+' px';const mx=(last.x+p.x)/2,my=(last.y+p.y)/2;c.font=`bold ${12/zm}px Sarabun`;c.textAlign='center';c.textBaseline='middle';const tw=c.measureText(lab).width;c.fillStyle='rgba(0,0,0,.78)';c.fillRect(mx-tw/2-5/zm,my-19/zm,tw+10/zm,15/zm);c.fillStyle='#ffd84d';c.fillText(lab,mx,my-11.5/zm);
+    if(tool==='line'&&dPts.length>=1){let tot=pLen(dPts)+segPx;const tl=sc>0?'รวม '+(tot/sc).toFixed(2)+' ม.':'รวม '+tot.toFixed(0)+' px';c.font=`bold ${11/zm}px Sarabun`;const tw2=c.measureText(tl).width;c.fillStyle='rgba(0,150,100,.85)';c.fillRect(p.x+10/zm,p.y-8/zm,tw2+10/zm,15/zm);c.fillStyle='#fff';c.textAlign='left';c.fillText(tl,p.x+15/zm,p.y-0.5/zm);}
+    else if(tool==='polygon'&&dPts.length>=2){const tmp=[...dPts,p];const ar=pArea(tmp)/(sc*sc||1);const al=sc>0?'≈ '+F(ar)+' ตร.ม.':'';if(al){c.font=`bold ${11/zm}px Sarabun`;const tw3=c.measureText(al).width;c.fillStyle='rgba(45,127,249,.85)';c.fillRect(p.x+10/zm,p.y-8/zm,tw3+10/zm,15/zm);c.fillStyle='#fff';c.textAlign='left';c.fillText(al,p.x+15/zm,p.y-0.5/zm);}}
+    c.textBaseline='alphabetic';c.textAlign='center';}
+  if(tool==='count'&&dPts.length&&cur){const p=cur,cl='นับ: '+dPts.length+' (Enter จบ)';c.font=`bold ${12/zm}px Sarabun`;c.textAlign='left';c.textBaseline='middle';const tw=c.measureText(cl).width;c.fillStyle='rgba(255,92,240,.9)';c.fillRect(p.x+12/zm,p.y-8/zm,tw+10/zm,16/zm);c.fillStyle='#fff';c.fillText(cl,p.x+17/zm,p.y);c.textBaseline='alphabetic';c.textAlign='center';}
+  if(snP&&tool!=='select'){const s8=8/zm;if(snP.t==='mid'){c.beginPath();c.moveTo(snP.x,snP.y-s8);c.lineTo(snP.x+s8,snP.y+s8);c.lineTo(snP.x-s8,snP.y+s8);c.closePath();c.strokeStyle='#ffb800';c.lineWidth=2.5/zm;c.stroke();}else if(snP.t==='int'){c.strokeStyle='#ff5cf0';c.lineWidth=2.5/zm;c.beginPath();c.moveTo(snP.x-s8,snP.y-s8);c.lineTo(snP.x+s8,snP.y+s8);c.moveTo(snP.x+s8,snP.y-s8);c.lineTo(snP.x-s8,snP.y+s8);c.stroke();}else if(snP.t==='perp'){c.strokeStyle='#00d4ff';c.lineWidth=2.5/zm;c.strokeRect(snP.x-s8,snP.y-s8,s8*2,s8*2);c.beginPath();c.moveTo(snP.x-s8,snP.y);c.lineTo(snP.x,snP.y);c.lineTo(snP.x,snP.y+s8);c.stroke();}else if(snP.t==='near'){c.strokeStyle='#ff9d3c';c.lineWidth=2.5/zm;c.beginPath();c.moveTo(snP.x,snP.y-s8);c.lineTo(snP.x+s8,snP.y);c.lineTo(snP.x,snP.y+s8);c.lineTo(snP.x-s8,snP.y);c.closePath();c.stroke();}else if(snP.t==='img'){c.strokeStyle='#19e3ff';c.lineWidth=2/zm;c.beginPath();c.arc(snP.x,snP.y,s8,0,Math.PI*2);c.stroke();c.beginPath();c.moveTo(snP.x-s8*1.4,snP.y);c.lineTo(snP.x+s8*1.4,snP.y);c.moveTo(snP.x,snP.y-s8*1.4);c.lineTo(snP.x,snP.y+s8*1.4);c.stroke();}else{c.beginPath();c.arc(snP.x,snP.y,s8,0,Math.PI*2);c.strokeStyle='#00ff88';c.lineWidth=2.5/zm;c.stroke();}}
+  if(cur&&tool!=='select'&&!pan){const p=snP||cur;c.strokeStyle='rgba(255,255,255,.4)';c.lineWidth=1/zm;c.setLineDash([4/zm,4/zm]);c.beginPath();c.moveTo(p.x-18/zm,p.y);c.lineTo(p.x+18/zm,p.y);c.moveTo(p.x,p.y-18/zm);c.lineTo(p.x,p.y+18/zm);c.stroke();c.setLineDash([]);}
+  c.restore();
+}
+
+// === MOUSE ===
+cw.addEventListener('mousedown',e=>{
+  if(e.button===1||(e.button===0&&e.altKey)){pan=true;psx=e.clientX-px;psy=e.clientY-py;cw.style.cursor='grabbing';return;}
+  if(e.button!==0)return;
+  const pt=s2c(e.clientX,e.clientY),sp=fSnap(pt);let fp=sp||pt;if(!sp&&orthoOn())fp=applyOrtho(dPts[dPts.length-1],pt);
+  if(tool==='select'){
+    if(selIdx!==null&&shapes[selIdx]){const s=shapes[selIdx];for(let k=0;k<s.points.length;k++){if(D(pt,s.points[k])<11/zm){dragV={si:selIdx,pi:k};return;}}}
+    let f=-1;for(let i=shapes.length-1;i>=0;i--){const s=shapes[i];if(!layerVis(s))continue;if(s.type==='polygon'){let ins=false;const ps=s.points;for(let a=0,b=ps.length-1;a<ps.length;b=a++)if(ps[a].y>pt.y!==ps[b].y>pt.y&&pt.x<((ps[b].x-ps[a].x)*(pt.y-ps[a].y))/(ps[b].y-ps[a].y)+ps[a].x)ins=!ins;if(ins){f=i;break;}}else if(s.type==='line'){for(let j=0;j<s.points.length-1;j++){const a2=s.points[j],b2=s.points[j+1],ln=D(a2,b2);if(!ln)continue;const t=Math.max(0,Math.min(1,((pt.x-a2.x)*(b2.x-a2.x)+(pt.y-a2.y)*(b2.y-a2.y))/(ln*ln)));if(D(pt,{x:a2.x+t*(b2.x-a2.x),y:a2.y+t*(b2.y-a2.y)})<10/zm){f=i;break;}}if(f>=0)break;}else if(s.type==='circle'){if(Math.abs(D(pt,s.points[0])-s.radius)<10/zm||D(pt,s.points[0])<s.radius){f=i;break;}}else if(s.type==='count'){for(const p of s.points){if(D(pt,p)<10/zm){f=i;break;}}if(f>=0)break;}}selIdx=f>=0?f:null;updBB();rTab();draw();return;}
+  if(tool==='calibrate'){if(!dPts.length){dPts=[fp];}else{const pl=D(dPts[0],fp),d=parseFloat(calD)||1;sc=pl/d;shapes.push({type:'calibrate',points:[dPts[0],fp],label:d+' ม.'});dPts=[];tool='polygon';updTN();rTab();}draw();return;}
+  if(tool==='circle'){if(!dPts.length){dPts=[fp];}else{const rad=D(dPts[0],fp);if(rad>0){const rm=rad/(sc||1),ar=Math.PI*rm*rm;addShape({type:'circle',points:[dPts[0],fp],radius:rad,radiusM:rm,areaSqm:ar,circM:2*Math.PI*rm,label:'⌀'+F(rm*2)+' ม.'});}dPts=[];rTab();}draw();return;}
+  if(tool==='count'){dPts.push(fp);draw();return;}
+  if(tool==='polygon'&&dPts.length>=3&&D(fp,dPts[0])<12/zm){const a=pArea(dPts)/(sc*sc||1);addShape({type:'polygon',points:[...dPts],areaSqm:a,label:F(a)+' ตร.ม.'});dPts=[];rTab();draw();return;}
+  dPts.push(fp);draw();
+});
+cw.addEventListener('mousemove',e=>{if(pan){px=e.clientX-psx;py=e.clientY-psy;draw();return;}const pt=s2c(e.clientX,e.clientY);
+  if(dragV){const s=shapes[dragV.si];const sp=fSnap(pt,dragV.si),np=sp||pt;if(s.type==='circle'&&dragV.pi===0){const dx=np.x-s.points[0].x,dy=np.y-s.points[0].y;s.points[0]={x:np.x,y:np.y};s.points[1]={x:s.points[1].x+dx,y:s.points[1].y+dy};}else{s.points[dragV.pi]={x:np.x,y:np.y};}recalcShape(s);snP=sp;updBB();draw();return;}
+  snP=fSnap(pt);let oOn=false;if(snP){cur=pt;}else if(orthoOn()){cur=applyOrtho(dPts[dPts.length-1],pt);oOn=true;}else{cur=pt;}const tlab={node:'● ปลายเส้น',mid:'▲ กึ่งกลาง',int:'✕ จุดตัด',perp:'⊾ ตั้งฉาก',near:'◇ จุดบนเส้น',img:'✛ เส้นในแบบ'},tcol={node:'var(--gn)',mid:'var(--yw)',int:'#ff5cf0',perp:'#00d4ff',near:'#ff9d3c',img:'#19e3ff'};document.getElementById('CD').innerHTML=`X:${(cur).x.toFixed(0)} Y:${(cur).y.toFixed(0)}`+(snP?`<span style="color:${tcol[snP.t]};margin-left:5px">${tlab[snP.t]}</span>`:'')+(oOn?'<span style="color:var(--yw);margin-left:5px">⊾ ORTHO</span>':'');draw();});
+cw.addEventListener('mouseup',()=>{pan=false;if(dragV){dragV=null;snP=null;rTab();draw();}cw.style.cursor=tool==='select'?'default':'crosshair';});
+cw.addEventListener('mouseleave',()=>{pan=false;cur=null;snP=null;draw();});
+function finalizeDraw(){
+  if(tool==='line'&&dPts.length>=2){const l=pLen(dPts)/(sc||1);addShape({type:'line',points:[...dPts],lengthM:l,label:F(l)+' ม.'});dPts=[];rTab();draw();}
+  else if(tool==='polygon'&&dPts.length>=3){const a=pArea(dPts)/(sc*sc||1);addShape({type:'polygon',points:[...dPts],areaSqm:a,label:F(a)+' ตร.ม.'});dPts=[];rTab();draw();}
+  else if(tool==='count'&&dPts.length>=1){addShape({type:'count',points:[...dPts],count:dPts.length,label:dPts.length+' จุด'});dPts=[];rTab();draw();}
+}
+cw.addEventListener('dblclick',e=>{
+  if(tool==='select'&&selIdx!==null&&shapes[selIdx]){
+    const s=shapes[selIdx];if(s.type==='polygon'||s.type==='line'){
+      const pt=s2c(e.clientX,e.clientY);const n=s.points.length,lim=s.type==='polygon'?n:n-1;
+      let bi=-1,bd=10/zm,bp=null;
+      for(let j=0;j<lim;j++){const a=s.points[j],b=s.points[(j+1)%n],f=projSeg(pt,a,b),d=D(pt,f);if(d<bd){bd=d;bi=j+1;bp=f;}}
+      if(bi>=0){s.points.splice(bi,0,{x:bp.x,y:bp.y});recalcShape(s);rTab();draw();return;}
+    }
+  }
+  finalizeDraw();
+});
+cw.addEventListener('wheel',e=>{e.preventDefault();const r=cw.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top,f=e.deltaY<0?1.15:1/1.15,nz=Math.max(.1,Math.min(20,zm*f));px=mx-(mx-px)*(nz/zm);py=my-(my-py)*(nz/zm);zm=nz;document.getElementById('ZM').textContent='🔍 '+(zm*100).toFixed(0)+'%';draw();},{passive:false});
+cw.addEventListener('contextmenu',e=>{
+  e.preventDefault();
+  if(tool==='select'&&selIdx!==null&&shapes[selIdx]){
+    const s=shapes[selIdx],pt=s2c(e.clientX,e.clientY);
+    for(let k=0;k<s.points.length;k++){
+      if(D(pt,s.points[k])<11/zm){
+        const minPts=s.type==='polygon'?3:s.type==='line'?2:s.type==='count'?1:99;
+        if(s.points.length>minPts){s.points.splice(k,1);recalcShape(s);rTab();draw();}
+        else alert('ลบไม่ได้ — เหลือจำนวนจุดขั้นต่ำแล้ว');
+        return;
+      }
+    }
+  }
+});
+document.addEventListener('keydown',e=>{if(e.key==='Shift'){if(!shiftDown){shiftDown=true;draw();}}else if(e.key==='F8'){e.preventDefault();ortho=!ortho;rTab();draw();}else if(e.key==='F3'){e.preventDefault();snap=!snap;snP=null;rTab();draw();}else if(e.key==='Enter'){e.preventDefault();finalizeDraw();}else if(e.key==='Escape'){dPts=[];draw();}else if(e.key==='z'&&e.ctrlKey&&dPts.length){dPts.pop();draw();}else if(e.key==='Delete'&&selIdx!==null){shapes.splice(selIdx,1);selIdx=null;updBB();rTab();draw();}else if((e.key==='d'||e.key==='D')&&e.ctrlKey&&selIdx!==null){e.preventDefault();dupShape(selIdx);}});
+document.addEventListener('keyup',e=>{if(e.key==='Shift'){shiftDown=false;draw();}});
+function rstView(){zm=1;px=0;py=0;document.getElementById('ZM').textContent='🔍 100%';draw();}
+function updTN(){const n={polygon:'⬡ วาดพื้นที่',line:'📏 วัดความยาว',circle:'⭕ วาดวงกลม (คลิกจุดศูนย์กลาง→รัศมี)',count:'🔢 นับจำนวน (คลิกวางจุด→Enter จบ)',calibrate:'📐 ตั้งสเกล',select:'🖱️ เลือก'};document.getElementById('TN').textContent=n[tool]||'';cw.style.cursor=tool==='select'?'default':'crosshair';}
+function updBB(){const b=document.getElementById('BB');if(selIdx!==null&&shapes[selIdx]){const s=shapes[selIdx];b.style.display='flex';const tn={polygon:'พื้นที่',line:'เส้น',circle:'วงกลม',count:'นับจำนวน'}[s.type]||'';document.getElementById('BL').innerHTML=`<span style="color:var(--yw)">✦ ${s.name?E(s.name)+' · ':''}${tn} #${selIdx+1}</span>`;document.getElementById('BV').textContent=s.label;}else b.style.display='none';}
+function loadFile(e){const f=e.target.files?.[0];if(!f)return;
+  if(f.type==='application/pdf'){
+    const r=new FileReader;r.onload=ev=>{
+      const arr=new Uint8Array(ev.target.result);
+      pdfjsLib.getDocument({data:arr}).promise.then(pdf=>{
+        pdfDoc=pdf;pdfTotal=pdf.numPages;pdfPage=1;
+        shapes=[];dPts=[];selIdx=null;sc=0;
+        renderPdfPage(1);
+      }).catch(err=>{alert('ไม่สามารถเปิด PDF ได้: '+err.message);});
+    };r.readAsArrayBuffer(f);
+  } else {
+    pdfDoc=null;pdfTotal=0;
+    const r=new FileReader;r.onload=ev=>{const im=new Image;im.onload=()=>{imgEl=im;img=ev.target.result;zm=1;px=0;py=0;shapes=[];dPts=[];selIdx=null;document.getElementById('PH').style.display='none';captureImgData();resize();rTab();};im.src=ev.target.result;};r.readAsDataURL(f);
+  }
+}
+function renderPdfPage(num){
+  if(!pdfDoc)return;
+  pdfDoc.getPage(num).then(page=>{
+    const vp=page.getViewport({scale:pdfScale});
+    const offCv=document.createElement('canvas');
+    offCv.width=vp.width;offCv.height=vp.height;
+    const offCtx=offCv.getContext('2d');
+    page.render({canvasContext:offCtx,viewport:vp}).promise.then(()=>{
+      const im=new Image;
+      im.onload=()=>{imgEl=im;img='pdf';zm=1;px=0;py=0;
+        document.getElementById('PH').style.display='none';captureImgData();resize();rTab();};
+      im.src=offCv.toDataURL();
+    });
+  });
+}
+function pdfGo(n){if(!pdfDoc)return;pdfPage=Math.max(1,Math.min(pdfTotal,n));shapes=[];dPts=[];selIdx=null;sc=0;renderPdfPage(pdfPage);}
+function setT(t){tool=t;dPts=[];updTN();rTab();draw();}
+
+// === TABS ===
+function goTab(t){tab=t;document.querySelectorAll('.tabs button').forEach(b=>b.classList.toggle('on',b.dataset.tab===t));rTab();}
+function rTab(){const el=document.getElementById('TC');if(tab==='draw')rDraw(el);else if(tab==='boq')rBoq(el);else if(tab==='rates')rRates(el);else rMats(el);}
+
+function rDraw(el){
+  let h=`<div style="margin-bottom:8px"><label class="fup">📁 เปิดไฟล์แบบ (JPG, PNG, PDF)<input type="file" accept="image/*,.pdf,application/pdf" onchange="loadFile(event)" style="display:none"></label></div>`;
+  h+=`<div style="display:flex;gap:6px;margin-bottom:10px"><button class="b" style="flex:1;justify-content:center" onclick="saveProject()">💾 บันทึกงาน</button><label class="b" style="flex:1;justify-content:center;cursor:pointer">📂 เปิดงาน<input type="file" accept=".json,application/json" onchange="loadProject(event)" style="display:none"></label></div>`;
+  if(pdfDoc){h+=`<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;background:var(--p2);border:1px solid var(--bd);border-radius:6px;padding:6px 10px"><span style="font-size:11px;color:var(--dm)">📄 PDF</span><button class="b" style="padding:3px 8px;font-size:11px" onclick="pdfGo(pdfPage-1)" ${pdfPage<=1?'disabled style="opacity:.4;padding:3px 8px;font-size:11px"':''}>◀</button><span style="font-size:12px;font-weight:700;color:var(--ac2)">หน้า ${pdfPage} / ${pdfTotal}</span><button class="b" style="padding:3px 8px;font-size:11px" onclick="pdfGo(pdfPage+1)" ${pdfPage>=pdfTotal?'disabled style="opacity:.4;padding:3px 8px;font-size:11px"':''}>▶</button><select class="inp" style="width:auto;padding:3px 6px;font-size:11px" onchange="pdfGo(parseInt(this.value))">${Array.from({length:pdfTotal},(_,i)=>`<option value="${i+1}" ${i+1===pdfPage?'selected':''}>หน้า ${i+1}</option>`).join('')}</select><span style="font-size:10px;color:var(--dm);margin-left:auto">DPI:</span><select class="inp" style="width:auto;padding:3px 6px;font-size:11px" onchange="pdfScale=parseFloat(this.value);renderPdfPage(pdfPage);rTab()"><option value="1.5" ${pdfScale===1.5?'selected':''}>ต่ำ</option><option value="2" ${pdfScale===2?'selected':''}>กลาง</option><option value="3" ${pdfScale===3?'selected':''}>สูง</option><option value="4" ${pdfScale===4?'selected':''}>สูงมาก</option></select></div>`;}
+  else if(imgEl){h+=`<div style="margin-bottom:10px;background:rgba(255,184,0,.08);border:1px solid rgba(255,184,0,.25);border-radius:6px;padding:7px 10px;font-size:11px;color:var(--yw2)">🖼️ ไฟล์รูปภาพ (มีหน้าเดียว) — ถ้าต้องการเลื่อนหลายหน้า ให้เปิดเป็นไฟล์ <b>PDF</b> แทน</div>`;}
+  if(imgEl){h+=`<div style="margin-bottom:10px;background:var(--p2);border:1px solid var(--bd);border-radius:6px;padding:7px 10px">
+    <div style="font-size:11px;font-weight:600;color:var(--ac2);margin-bottom:5px">🔄 หมุนภาพ (แก้แบบเอียง) · ปัจจุบัน: ${imgRot.toFixed(1)}°</div>
+    <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center">
+      <button class="b" onclick="imgRot-=1;draw()" style="padding:3px 8px;font-size:11px">◀ -1°</button>
+      <button class="b" onclick="imgRot-=0.1;draw()" style="padding:3px 8px;font-size:11px">-0.1°</button>
+      <button class="b" onclick="imgRot=0;draw()" style="padding:3px 8px;font-size:11px">⟲ รีเซ็ต</button>
+      <button class="b" onclick="imgRot+=0.1;draw()" style="padding:3px 8px;font-size:11px">+0.1°</button>
+      <button class="b" onclick="imgRot+=1;draw()" style="padding:3px 8px;font-size:11px">+1° ▶</button>
+      <button class="b yw" onclick="autoDeskew()" style="padding:3px 8px;font-size:11px">🤖 ตรวจจับอัตโนมัติ</button>
+    </div></div>`;}
+  h+=`<div class="sec">เครื่องมือ</div><div class="row">`;
+  h+=`<button class="b ${tool==='polygon'?'on':''}" onclick="setT('polygon')">⬡ พื้นที่</button>`;
+  h+=`<button class="b ${tool==='line'?'gn':''}" onclick="setT('line')">📏 ความยาว</button>`;
+  h+=`<button class="b ${tool==='circle'?'gn':''}" onclick="setT('circle')">⭕ วงกลม</button>`;
+  h+=`<button class="b ${tool==='count'?'rd':''}" onclick="setT('count')">🔢 นับจำนวน</button>`;
+  h+=`<button class="b ${tool==='calibrate'?'rd':''}" onclick="setT('calibrate')">📐 สเกล</button>`;
+  h+=`<button class="b ${tool==='select'?'yw':''}" onclick="setT('select')">🖱️ เลือก</button></div>`;
+  if(tool==='calibrate')h+=`<div class="cbox"><div style="font-size:12px;font-weight:600;color:#ff6b7a;margin-bottom:5px">📐 คลิก 2 จุดที่ทราบระยะ</div><div style="display:flex;align-items:center;gap:5px"><span style="font-size:11px;color:var(--dm)">ระยะ:</span><input class="inp" type="number" value="${calD}" onchange="calD=this.value" style="width:65px"><span style="font-size:11px;color:var(--dm)">ม.</span></div></div>`;
+  h+=`<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap"><label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:11px"><input type="checkbox" ${snap?'checked':''} onchange="snap=this.checked;rTab();draw()" style="accent-color:var(--gn)">🧲 Snap (F3)</label><label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:11px"><input type="checkbox" ${ortho?'checked':''} onchange="ortho=this.checked;draw()" style="accent-color:var(--yw)">⊾ Ortho (F8)</label><span style="font-size:10px;color:var(--dm)">สเกล: ${sc>0?F(sc)+' px/ม.':'❌ ยังไม่ตั้ง'}</span></div>`;
+  if(snap)h+=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;padding:5px 8px;background:var(--p2);border:1px solid var(--bd);border-radius:6px;flex-wrap:wrap"><span style="font-size:10px;color:var(--dm)">โหมด Snap:</span><label style="display:flex;align-items:center;gap:3px;cursor:pointer;font-size:11px;color:var(--gn2)"><input type="checkbox" ${snapEnd?'checked':''} onchange="snapEnd=this.checked;draw()" style="accent-color:var(--gn)">● ปลาย</label><label style="display:flex;align-items:center;gap:3px;cursor:pointer;font-size:11px;color:var(--yw2)"><input type="checkbox" ${snapMid?'checked':''} onchange="snapMid=this.checked;draw()" style="accent-color:var(--yw)">▲ กลาง</label><label style="display:flex;align-items:center;gap:3px;cursor:pointer;font-size:11px;color:#ff5cf0"><input type="checkbox" ${snapInt?'checked':''} onchange="snapInt=this.checked;draw()" style="accent-color:#ff5cf0">✕ ตัด</label><label style="display:flex;align-items:center;gap:3px;cursor:pointer;font-size:11px;color:#00d4ff"><input type="checkbox" ${snapPerp?'checked':''} onchange="snapPerp=this.checked;draw()" style="accent-color:#00d4ff">⊾ ตั้งฉาก</label><label style="display:flex;align-items:center;gap:3px;cursor:pointer;font-size:11px;color:#ff9d3c"><input type="checkbox" ${snapNear?'checked':''} onchange="snapNear=this.checked;draw()" style="accent-color:#ff9d3c">◇ บนเส้น</label></div>`;
+  if(snap)h+=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;padding:6px 9px;background:rgba(25,227,255,.07);border:1px solid rgba(25,227,255,.28);border-radius:6px;flex-wrap:wrap"><label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:11px;color:#19e3ff;font-weight:600"><input type="checkbox" ${snapImg?'checked':''} onchange="snapImg=this.checked;draw()" style="accent-color:#19e3ff">✛ Snap เส้นในแบบ ${imgData?'':'<span style="color:var(--dm)">(เปิดไฟล์ก่อน)</span>'}</label>${snapImg?`<span style="font-size:10px;color:var(--dm)">ความไว:</span><select class="inp" style="width:auto;padding:2px 5px;font-size:10px" onchange="imgThresh=parseInt(this.value);draw()"><option value="90" ${imgThresh===90?'selected':''}>เส้นเข้มจัด</option><option value="130" ${imgThresh===130?'selected':''}>ปกติ</option><option value="170" ${imgThresh===170?'selected':''}>เส้นจาง/สแกน</option></select>`:''}</div>`;
+  // LAYER MANAGER
+  h+=`<div class="sec">ชั้นงาน (Layer)</div>`;
+  h+=`<div style="display:flex;gap:5px;margin-bottom:6px"><select class="inp" style="flex:1" onchange="activeLayer=this.value;rTab()">${layers.map(l=>`<option value="${E(l.name)}" ${l.name===activeLayer?'selected':''}>วาดในชั้น: ${E(l.name)}</option>`).join('')}</select><button class="b" style="padding:5px 9px" onclick="addLayer()">＋</button></div>`;
+  layers.forEach(l=>{const cnt=shapes.filter(s=>(s.layer||'ทั่วไป')===l.name&&s.type!=='calibrate').length;
+    h+=`<div style="display:flex;align-items:center;gap:6px;padding:4px 8px;margin-bottom:3px;background:var(--bg);border:1px solid var(--bd);border-radius:6px"><label style="display:flex;align-items:center;gap:5px;cursor:pointer;flex:1;font-size:12px"><input type="checkbox" ${l.vis?'checked':''} onchange="layers.find(x=>x.name==='${E(l.name)}').vis=this.checked;draw()" style="accent-color:var(--ac)">${l.name===activeLayer?'▸ ':''}${E(l.name)} <span style="color:var(--dm);font-size:10px">(${cnt})</span></label><button class="x" onclick="delLayer('${E(l.name)}')">✕</button></div>`;});
+  // SHAPE LIST
+  const sl=shapes.filter(s=>s.type!=='calibrate');
+  h+=`<div class="sec" style="margin-top:12px">รายการวาด (${sl.length})</div>`;
+  shapes.forEach((s,i)=>{if(s.type==='calibrate')return;
+    const tg={polygon:['tag-area','⬡ พื้นที่'],line:['tag-line','📏 เส้น'],circle:['tag-line','⭕ วงกลม'],count:['tag-cnt','🔢 นับ']}[s.type]||['tag-area','?'];
+    let meta='';
+    if(s.type==='polygon')meta=`${F(s.areaSqm)} ตร.ม. · ${s.points.length} จุด`;
+    else if(s.type==='line')meta=`${F(s.lengthM)} ม. · ${s.points.length} จุด`;
+    else if(s.type==='circle')meta=`พื้นที่ ${F(s.areaSqm)} ตร.ม. · R=${F(s.radiusM)} ม.`;
+    else if(s.type==='count')meta=`จำนวน ${s.count} จุด`;
+    const dim=!layerVis(s)?'opacity:.4;':'';
+    h+=`<div class="card ${selIdx===i?'sel':''}" style="${dim}" onclick="selIdx=${i};tool='select';updTN();updBB();rTab();draw()"><div style="display:flex;justify-content:space-between;align-items:center;gap:3px"><span style="font-weight:700;flex:1;min-width:0"><span class="badge ${tg[0]}">${tg[1]}</span> ${s.name?E(s.name)+' ':''}${E(s.label)}</span><button class="x" style="color:var(--ac2)" title="ตั้งชื่อ" onclick="event.stopPropagation();renameShape(${i})">✎</button><button class="x" style="color:var(--gn)" title="คัดลอก" onclick="event.stopPropagation();dupShape(${i})">⧉</button><button class="x" title="ลบ" onclick="event.stopPropagation();shapes.splice(${i},1);if(selIdx===${i})selIdx=null;updBB();rTab();draw()">✕</button></div><div style="display:flex;justify-content:space-between;align-items:center;margin-top:2px"><span style="font-size:10.5px;color:var(--dm)">${meta}</span><select onclick="event.stopPropagation()" onchange="shapes[${i}].layer=this.value;rTab();draw()" style="font-size:10px;background:var(--bg);color:var(--dm);border:1px solid var(--bd);border-radius:4px;padding:1px 3px">${layers.map(l=>`<option value="${E(l.name)}" ${(s.layer||'ทั่วไป')===l.name?'selected':''}>${E(l.name)}</option>`).join('')}</select></div></div>`;});
+  // SUMMARY BY NAME
+  const groups={};
+  shapes.forEach(s=>{if(s.type==='calibrate')return;const k=s.name||'(ไม่ตั้งชื่อ)';if(!groups[k])groups[k]={area:0,len:0,cnt:0};if(s.areaSqm)groups[k].area+=s.areaSqm;if(s.lengthM)groups[k].len+=s.lengthM;if(s.count)groups[k].cnt+=s.count;});
+  const gk=Object.keys(groups);
+  if(gk.length){
+    h+=`<div class="sec" style="margin-top:14px">📊 สรุปปริมาณรวม (ตามชื่อ)</div><div style="background:var(--p2);border:1px solid var(--bd);border-radius:8px;padding:8px">`;
+    gk.forEach(k=>{const g=groups[k];let parts=[];if(g.area>0)parts.push(`${F(g.area)} ตร.ม.`);if(g.len>0)parts.push(`${F(g.len)} ม.`);if(g.cnt>0)parts.push(`${g.cnt} จุด`);
+      h+=`<div style="display:flex;justify-content:space-between;font-size:11.5px;padding:3px 0;border-bottom:1px solid var(--bd)"><span style="font-weight:600">${E(k)}</span><span style="color:var(--ac2)">${parts.join(' · ')}</span></div>`;});
+    h+=`</div>`;
+  }
+  if(shapes.filter(s=>s.type!=='calibrate').length){
+    h+=`<div style="margin-top:8px"><button class="b gn" onclick="exportToGPT()" style="width:100%;justify-content:center;padding:8px">📋 ส่งออกค่าวัดไป GPT (คัดลอกข้อความ)</button></div>`;
+  }
+  h+=`<div class="hlp"><div class="ht">💡 วิธีใช้</div>• <b>เปิดไฟล์</b>: JPG, PNG, <b>PDF</b> · <b>💾 บันทึก/เปิดงาน</b>: ไฟล์ .json<br>• <b>ตั้งสเกล</b>: 📐 คลิก 2 จุด → ใส่ระยะ (ตั้งใหม่ได้หลายจุดต่อหน้า)<br>• <b>วาด</b>: ⬡พื้นที่ · 📏ความยาว · ⭕วงกลม · 🔢นับจำนวน (Enter จบ)<br>• <b>🖱️ แก้ไข</b>: เลือกรูป → ลากจุด · <b>Dbl-click</b> บนเส้นเพื่อ<b>แทรกจุด</b> · <b>คลิกขวา</b>ที่จุดเพื่อ<b>ลบจุด</b><br>• <b>⧉ คัดลอก</b>: ในรายการ หรือ <b>Ctrl+D</b><br>• <b>Layer</b>: เลือกชั้นที่จะวาด · ติ๊กซ่อน/แสดง · เปลี่ยนชั้นของรูปได้<br>• <b>🧲 Snap</b>: ●ปลาย ▲กลาง ✕ตัด ⊾ตั้งฉาก ◇บนเส้น · <b>✛ เส้นในแบบ</b> (จับเส้นจริงในรูป) · <b>F3</b><br>• <b>⊾ Ortho</b>: Shift/F8</div>`;
+  el.innerHTML=h;
+}
+
+function rBoq(el){
+  let h=`<div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap"><button class="b yw" onclick="showAIImport()">🤖 นำเข้าจาก AI</button>`;
+  if(boq.length)h+=`<button class="b rd" onclick="if(confirm('ล้างรายการ BOQ ทั้งหมด?')){boq=[];rTab();}">🗑️ ล้าง BOQ</button>`;
+  h+=`</div>`;
+  h+=`<div style="font-size:11px;color:var(--dm);margin-bottom:8px">เลือกรายการจากแท็บ "ค่าแรง" หรือ "ค่าวัสดุ" แล้วกดเพิ่ม หรือกด 🤖 วาง JSON จาก Custom GPT`;
+  if(selIdx!==null)h+=` <span style="color:var(--yw)">· shape #${selIdx+1}</span>`;
+  h+=`</div>`;
+  if(!boq.length)h+=`<div style="text-align:center;padding:24px;color:var(--dm)">ยังไม่มีรายการ</div>`;
+  else boq.forEach((it,i)=>{
+    const eq=effQty(it),lt=lineTotal(it);
+    h+=`<div class="boq-c"><div style="display:flex;justify-content:space-between"><span class="boq-n"><span class="badge" style="background:${it.isMat?'rgba(255,184,0,.15);color:var(--yw2)':'rgba(45,127,249,.15);color:var(--ac2)'}">${it.isMat?'🧱 วัสดุ':'👷 ค่าแรง'}</span> ${E(it.name)}</span><button class="x" onclick="boq.splice(${i},1);rTab()">✕</button></div>`;
+    h+=`<div class="boq-r">${it.isMat?'ราคาวัสดุ':'อัตราค่าแรง'}: ${F(it.rate)} บาท/${it.unit}</div>`;
+    h+=`<div class="boq-rw"><span style="font-size:11px">${it.unit==='ลบ.ม.'?'พื้นที่/ปริมาณ:':'ปริมาณ:'}</span><input class="inp" type="number" value="${it.qty||''}" onchange="boq[${i}].qty=parseFloat(this.value)||0;rTab()" style="width:70px">`;
+    if(selIdx!==null)h+=`<button class="fill-b" onclick="autoFill(${i})">← shape</button>`;
+    h+=`</div>`;
+    if(it.unit==='ลบ.ม.'){h+=`<div class="boq-rw" style="margin-top:4px"><span style="font-size:11px;color:var(--ac2)">× ความหนา/สูง:</span><input class="inp" type="number" value="${it.thick||''}" placeholder="1.00" onchange="boq[${i}].thick=parseFloat(this.value)||0;rTab()" style="width:60px"><span style="font-size:11px;color:var(--dm)">ม. = ${F(eq)} ลบ.ม.</span></div>`;}
+    h+=`<div class="boq-rw" style="margin-top:4px"><span style="font-size:11px;color:var(--yw2)">เผื่อเสีย:</span><input class="inp" type="number" value="${it.waste||''}" placeholder="0" onchange="boq[${i}].waste=parseFloat(this.value)||0;rTab()" style="width:50px"><span style="font-size:11px;color:var(--dm)">% → ${F(eq*(1+(it.waste||0)/100))} ${it.unit}</span></div>`;
+    h+=`<div class="boq-t">${F(lt)} บาท</div></div>`;
+  });
+  const S=sumBOQ();
+  if(boq.length){
+    h+=`<div class="tot"><div class="tot-l">💰 ราคากลาง (รวม Factor F)</div><div class="tot-v">฿ ${F(S.tF)}</div>`;
+    h+=`<div class="tot-row"><span>👷 ค่าแรงรวม</span><span style="font-weight:700">${F(S.tL)} บาท</span></div>`;
+    h+=`<div class="tot-row" style="border-top:0;margin-top:0;padding-top:2px"><span>🧱 ค่าวัสดุรวม</span><span style="font-weight:700">${F(S.tM)} บาท</span></div>`;
+    h+=`<div class="tot-row"><span>ต้นทุนรวม (Direct Cost)</span><span style="font-weight:700">${F(S.tD)} บาท</span></div>`;
+    h+=`<div class="tot-row" style="border-top:0;margin-top:0;padding-top:2px;align-items:center"><span>Factor F ×</span><input class="inp" type="number" step="0.0001" value="${factorF}" onchange="factorF=parseFloat(this.value)||1;rTab()" style="width:80px;text-align:right"></div>`;
+    h+=`<div class="tot-n">* Factor F ดูจากตารางราชการตามประเภท/วงเงินงาน (ค่าอำนวยการ+กำไร+ภาษี) · ค่าวัสดุเป็นราคาประมาณการ</div></div>`;
+    h+=`<div style="margin-top:10px;padding:8px;background:var(--p2);border:1px solid var(--bd);border-radius:6px"><div style="font-size:10px;color:var(--dm);margin-bottom:4px">ข้อมูลสำหรับใบรายงาน (PDF)</div><input class="inp" placeholder="ชื่อโครงการ" value="${E(projName)}" onchange="projName=this.value" style="margin-bottom:4px"><input class="inp" placeholder="หน่วยงาน/เจ้าของงาน" value="${E(projOwner)}" onchange="projOwner=this.value" style="margin-bottom:4px"><input class="inp" placeholder="สถานที่ก่อสร้าง" value="${E(projLoc)}" onchange="projLoc=this.value"></div>`;
+    h+=`<div class="exp-row"><button class="exp exp-xl" onclick="expXL()">📊 Excel</button><button class="exp exp-csv" onclick="expCSV()">📄 CSV</button><button class="exp exp-pr" onclick="expPDF()">🖨️ PDF</button></div>`;
+  }
+  el.innerHTML=h;
+}
+
+function rRates(el){
+  let h=`<input class="inp" type="search" placeholder="🔍 ค้นหาค่าแรง..." value="${E(sRate)}" oninput="sRate=this.value;rTab()" style="margin-bottom:8px">`;
+  const q=sRate.toLowerCase();
+  Object.entries(RATES).forEach(([k,cat])=>{const items=q?cat.items.filter(i=>i.name.toLowerCase().includes(q)):cat.items;if(!items.length)return;h+=`<div style="margin-bottom:12px"><div class="cat-hd">${cat.label}</div>`;items.forEach(it=>{const oi=cat.items.indexOf(it);h+=`<div class="ri" onclick="addBoq('${k}',${oi},false)"><div><div class="nm">${E(it.name)}</div><div class="pr">${F(it.rate)} บ./${it.unit}</div></div><span class="plus">＋</span></div>`;});h+=`</div>`;});
+  el.innerHTML=h;
+}
+
+function rMats(el){
+  let h=`<input class="inp" type="search" placeholder="🔍 ค้นหาวัสดุ..." value="${E(sMat)}" oninput="sMat=this.value;rTab()" style="margin-bottom:8px">`;
+  const q=sMat.toLowerCase();
+  Object.entries(MATS).forEach(([k,cat])=>{const items=q?cat.items.filter(i=>i.name.toLowerCase().includes(q)):cat.items;if(!items.length)return;h+=`<div style="margin-bottom:12px"><div class="cat-hd" style="color:var(--yw)">${cat.label}</div>`;items.forEach(it=>{const oi=cat.items.indexOf(it);h+=`<div class="ri" onclick="addBoq('${k}',${oi},true)"><div><div class="nm">${E(it.name)}</div><div class="pr">${F(it.price||it.rate)} บ./${it.unit}</div></div><span class="plus">＋</span></div>`;});h+=`</div>`;});
+  el.innerHTML=h;
+}
+
+function addBoq(ck,idx,isMat){
+  const src=isMat?MATS:RATES;const it=src[ck].items[idx];
+  boq.push({name:it.name,unit:it.unit,rate:it.price||it.rate,qty:0,thick:it.unit==='ลบ.ม.'?0:undefined,waste:0,isMat:!!isMat});
+  goTab('boq');
+}
+
+function autoFill(i){if(selIdx===null)return;const s=shapes[selIdx];if(!s)return;let q=0;const u=boq[i].unit;
+  if(u==='ตร.ม.'){q=s.areaSqm||0;}
+  else if(u==='เมตร'){q=s.lengthM||s.circM||0;}
+  else if(u==='ลบ.ม.'){q=s.areaSqm||0;}
+  else if(u==='ชุด'||u==='ตัว'||u==='ก้อน'||u==='แผ่น'||u==='ถุง'||u==='ถัง'){q=s.count||0;}
+  else{q=s.count||s.areaSqm||s.lengthM||0;}
+  boq[i].qty=parseFloat(q.toFixed(2));rTab();}
+function renameShape(i){const s=shapes[i];if(!s)return;const nm=prompt('ตั้งชื่อรายการ (เช่น ห้องนอน 1, เสา C1, โคมไฟ):',s.name||'');if(nm!==null){s.name=nm.trim()||undefined;rTab();draw();}}
+function dupShape(i){const s=shapes[i];if(!s||s.type==='calibrate')return;const off=20/zm;const ns=JSON.parse(JSON.stringify(s));ns.points=ns.points.map(p=>({x:p.x+off,y:p.y+off}));if(ns.name)ns.name=ns.name+' (คัดลอก)';shapes.push(ns);selIdx=shapes.length-1;tool='select';updTN();updBB();rTab();draw();}
+
+/* === 🔄 AUTO DESKEW === */
+function autoDeskew(){
+  if(!imgEl){alert('เปิดไฟล์ก่อน');return;}
+  try{
+    const maxW=600,iw=imgEl.naturalWidth||imgEl.width,ih=imgEl.naturalHeight||imgEl.height;
+    const ratio=Math.min(maxW/iw,maxW/ih,1);
+    const w=Math.round(iw*ratio),h=Math.round(ih*ratio);
+    const oc=document.createElement('canvas');oc.width=w;oc.height=h;
+    const ox=oc.getContext('2d');ox.drawImage(imgEl,0,0,w,h);
+    const d=ox.getImageData(0,0,w,h).data;
+    // Convert to grayscale + Sobel edge detection
+    const gray=new Float32Array(w*h);
+    for(let i=0;i<w*h;i++)gray[i]=0.299*d[i*4]+0.587*d[i*4+1]+0.114*d[i*4+2];
+    // Compute gradient angles at edge pixels
+    const angles=[];
+    for(let y=1;y<h-1;y++){for(let x=1;x<w-1;x++){
+      const gx=gray[(y-1)*w+x+1]-gray[(y-1)*w+x-1]+2*(gray[y*w+x+1]-gray[y*w+x-1])+gray[(y+1)*w+x+1]-gray[(y+1)*w+x-1];
+      const gy=gray[(y+1)*w+x-1]-gray[(y-1)*w+x-1]+2*(gray[(y+1)*w+x]-gray[(y-1)*w+x])+gray[(y+1)*w+x+1]-gray[(y-1)*w+x+1];
+      const mag=Math.sqrt(gx*gx+gy*gy);
+      if(mag>50){let a=Math.atan2(gy,gx)*180/Math.PI;
+        // Normalize to -45..45 range (we want near-horizontal or near-vertical lines)
+        while(a>45)a-=90;while(a<-45)a+=90;
+        angles.push(a);
+      }
+    }}
+    if(angles.length<100){alert('ไม่พบเส้นเพียงพอ ลองปรับด้วยมือ');return;}
+    // Find median angle (robust against outliers)
+    angles.sort((a,b)=>a-b);
+    const medAngle=angles[Math.floor(angles.length/2)];
+    // Apply correction
+    const correction=-medAngle;
+    if(Math.abs(correction)<0.05){alert('ภาพตั้งฉากดีแล้ว (เอียง < 0.05°)');return;}
+    imgRot=+(imgRot+correction).toFixed(1);
+    draw();rTab();
+    alert(`ตรวจพบเอียง ${medAngle.toFixed(1)}° → หมุนแก้ ${correction.toFixed(1)}°\nปัจจุบัน: ${imgRot.toFixed(1)}°`);
+  }catch(e){alert('ไม่สามารถวิเคราะห์ภาพ: '+e.message);}
+}
+
+/* === 🤖 AI IMPORT === */
+function showAIImport(){
+  const m=document.createElement('div');m.className='modal-bg';m.id='aiModal';m.onclick=e=>{if(e.target===m)m.remove();};
+  m.innerHTML=`<div class="modal" style="width:520px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><h3 style="margin:0">🤖 นำเข้า BOQ จาก AI (Custom GPT)</h3><button class="x" style="font-size:20px" onclick="document.getElementById('aiModal').remove()">✕</button></div>
+    <div style="font-size:11px;color:var(--dm);margin-bottom:8px">วาง JSON ที่ได้จาก Custom GPT (สั่ง <b>"ส่งออก JSON"</b> ใน ChatGPT) แล้วกดนำเข้า<br>รูปแบบ: <code>{"project":"...","factorF":1.3,"boq":[...]}</code></div>
+    <textarea id="aiJSON" class="inp" rows="12" placeholder='วาง JSON ที่นี่...' style="font-family:monospace;font-size:12px;resize:vertical"></textarea>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button class="exp exp-xl" style="flex:1;justify-content:center" onclick="doAIImport()">✅ นำเข้า</button>
+      <button class="exp exp-csv" style="justify-content:center" onclick="document.getElementById('aiJSON').value='';document.getElementById('aiJSON').focus()">🗑️ ล้าง</button>
+    </div>
+    <div id="aiResult" style="margin-top:8px;font-size:12px"></div>
+  </div>`;
+  document.body.appendChild(m);
+  setTimeout(()=>document.getElementById('aiJSON').focus(),100);
+}
+function doAIImport(){
+  const raw=document.getElementById('aiJSON').value.trim();
+  const res=document.getElementById('aiResult');
+  if(!raw){res.innerHTML='<span style="color:var(--rd)">❌ กรุณาวาง JSON ก่อน</span>';return;}
+  try{
+    let txt=raw;
+    // strip markdown code fence if present
+    txt=txt.replace(/^```json?\s*/i,'').replace(/\s*```$/,'').trim();
+    const d=JSON.parse(txt);
+    if(!d.boq||!Array.isArray(d.boq)){res.innerHTML='<span style="color:var(--rd)">❌ ไม่พบ key "boq" หรือรูปแบบไม่ถูก</span>';return;}
+    let cnt=0;
+    d.boq.forEach(it=>{
+      if(!it.name||it.rate===undefined)return;
+      boq.push({
+        name:it.name,
+        unit:it.unit||'ชุด',
+        rate:parseFloat(it.rate)||0,
+        qty:parseFloat(it.qty)||0,
+        isMat:!!it.isMat,
+        thick:it.thick?parseFloat(it.thick):undefined,
+        waste:parseFloat(it.waste)||0
+      });
+      cnt++;
+    });
+    if(d.factorF)factorF=parseFloat(d.factorF);
+    if(d.project&&!projName)projName=d.project;
+    res.innerHTML=`<span style="color:var(--gn)">✅ นำเข้า ${cnt} รายการสำเร็จ${d.factorF?' · Factor F = '+d.factorF:''}${d.project?' · โครงการ: '+E(d.project):''}</span>`;
+    goTab('boq');
+  }catch(err){
+    res.innerHTML=`<span style="color:var(--rd)">❌ JSON ไม่ถูกต้อง: ${E(err.message)}</span>`;
+  }
+}
+
+/* === 📋 EXPORT TO GPT === */
+function exportToGPT(){
+  const meas=shapes.filter(s=>s.type!=='calibrate');
+  if(!meas.length){alert('ยังไม่มีรายการที่วัด');return;}
+  // build groups
+  const groups={};
+  meas.forEach(s=>{
+    const k=s.name||'(ไม่ตั้งชื่อ)';
+    if(!groups[k])groups[k]={area:0,len:0,circ:0,cnt:0,items:[]};
+    if(s.areaSqm)groups[k].area+=s.areaSqm;
+    if(s.lengthM)groups[k].len+=s.lengthM;
+    if(s.circM)groups[k].circ+=s.circM;
+    if(s.count)groups[k].cnt+=s.count;
+    groups[k].items.push(s);
+  });
+  let txt=`📋 ข้อมูลที่วัดจากแบบ (ส่งจากโปรแกรมประมาณราคา)\n`;
+  txt+=`โครงการ: ${projName||'(ไม่ระบุ)'}\n`;
+  txt+=`สเกล: 1 ม. = ${sc?sc.toFixed(1)+' px':'(ยังไม่ตั้ง)'}\n`;
+  txt+=`จำนวนรายการ: ${meas.length}\n\n`;
+  txt+=`รายการที่วัดได้:\n`;
+  let n=1;
+  Object.entries(groups).forEach(([k,g])=>{
+    let parts=[];
+    if(g.area>0)parts.push(`พื้นที่ = ${g.area.toFixed(2)} ตร.ม.`);
+    if(g.len>0)parts.push(`ความยาว = ${g.len.toFixed(2)} ม.`);
+    if(g.circ>0)parts.push(`เส้นรอบวง = ${g.circ.toFixed(2)} ม.`);
+    if(g.cnt>0)parts.push(`จำนวน = ${g.cnt} จุด`);
+    txt+=`${n}. "${k}" — ${parts.join(', ')} (${g.items.length} shape)\n`;
+    n++;
+  });
+  txt+=`\nกรุณาคำนวณปริมาณเหล็กเสริม คอนกรีต ไม้แบบ ค่าแรง ว.809 และค่าวัสดุ\nจากข้อมูลด้านบน ร่วมกับแบบโครงสร้างที่แนบมา\nเมื่อคำนวณเสร็จ พิมพ์ "ส่งออก JSON" เพื่อนำกลับเข้าโปรแกรม BOQ`;
+
+  // show in modal
+  const m=document.createElement('div');m.className='modal-bg';m.id='gptModal';m.onclick=e=>{if(e.target===m)m.remove();};
+  m.innerHTML=`<div class="modal" style="width:520px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><h3 style="margin:0">📋 ส่งออกค่าวัดไป GPT</h3><button class="x" style="font-size:20px" onclick="document.getElementById('gptModal').remove()">✕</button></div>
+    <div style="font-size:11px;color:var(--dm);margin-bottom:8px">คัดลอกข้อความด้านล่าง แล้วไปวางใน Custom GPT (ChatGPT) พร้อมแนบรูปแบบโครงสร้าง</div>
+    <textarea id="gptText" class="inp" rows="14" style="font-family:monospace;font-size:11px;resize:vertical" readonly>${E(txt)}</textarea>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button class="exp exp-xl" style="flex:1;justify-content:center" onclick="navigator.clipboard.writeText(document.getElementById('gptText').value).then(()=>this.textContent='✅ คัดลอกแล้ว!').catch(()=>{document.getElementById('gptText').select();document.execCommand('copy');this.textContent='✅ คัดลอกแล้ว!';})">📋 คัดลอก</button>
+      <button class="exp exp-csv" style="justify-content:center" onclick="document.getElementById('gptModal').remove()">ปิด</button>
+    </div>
+  </div>`;
+  document.body.appendChild(m);
+}
+function addLayer(){const nm=prompt('ชื่อชั้นงานใหม่ (เช่น ชั้น 1, ชั้น 2, งานระบบ):','');if(nm&&nm.trim()){const n=nm.trim();if(!layers.find(l=>l.name===n)){layers.push({name:n,vis:true});}activeLayer=n;rTab();draw();}}
+function delLayer(nm){if(layers.length<=1){alert('ต้องมีอย่างน้อย 1 ชั้นงาน');return;}const cnt=shapes.filter(s=>(s.layer||'ทั่วไป')===nm).length;if(cnt>0&&!confirm('ชั้น "'+nm+'" มี '+cnt+' รายการ จะถูกลบทั้งหมด ยืนยัน?'))return;shapes=shapes.filter(s=>(s.layer||'ทั่วไป')!==nm);layers=layers.filter(l=>l.name!==nm);if(activeLayer===nm)activeLayer=layers[0].name;selIdx=null;updBB();rTab();draw();}
+function saveProject(){let imgSave=null;if(imgEl){try{const oc=document.createElement('canvas');oc.width=imgEl.naturalWidth||imgEl.width;oc.height=imgEl.naturalHeight||imgEl.height;oc.getContext('2d').drawImage(imgEl,0,0);imgSave=oc.toDataURL('image/png');}catch(e){imgSave=img&&img!=='pdf'?img:null;}}const data={v:5,scale:sc,shapes,boq,factorF,projName,projOwner,projLoc,layers,activeLayer,imgRot,pdfPage:pdfDoc?pdfPage:0,img:imgSave};const blob=new Blob([JSON.stringify(data)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=(projName||'โปรเจกต์ประมาณราคา')+'.json';a.click();}
+function loadProject(e){const f=e.target.files?.[0];if(!f)return;const r=new FileReader;r.onload=ev=>{try{const d=JSON.parse(ev.target.result);sc=d.scale||0;shapes=d.shapes||[];boq=d.boq||[];factorF=d.factorF||1;projName=d.projName||'';projOwner=d.projOwner||'';projLoc=d.projLoc||'';layers=d.layers||[{name:'ทั่วไป',vis:true}];activeLayer=d.activeLayer||layers[0].name;imgRot=d.imgRot||0;selIdx=null;dPts=[];if(d.img){const im=new Image;im.onload=()=>{imgEl=im;img=d.img;pdfDoc=null;pdfTotal=0;document.getElementById('PH').style.display='none';captureImgData();resize();rTab();};im.src=d.img;}else{imgEl=null;img=null;rTab();draw();}}catch(err){alert('ไฟล์ไม่ถูกต้อง: '+err.message);}};r.readAsText(f);}
+
+// === EXPORT ===
+function expCSV(){
+  let csv='ลำดับ,ประเภท,รายการ,หน่วย,ปริมาณ,ความหนา(ม.),เผื่อเสีย(%),ปริมาณรวม,ราคาต่อหน่วย,รวม(บาท)\n';
+  boq.forEach((it,i)=>{const eq=effQty(it),wq=eq*(1+(it.waste||0)/100);csv+=`${i+1},${it.isMat?'วัสดุ':'ค่าแรง'},"${it.name}",${it.unit},${it.qty||0},${it.thick||''},${it.waste||0},${wq.toFixed(2)},${it.rate},${lineTotal(it).toFixed(2)}\n`;});
+  const S=sumBOQ();
+  csv+=`,,,,,,,,"ค่าแรงรวม",${S.tL.toFixed(2)}\n,,,,,,,,"ค่าวัสดุรวม",${S.tM.toFixed(2)}\n,,,,,,,,"ต้นทุนรวม",${S.tD.toFixed(2)}\n,,,,,,,,"Factor F",${factorF}\n,,,,,,,,"ราคากลาง",${S.tF.toFixed(2)}\n`;
+  const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8;'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='BOQ_ประมาณราคา.csv';a.click();
+}
+
+function expXL(){
+  const wb=XLSX.utils.book_new();
+  const data=[['สรุปประมาณราคางานก่อสร้าง'],['อ้างอิงบัญชีค่าแรง ว.809 (14 พ.ย. 2568) กรมบัญชีกลาง']];
+  if(projName)data.push(['โครงการ: '+projName]);
+  if(projOwner)data.push(['หน่วยงาน: '+projOwner]);
+  data.push([]);
+  const hdrRow=data.length;
+  data.push(['ลำดับ','ประเภท','รายการ','หน่วย','ปริมาณ','ความหนา(ม.)','เผื่อเสีย(%)','ปริมาณรวม','ราคา/หน่วย','รวม (บาท)']);
+  boq.forEach((it,i)=>{const eq=effQty(it),wq=eq*(1+(it.waste||0)/100);data.push([i+1,it.isMat?'วัสดุ':'ค่าแรง',it.name,it.unit,it.qty||0,it.thick||'',it.waste||0,+wq.toFixed(2),it.rate,+lineTotal(it).toFixed(2)]);});
+  const S=sumBOQ();
+  data.push([]);
+  data.push(['','','','','','','','','ค่าแรงรวม',+S.tL.toFixed(2)]);
+  data.push(['','','','','','','','','ค่าวัสดุรวม',+S.tM.toFixed(2)]);
+  data.push(['','','','','','','','','ต้นทุนรวม',+S.tD.toFixed(2)]);
+  data.push(['','','','','','','','','Factor F',factorF]);
+  data.push(['','','','','','','','','ราคากลาง',+S.tF.toFixed(2)]);
+  const ws=XLSX.utils.aoa_to_sheet(data);
+  ws['!cols']=[{wch:6},{wch:8},{wch:40},{wch:8},{wch:10},{wch:10},{wch:10},{wch:12},{wch:12},{wch:16}];
+  ws['!merges']=[{s:{r:0,c:0},e:{r:0,c:9}},{s:{r:1,c:0},e:{r:1,c:9}}];
+  // Add borders + header style
+  const bdr={top:{style:'thin'},bottom:{style:'thin'},left:{style:'thin'},right:{style:'thin'}};
+  const hdrS={font:{bold:true,sz:11,color:{rgb:'FFFFFF'}},fill:{fgColor:{rgb:'2D7FF9'}},alignment:{horizontal:'center'},border:bdr};
+  const cellS={border:bdr,alignment:{wrapText:true}};
+  const numS={border:bdr,numFmt:'#,##0.00'};
+  const range=XLSX.utils.decode_range(ws['!ref']);
+  for(let r=range.s.r;r<=range.e.r;r++){for(let cc=range.s.c;cc<=range.e.c;cc++){
+    const addr=XLSX.utils.encode_cell({r,c:cc});
+    if(!ws[addr])ws[addr]={v:'',t:'s'};
+    if(r===hdrRow)ws[addr].s=hdrS;
+    else if(r>hdrRow&&r<hdrRow+1+boq.length){ws[addr].s=(cc>=4&&cc<=9)?numS:cellS;}
+    else if(r>=hdrRow+2+boq.length){ws[addr].s={border:bdr,font:{bold:true},numFmt:'#,##0.00'};}
+  }}
+  // Title style
+  if(ws['A1'])ws['A1'].s={font:{bold:true,sz:14},alignment:{horizontal:'center'}};
+  if(ws['A2'])ws['A2'].s={font:{sz:10,color:{rgb:'666666'}},alignment:{horizontal:'center'}};
+  XLSX.utils.book_append_sheet(wb,ws,'BOQ');
+  const sd=[['รายการที่วัดจากแบบ'],['ลำดับ','ชื่อ','ประเภท','ค่าที่วัด','หน่วย']];
+  shapes.forEach((s,i)=>{if(s.type==='calibrate')return;const tn={polygon:'พื้นที่',line:'ความยาว',circle:'วงกลม',count:'นับจำนวน'}[s.type];const v=s.areaSqm||s.lengthM||s.count||0;const u=s.type==='line'?'ม.':s.type==='count'?'จุด':'ตร.ม.';sd.push([i+1,s.name||'-',tn,+v.toFixed(2),u]);});
+  const ws2=XLSX.utils.aoa_to_sheet(sd);ws2['!cols']=[{wch:6},{wch:18},{wch:12},{wch:14},{wch:8}];
+  XLSX.utils.book_append_sheet(wb,ws2,'Measurements');
+  XLSX.writeFile(wb,'BOQ_ประมาณราคา.xlsx');
+}
+
+function expPDF(){
+  const S=sumBOQ();
+  const dt=new Date().toLocaleDateString('th-TH',{year:'numeric',month:'long',day:'numeric'});
+  let rows='';
+  boq.forEach((it,i)=>{const eq=effQty(it),wq=eq*(1+(it.waste||0)/100);
+    rows+=`<tr><td style="text-align:center">${i+1}</td><td>${E(it.name)}</td><td style="text-align:center">${it.isMat?'วัสดุ':'ค่าแรง'}</td><td style="text-align:right">${F(wq)}</td><td style="text-align:center">${it.unit}</td><td style="text-align:right">${F(it.rate)}</td><td style="text-align:right">${F(lineTotal(it))}</td></tr>`;});
+  const win=window.open('','_blank');
+  win.document.write(`<!DOCTYPE html><html lang="th"><head><meta charset="UTF-8"><title>ใบประมาณราคา</title>
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+  *{font-family:'Sarabun',sans-serif;box-sizing:border-box}
+  body{padding:30px;color:#000;font-size:13px}
+  h1{text-align:center;font-size:18px;margin:0 0 4px}
+  .sub{text-align:center;font-size:12px;color:#444;margin-bottom:14px}
+  .info{margin-bottom:12px;font-size:13px;line-height:1.8}
+  table{width:100%;border-collapse:collapse;margin-bottom:14px}
+  th,td{border:1px solid #333;padding:5px 7px;font-size:12px}
+  th{background:#e8eef7;font-weight:700;text-align:center}
+  .sum td{font-weight:700;background:#f5f7fa}
+  .grand td{font-weight:800;background:#dceaff;font-size:14px}
+  .sign{display:flex;justify-content:space-around;margin-top:50px;text-align:center;font-size:13px}
+  .sign div{width:40%}
+  .line{border-top:1px dotted #333;margin-top:40px;padding-top:4px}
+  @media print{body{padding:10px}.noprint{display:none}}
+  .noprint{text-align:center;margin-bottom:14px}
+  .btn{padding:8px 20px;background:#2d7ff9;color:#fff;border:0;border-radius:6px;font-size:14px;cursor:pointer;font-family:'Sarabun'}
+  </style></head><body>
+  <div class="noprint"><button class="btn" onclick="window.print()">🖨️ สั่งพิมพ์ / บันทึกเป็น PDF</button></div>
+  <h1>ใบประมาณราคางานก่อสร้าง (BOQ)</h1>
+  <div class="sub">อ้างอิงบัญชีค่าแรงงาน ว.809 ลงวันที่ 14 พฤศจิกายน 2568 กรมบัญชีกลาง</div>
+  <div class="info">
+  <b>ชื่อโครงการ:</b> ${E(projName)||'.....................................................'}<br>
+  <b>หน่วยงาน/เจ้าของงาน:</b> ${E(projOwner)||'.....................................................'}<br>
+  <b>สถานที่ก่อสร้าง:</b> ${E(projLoc)||'.....................................................'}<br>
+  <b>วันที่ประมาณการ:</b> ${dt}
+  </div>
+  <table><thead><tr><th style="width:35px">ลำดับ</th><th>รายการ</th><th style="width:55px">ประเภท</th><th style="width:75px">ปริมาณ</th><th style="width:50px">หน่วย</th><th style="width:80px">ราคา/หน่วย</th><th style="width:95px">จำนวนเงิน</th></tr></thead>
+  <tbody>${rows}
+  <tr class="sum"><td colspan="6" style="text-align:right">รวมค่าแรง</td><td style="text-align:right">${F(S.tL)}</td></tr>
+  <tr class="sum"><td colspan="6" style="text-align:right">รวมค่าวัสดุ</td><td style="text-align:right">${F(S.tM)}</td></tr>
+  <tr class="sum"><td colspan="6" style="text-align:right">ต้นทุนรวม (Direct Cost)</td><td style="text-align:right">${F(S.tD)}</td></tr>
+  <tr class="sum"><td colspan="6" style="text-align:right">Factor F</td><td style="text-align:right">${factorF}</td></tr>
+  <tr class="grand"><td colspan="6" style="text-align:right">ราคากลาง (รวมทั้งสิ้น)</td><td style="text-align:right">${F(S.tF)}</td></tr>
+  </tbody></table>
+  <div class="sign"><div><div class="line">ผู้ประมาณราคา</div></div><div><div class="line">ผู้ตรวจสอบ</div></div></div>
+  </body></html>`);
+  win.document.close();
+}
+
+// === USAGE GUIDE ===
+function showGuide(){
+  const steps=[
+    ['1️⃣ เปิดแบบก่อสร้าง','กดปุ่ม "📁 เปิดไฟล์แบบ" เลือกไฟล์ JPG, PNG หรือ PDF (ถ้าเป็น PDF เลือกหน้า/ความละเอียดได้). ไฟล์ DWG/DWF ให้ Save เป็น PDF จาก AutoCAD ก่อน'],
+    ['2️⃣ ตั้งสเกล (สำคัญที่สุด!)','กดเครื่องมือ "📐 สเกล" → คลิกที่จุดเริ่มและจุดปลายของระยะที่รู้ค่าจริงในแบบ (เช่น เส้น dimension 2.00 ม.) → ใส่ค่าระยะจริงเป็นเมตร. หลังตั้งสเกล ทุกการวัดจะออกมาเป็นเมตร/ตร.ม. อัตโนมัติ'],
+    ['3️⃣ วัด/วาด','⬡ พื้นที่ = คลิกมุมทีละจุด ปิดที่จุดแรกหรือ Enter · 📏 ความยาว = คลิกจุดต่อจุด Enter จบ · ⭕ วงกลม = คลิกศูนย์กลางแล้วลากรัศมี · 🔢 นับจำนวน = คลิกวางจุดนับเสา/โคมไฟ Enter จบ'],
+    ['4️⃣ Snap & Ortho ช่วยวาดแม่นยำ','🧲 Snap จับจุดที่เราวาด: ●ปลาย ▲กลาง ✕จุดตัด ⊾ตั้งฉาก ◇บนเส้น (F3) · ✛ "Snap เส้นในแบบ" จับเส้นจริงในรูป PDF/JPG ให้คลิกตามมุม/เส้นได้แม่นยำ · ⊾ Ortho กด Shift หรือ F8 ล็อกแนว x/y/45°'],
+    ['5️⃣ แก้ไขรูปที่วาดแล้ว','เลือกเครื่องมือ "🖱️ เลือก" → คลิกรูป → ลากจุดมุม (เหลือง) เพื่อย้าย · ดับเบิลคลิกบนเส้นเพื่อแทรกจุดใหม่ · คลิกขวาที่จุดเพื่อลบจุด · กด ⧉ หรือ Ctrl+D เพื่อคัดลอกรูป'],
+    ['6️⃣ ตั้งชื่อ & ชั้นงาน (Layer)','กดไอคอน ✎ ตั้งชื่อ เช่น "ผนัง", "เสา C1" · แยกงานเป็นชั้น (เช่น ชั้น 1 / ชั้น 2) เลือกชั้นที่จะวาด ติ๊กซ่อน/แสดง และดูสรุปปริมาณรวมตามชื่อได้'],
+    ['7️⃣ ใส่ราคา (BOQ)','ไปแท็บ "💰 ค่าแรง" หรือ "🧱 ค่าวัสดุ" → กด ＋ เพิ่มรายการ → ในแท็บ "📋 BOQ" ใส่ปริมาณ หรือกด "← shape" ดึงค่าจากรูปที่เลือก'],
+    ['8️⃣ ปริมาตร / เผื่อเสีย / Factor F','รายการหน่วย ลบ.ม. ใส่ความหนาเพื่อแปลงพื้นที่→ปริมาตร · ใส่ % เผื่อเสียวัสดุ · ใส่ค่า Factor F (จากตารางราชการ) เพื่อได้ราคากลาง'],
+    ['9️⃣ ออกรายงาน','กด 📊 Excel, 📄 CSV หรือ 🖨️ PDF (กรอกชื่อโครงการก่อน) — PDF กดปุ่มพิมพ์แล้วเลือก "บันทึกเป็น PDF"'],
+    ['🔟 บันทึก & ส่งต่อ','กด "💾 บันทึกงาน" ได้ไฟล์ .json ส่งให้ทีมเปิดด้วย "📂 เปิดงาน" ทำงานต่อได้ทันที'],
+  ];
+  let body=steps.map(s=>`<div style="margin-bottom:12px"><div style="font-weight:700;color:var(--ac2);margin-bottom:2px">${s[0]}</div><div style="font-size:12px;color:var(--tx);line-height:1.7">${s[1]}</div></div>`).join('');
+  const keys=`<div style="margin-top:14px;padding:10px;background:var(--p2);border-radius:8px"><div style="font-weight:700;color:var(--br);margin-bottom:6px">⌨️ คีย์ลัด</div><div style="font-size:12px;line-height:1.9;color:var(--tx)"><b>F3</b> เปิด/ปิด Snap · <b>F8</b> เปิด/ปิด Ortho · <b>Shift</b> Ortho ชั่วคราว<br><b>Enter</b> จบการวาด · <b>Esc</b> ยกเลิก · <b>Ctrl+Z</b> ถอยจุด · <b>Ctrl+D</b> คัดลอกรูป · <b>Del</b> ลบรูป<br><b>Dbl-click</b> บนเส้น = แทรกจุด · <b>คลิกขวา</b>ที่จุด = ลบจุด<br><b>ล้อเมาส์</b> ซูม · <b>Alt+ลาก</b> เลื่อนภาพ</div></div>`;
+  const m=document.createElement('div');m.className='modal-bg';m.id='guideModal';m.onclick=e=>{if(e.target===m)closeGuide();};
+  m.innerHTML=`<div class="modal"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><h3 style="margin:0">📖 คู่มือการใช้งาน</h3><button class="x" style="font-size:20px" onclick="closeGuide()">✕</button></div>${body}${keys}<button class="exp exp-csv" style="width:100%;justify-content:center;margin-top:14px" onclick="closeGuide()">เริ่มใช้งาน</button></div>`;
+  document.body.appendChild(m);
+}
+function closeGuide(){const m=document.getElementById('guideModal');if(m)m.remove();}
+
+// === INIT ===
+resize();rTab();
+let firstVisit=true;
+if(firstVisit)setTimeout(showGuide,400);
+</script>
+</body>
+</html>

@@ -1,7 +1,47 @@
 #!/usr/bin/env sh
-# Gate: ความถูกต้องเชิงวิศวกรรมต้องผ่านก่อน commit — ห้าม bypass ด้วย --no-verify
-echo "▶ typecheck..."
-npm run --silent typecheck || { echo "✗ typecheck ไม่ผ่าน"; exit 1; }
-echo "▶ test:math..."
-npm run --silent test:math || { echo "✗ เทสต์คณิตศาสตร์ไม่ผ่าน ห้าม commit"; exit 1; }
-echo "✓ ผ่าน gate"
+# ───────────────────────────────────────────────────────────────────────
+# Gate ความถูกต้องเชิงวิศวกรรม — ห้าม bypass ด้วย --no-verify
+# ───────────────────────────────────────────────────────────────────────
+# Track A (root src/): typecheck + test:math
+# Track B (estimate-boq-v2/): typecheck + lint
+# จะรันเฉพาะ track ที่มี staged files จริงเท่านั้น เพื่อความเร็ว
+# ───────────────────────────────────────────────────────────────────────
+
+STAGED="$(git diff --cached --name-only --diff-filter=ACMR)"
+
+# helper
+has_changes() {
+  echo "$STAGED" | grep -qE "$1"
+}
+
+# ─── Track A ───────────────────────────────────────────────────────────
+# trigger เมื่อแตะ root src/, package.json, tsconfig, vite, .husky
+if has_changes '^(src/|package\.json$|tsconfig.*\.json$|vite\.config\.ts$|\.husky/)'; then
+  echo "▶ [Track A] typecheck..."
+  npm run --silent typecheck || { echo "✗ [Track A] typecheck ไม่ผ่าน"; exit 1; }
+  echo "▶ [Track A] test:math..."
+  npm run --silent test:math || { echo "✗ [Track A] เทสต์คณิตศาสตร์ไม่ผ่าน"; exit 1; }
+  echo "✓ [Track A] ผ่าน"
+fi
+
+# ─── Track B ───────────────────────────────────────────────────────────
+# trigger เมื่อแตะ estimate-boq-v2/
+if has_changes '^estimate-boq-v2/'; then
+  if [ ! -d "estimate-boq-v2/node_modules" ]; then
+    echo "✗ [Track B] ยังไม่ได้ npm install — รัน: cd estimate-boq-v2 && npm install"
+    exit 1
+  fi
+  echo "▶ [Track B] typecheck..."
+  ( cd estimate-boq-v2 && npm run --silent typecheck ) \
+    || { echo "✗ [Track B] typecheck ไม่ผ่าน"; exit 1; }
+  echo "▶ [Track B] lint..."
+  ( cd estimate-boq-v2 && npm run --silent lint ) \
+    || { echo "✗ [Track B] lint ไม่ผ่าน (ใช้ npm run lint:fix แก้ก่อน)"; exit 1; }
+  echo "✓ [Track B] ผ่าน"
+fi
+
+if ! has_changes '.'; then
+  echo "(no staged files — skip gate)"
+fi
+
+echo "✓ pre-commit gate ผ่าน"

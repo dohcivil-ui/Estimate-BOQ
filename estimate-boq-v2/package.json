@@ -1,0 +1,45 @@
+{
+  "name": "estimate-boq-v2",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "AI-first construction cost estimator (Track B, Phase 2) — React + Vite + Supabase + Claude API",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -b --noEmit",
+    "lint": "eslint . --max-warnings 0",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write \"**/*.{ts,tsx,css,json,md}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,css,json,md}\""
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.4",
+    "exceljs": "^4.4.0",
+    "konva": "^9.3.16",
+    "pdfjs-dist": "^4.6.82",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-konva": "^18.2.10",
+    "zustand": "^4.5.5"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.12.0",
+    "@types/node": "^22.7.4",
+    "@types/react": "^18.3.11",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.2",
+    "autoprefixer": "^10.4.20",
+    "eslint": "^9.12.0",
+    "eslint-plugin-react-hooks": "^5.0.0",
+    "eslint-plugin-react-refresh": "^0.4.12",
+    "globals": "^15.10.0",
+    "postcss": "^8.4.47",
+    "prettier": "^3.3.3",
+    "tailwindcss": "^3.4.13",
+    "typescript": "^5.6.2",
+    "typescript-eslint": "^8.8.1",
+    "vite": "^5.4.8"
+  }
+}

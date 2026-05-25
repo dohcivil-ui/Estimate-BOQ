@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>คู่มือการใช้งาน | โปรแกรมประมาณราคาก่อสร้าง</title>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#1a2332;--ink2:#3d4b63;--dim:#6b7a93;--ac:#2d6cdf;--ac2:#1b4fb0;--gn:#0a9d6e;--yw:#d98c00;--pk:#c0399b;--cy:#0a8db0;--or:#d96a1f;--bg:#fff;--soft:#f4f7fc;--soft2:#eaf0fa;--bd:#d8e1ef;--rd:#d63b48}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Sarabun',sans-serif;color:var(--ink);background:#e9edf4;line-height:1.65;font-size:14px}
+.page{max-width:820px;margin:24px auto;background:var(--bg);box-shadow:0 4px 30px rgba(0,0,0,.12);border-radius:8px;overflow:hidden}
+
+/* COVER */
+.cover{background:linear-gradient(135deg,#1b4fb0,#2d6cdf 55%,#0a9d6e);color:#fff;padding:48px 44px 40px;position:relative;overflow:hidden}
+.cover::after{content:'';position:absolute;right:-60px;top:-60px;width:240px;height:240px;border:30px solid rgba(255,255,255,.08);border-radius:50%}
+.cover .eyebrow{font-size:13px;letter-spacing:3px;text-transform:uppercase;opacity:.85;font-weight:600}
+.cover h1{font-size:34px;font-weight:800;margin:10px 0 6px;line-height:1.2}
+.cover .sub{font-size:15px;opacity:.92;font-weight:400;max-width:560px}
+.cover .meta{margin-top:24px;display:flex;gap:10px;flex-wrap:wrap}
+.cover .chip{background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.25);padding:5px 13px;border-radius:20px;font-size:12px;font-weight:500;backdrop-filter:blur(4px)}
+
+.body{padding:34px 44px 50px}
+
+/* SECTIONS */
+h2{font-size:21px;font-weight:800;color:var(--ac2);margin:34px 0 14px;padding-bottom:8px;border-bottom:2px solid var(--soft2);display:flex;align-items:center;gap:10px}
+h2 .no{background:var(--ac);color:#fff;width:30px;height:30px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0}
+h3{font-size:16px;font-weight:700;color:var(--ink);margin:20px 0 8px}
+p{margin-bottom:10px;color:var(--ink2)}
+ul,ol{margin:0 0 12px 22px}li{margin-bottom:6px;color:var(--ink2)}
+b,strong{color:var(--ink);font-weight:700}
+.lead{font-size:15px;color:var(--ink2);background:var(--soft);border-left:4px solid var(--ac);padding:14px 18px;border-radius:0 8px 8px 0;margin-bottom:8px}
+
+/* STEP CARDS */
+.step{display:flex;gap:14px;margin-bottom:16px;background:var(--soft);border:1px solid var(--bd);border-radius:10px;padding:14px 16px}
+.step .n{flex-shrink:0;width:34px;height:34px;border-radius:50%;background:var(--ac);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px}
+.step .c{flex:1}
+.step .t{font-weight:700;color:var(--ink);margin-bottom:3px;font-size:15px}
+.step .d{font-size:13.5px;color:var(--ink2)}
+
+/* TOOL GRID */
+.tools{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0}
+.tool{border:1px solid var(--bd);border-radius:10px;padding:12px 14px;background:#fff}
+.tool .h{font-weight:700;font-size:14px;margin-bottom:3px;display:flex;align-items:center;gap:7px}
+.tool .x{font-size:12.5px;color:var(--dim)}
+.ic{width:26px;height:26px;border-radius:7px;display:inline-flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+
+/* TABLE */
+table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13px}
+th,td{border:1px solid var(--bd);padding:8px 11px;text-align:left;vertical-align:top}
+th{background:var(--soft2);font-weight:700;color:var(--ac2)}
+tr:nth-child(even) td{background:var(--soft)}
+.kbd{display:inline-block;background:var(--ink);color:#fff;padding:2px 9px;border-radius:5px;font-size:12px;font-weight:600;font-family:monospace;margin:1px}
+
+/* SNAP LEGEND */
+.snap-row{display:flex;align-items:center;gap:10px;padding:9px 12px;border:1px solid var(--bd);border-radius:8px;margin-bottom:7px;background:#fff}
+.snap-mk{width:30px;height:30px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;border-radius:7px}
+
+/* CALLOUT */
+.note{border-radius:10px;padding:13px 16px;margin:14px 0;font-size:13.5px;border:1px solid}
+.note.tip{background:#eafaf4;border-color:#a9e6cf;color:#0a6e4e}
+.note.warn{background:#fff6e6;border-color:#f3d79a;color:#946100}
+.note.info{background:#eaf2ff;border-color:#b9d2f7;color:#1b4fb0}
+.note .h{font-weight:700;margin-bottom:3px}
+
+/* FLOW */
+.flow{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin:14px 0;padding:16px;background:var(--soft);border-radius:10px;justify-content:center}
+.flow .b{background:#fff;border:1.5px solid var(--ac);color:var(--ac2);padding:7px 13px;border-radius:8px;font-weight:600;font-size:13px}
+.flow .ar{color:var(--ac);font-size:18px;font-weight:800}
+
+/* PRINT BUTTON */
+.printbar{position:fixed;top:16px;right:16px;z-index:50}
+.printbtn{padding:11px 22px;background:var(--ac);color:#fff;border:0;border-radius:8px;font:700 14px 'Sarabun';cursor:pointer;box-shadow:0 4px 14px rgba(45,108,223,.4)}
+.printbtn:hover{background:var(--ac2)}
+
+.footer{margin-top:34px;padding-top:18px;border-top:2px solid var(--soft2);font-size:12px;color:var(--dim);text-align:center}
+
+@media print{
+  body{background:#fff;font-size:12px}
+  .page{box-shadow:none;margin:0;max-width:100%;border-radius:0}
+  .printbar{display:none}
+  .body{padding:18px 22px}
+  .cover{padding:30px 28px}
+  h2{page-break-after:avoid}
+  .step,.tool,.snap-row,.note{page-break-inside:avoid}
+  .sec{page-break-inside:avoid}
+}
+@media(max-width:600px){.tools{grid-template-columns:1fr}.body{padding:24px 20px}.cover{padding:32px 24px}.cover h1{font-size:26px}}
+</style>
+</head>
+<body>
+<div class="printbar"><button class="printbtn" onclick="window.print()">🖨️ บันทึกเป็น PDF / พิมพ์</button></div>
+
+<div class="page">
+  <!-- COVER -->
+  <div class="cover">
+    <div class="eyebrow">USER MANUAL · คู่มือการใช้งาน</div>
+    <h1>🏗️ โปรแกรมประมาณราคาก่อสร้าง</h1>
+    <div class="sub">เครื่องมือถอดแบบและประมาณราคาจากแบบก่อสร้าง (JPG / PNG / PDF) พร้อมบัญชีค่าแรงงาน ว.809 และคำนวณราคากลางตามหลักวิศวกรรม</div>
+    <div class="meta">
+      <span class="chip">📐 ถอดแบบ-วัดพื้นที่</span>
+      <span class="chip">💰 บัญชีค่าแรง ว.809</span>
+      <span class="chip">📊 ออก Excel / PDF</span>
+      <span class="chip">เวอร์ชัน 2.0</span>
+    </div>
+  </div>
+
+  <div class="body">
+    <div class="lead">คู่มือนี้อธิบายการใช้งานโปรแกรมตั้งแต่เปิดแบบ ตั้งสเกล วัดพื้นที่ ไปจนถึงการคำนวณราคากลางและออกรายงาน เหมาะสำหรับผู้ใช้งานใหม่ทุกคนในทีม</div>
+
+    <!-- SECTION 1: เริ่มต้น -->
+    <h2><span class="no">1</span> การเริ่มต้นใช้งาน</h2>
+    <p>โปรแกรมเป็นไฟล์ HTML ไฟล์เดียว <b>ไม่ต้องติดตั้ง</b> เปิดได้ทุกอุปกรณ์ที่มีเบราว์เซอร์</p>
+    <h3>ความต้องการของระบบ</h3>
+    <ul>
+      <li>เบราว์เซอร์รุ่นใหม่: <b>Chrome, Microsoft Edge, Firefox</b> (แนะนำ Chrome)</li>
+      <li>ใช้ได้ทั้ง Windows, macOS, Android, iPad/iOS</li>
+      <li>ต้องต่อ <b>อินเทอร์เน็ต</b> ครั้งแรกที่เปิด (เพื่อโหลดฟอนต์และเครื่องมือสร้าง PDF/Excel)</li>
+    </ul>
+    <h3>วิธีเปิดโปรแกรม</h3>
+    <ol>
+      <li>รับไฟล์ <b>cost-estimator-v2.html</b> จากหัวหน้าทีม</li>
+      <li>ดับเบิลคลิกที่ไฟล์ → เปิดในเบราว์เซอร์อัตโนมัติ</li>
+      <li>เริ่มใช้งานได้ทันที (จะมีคู่มือย่อเด้งขึ้นมาครั้งแรก)</li>
+    </ol>
+    <div class="note info"><div class="h">💡 ไฟล์ DWG / DWF ทำอย่างไร?</div>โปรแกรมเปิด JPG, PNG, PDF ได้โดยตรง สำหรับไฟล์ AutoCAD (.dwg/.dwf) ให้ <b>Save As เป็น PDF</b> จาก AutoCAD ก่อน แล้วจึงเปิดในโปรแกรมนี้</div>
+
+    <!-- SECTION 2: ภาพรวมหน้าจอ -->
+    <h2><span class="no">2</span> ภาพรวมหน้าจอ</h2>
+    <table>
+      <tr><th style="width:34%">ส่วน</th><th>หน้าที่</th></tr>
+      <tr><td><b>แผงซ้าย — แท็บ 📐 วาด/วัด</b></td><td>เปิดไฟล์แบบ, เลือกเครื่องมือ, ตั้งค่า Snap/Ortho, ดูรายการที่วาด</td></tr>
+      <tr><td><b>แท็บ 📋 BOQ</b></td><td>รายการประมาณราคา ใส่ปริมาณ ความหนา เผื่อเสีย Factor F และออกรายงาน</td></tr>
+      <tr><td><b>แท็บ 💰 ค่าแรง</b></td><td>บัญชีค่าแรงงาน ว.809 (5 หมวด) ค้นหาและกดเพิ่มเข้า BOQ</td></tr>
+      <tr><td><b>แท็บ 🧱 ค่าวัสดุ</b></td><td>ราคาวัสดุประมาณการ (คอนกรีต เหล็ก อิฐ สี ฯลฯ)</td></tr>
+      <tr><td><b>พื้นที่กลาง (Canvas)</b></td><td>แสดงแบบก่อสร้าง วาด/วัด/แก้ไข แถบบนบอกเครื่องมือและพิกัด</td></tr>
+    </table>
+
+    <!-- SECTION 3: ขั้นตอนหลัก -->
+    <h2><span class="no">3</span> ขั้นตอนการทำงาน (สำคัญ)</h2>
+    <div class="flow">
+      <span class="b">เปิดแบบ</span><span class="ar">→</span>
+      <span class="b">ตั้งสเกล</span><span class="ar">→</span>
+      <span class="b">วัด/วาด</span><span class="ar">→</span>
+      <span class="b">เพิ่ม BOQ</span><span class="ar">→</span>
+      <span class="b">ออกรายงาน</span>
+    </div>
+
+    <div class="step"><div class="n">1</div><div class="c"><div class="t">เปิดแบบก่อสร้าง</div><div class="d">กด <b>"📁 เปิดไฟล์แบบ"</b> เลือก JPG, PNG หรือ PDF · ถ้าเป็น PDF เลือกหน้าและความละเอียด (DPI) ได้</div></div></div>
+
+    <div class="step"><div class="n">2</div><div class="c"><div class="t">ตั้งสเกล — ขั้นตอนสำคัญที่สุด ⚠️</div><div class="d">กดเครื่องมือ <b>"📐 สเกล"</b> → คลิกที่จุดเริ่มและจุดปลายของระยะที่ <b>รู้ค่าจริง</b> ในแบบ (เช่น เส้นบอกระยะ 2.00 ม.) → พิมพ์ค่าระยะจริงเป็นเมตร<br>หลังตั้งสเกลแล้ว การวัดทุกครั้งจะแปลงเป็นเมตร / ตร.ม. โดยอัตโนมัติ</div></div></div>
+
+    <div class="step"><div class="n">3</div><div class="c"><div class="t">วัดและวาด</div><div class="d">เลือกเครื่องมือที่ต้องการ (ดูหัวข้อ 4) วัดพื้นที่ ความยาว วงกลม หรือนับจำนวน</div></div></div>
+
+    <div class="step"><div class="n">4</div><div class="c"><div class="t">ใส่ราคา (BOQ)</div><div class="d">ไปแท็บ <b>💰 ค่าแรง</b> หรือ <b>🧱 ค่าวัสดุ</b> → กด <b>＋</b> เพิ่มรายการ → ในแท็บ <b>📋 BOQ</b> ใส่ปริมาณเอง หรือเลือกรูปแล้วกด <b>"← shape"</b> เพื่อดึงค่าที่วัดมาอัตโนมัติ</div></div></div>
+
+    <div class="step"><div class="n">5</div><div class="c"><div class="t">ออกรายงาน</div><div class="d">ใส่ Factor F และข้อมูลโครงการ → กด <b>📊 Excel</b>, <b>📄 CSV</b> หรือ <b>🖨️ PDF</b></div></div></div>
+
+    <div class="note tip"><div class="h">✅ เคล็ดลับ</div>ถ้ายังไม่ได้ตั้งสเกล ค่าที่วัดจะเป็นหน่วย "พิกเซล (px)" ให้ตั้งสเกลก่อนเสมอเพื่อให้ได้หน่วยเมตรที่ถูกต้อง</div>
+
+    <!-- SECTION 4: เครื่องมือ -->
+    <h2><span class="no">4</span> เครื่องมือวัด/วาด</h2>
+    <div class="tools">
+      <div class="tool"><div class="h"><span class="ic" style="background:#eaf2ff">⬡</span> วาดพื้นที่ (Polygon)</div><div class="x">คลิกมุมทีละจุด ปิดรูปโดยคลิกที่จุดแรก หรือกด Enter / ดับเบิลคลิก → ได้พื้นที่ ตร.ม.</div></div>
+      <div class="tool"><div class="h"><span class="ic" style="background:#eafaf4">📏</span> วัดความยาว (Line)</div><div class="x">คลิกจุดต่อจุด กด Enter หรือดับเบิลคลิกเพื่อจบ → แสดงระยะกำกับเหนือเส้นแต่ละช่วง</div></div>
+      <div class="tool"><div class="h"><span class="ic" style="background:#eafaf4">⭕</span> วงกลม (Circle)</div><div class="x">คลิกจุดศูนย์กลาง แล้วคลิกกำหนดรัศมี → ได้พื้นที่ รัศมี และเส้นรอบวง (เหมาะกับเสากลม ถัง บ่อ)</div></div>
+      <div class="tool"><div class="h"><span class="ic" style="background:#fbeaf6">🔢</span> นับจำนวน (Count)</div><div class="x">คลิกวางจุดทีละจุด มีเลขกำกับ กด Enter จบ (นับเสา โคมไฟ สุขภัณฑ์ หัวสปริงเกอร์)</div></div>
+      <div class="tool"><div class="h"><span class="ic" style="background:#ffeaea">📐</span> ตั้งสเกล (Calibrate)</div><div class="x">คลิก 2 จุดที่ทราบระยะจริง แล้วใส่ค่าเป็นเมตร</div></div>
+      <div class="tool"><div class="h"><span class="ic" style="background:#fff6e6">🖱️</span> เลือก/แก้ไข (Select)</div><div class="x">คลิกเลือกรูป → ลากจุดมุม (สีเหลือง) เพื่อย้ายตำแหน่ง · กดไอคอน ✎ ตั้งชื่อรายการ</div></div>
+    </div>
+
+    <!-- SECTION 5: Snap & Ortho -->
+    <h2><span class="no">5</span> Snap และ Ortho (วาดให้แม่นยำ)</h2>
+    <h3>🧲 Snap — จับเข้าจุดอัตโนมัติ (เลือกเปิด/ปิด 5 โหมด · กด <span class="kbd">F3</span>)</h3>
+    <div class="snap-row"><span class="snap-mk" style="background:#eafaf4;color:#0a9d6e">●</span><div><b>ปลายเส้น (Endpoint)</b> — จับเข้าจุดมุม/ปลายเส้น (ปลายถึงปลาย)</div></div>
+    <div class="snap-row"><span class="snap-mk" style="background:#fff6e6;color:#d98c00">▲</span><div><b>กึ่งกลาง (Midpoint)</b> — จับเข้าจุดกึ่งกลางของเส้น</div></div>
+    <div class="snap-row"><span class="snap-mk" style="background:#fbeaf6;color:#c0399b">✕</span><div><b>จุดตัด (Intersection)</b> — จับเข้าจุดที่เส้นสองเส้นตัดกัน</div></div>
+    <div class="snap-row"><span class="snap-mk" style="background:#e6f6fb;color:#0a8db0">⊾</span><div><b>ตั้งฉาก (Perpendicular)</b> — ลากเส้นให้ตั้งฉากกับเส้นที่มีอยู่</div></div>
+    <div class="snap-row"><span class="snap-mk" style="background:#fdeee0;color:#d96a1f">◇</span><div><b>จุดบนเส้น (Nearest)</b> — จับเข้าจุดใดก็ได้ที่อยู่บนเส้น</div></div>
+    <div class="snap-row" style="border-color:#9fe0ee;background:#ecfbff"><span class="snap-mk" style="background:#e0f7fc;color:#0a8db0">✛</span><div><b>เส้นในแบบ (Image Snap)</b> — จับเข้า <b>เส้นจริงในรูป PDF/JPG</b> โดยตรวจจับเส้นสีเข้มในภาพ ทำให้คลิกตามมุม เส้น และจุดตัดของแบบได้แม่นยำ แม้รูปจะเป็นภาพ (ไม่ใช่เวกเตอร์)</div></div>
+    <div class="note tip"><div class="h">✅ วิธีวัดให้แม่นยำที่สุดบนรูป PDF/JPG</div>
+    1) เปิด <b>✛ Snap เส้นในแบบ</b> (ในแถบสีฟ้าใต้โหมด Snap) &nbsp; 2) <b>ซูมเข้า</b>ให้เห็นเส้นชัดก่อนคลิก &nbsp; 3) ถ้าเส้นจาง/สแกนไม่ชัด ปรับ "ความไว" เป็น <b>เส้นจาง/สแกน</b> &nbsp; 4) เปิด PDF ด้วย DPI <b>สูง/สูงมาก</b> เพื่อให้เส้นคมชัด</div>
+    <h3>⊾ Ortho — ล็อกแนวแกน</h3>
+    <p>กด <span class="kbd">Shift</span> ค้าง หรือ <span class="kbd">F8</span> ขณะลากเส้น เพื่อล็อกให้เป็นแนวนอน / แนวตั้ง / 45° อัตโนมัติ — ได้เส้นตรงเป๊ะตามแนวผนัง</p>
+    <div class="note info"><div class="h">ℹ️ ลำดับความสำคัญของ Snap</div>เมื่อมีหลายจุดใกล้กัน ระบบจะเลือกตามลำดับ: ปลายเส้น → จุดตัด → ตั้งฉาก → กึ่งกลาง → จุดบนเส้น</div>
+
+    <!-- SECTION 6: แก้ไข -->
+    <h2><span class="no">6</span> แก้ไขและจัดการรูปที่วาด</h2>
+    <ul>
+      <li><b>ย้ายจุด:</b> เลือกเครื่องมือ 🖱️ → คลิกรูป → จุดมุมจะใหญ่ขึ้น (สีเหลือง) → ลากย้ายได้ ระบบคำนวณค่าใหม่ให้อัตโนมัติ</li>
+      <li><b>แทรกจุดใหม่:</b> <b>ดับเบิลคลิก</b> บนเส้น/ขอบของรูปที่เลือก → จะเพิ่มจุดตรงตำแหน่งนั้น</li>
+      <li><b>ลบจุด:</b> <b>คลิกขวา</b> ที่จุดมุมของรูปที่เลือก → ลบจุดนั้น (รูปต้องเหลือจุดขั้นต่ำ: พื้นที่ 3, เส้น 2)</li>
+      <li><b>คัดลอกรูป (Duplicate):</b> กดไอคอน <b>⧉</b> ในรายการ หรือกด <span class="kbd">Ctrl</span>+<span class="kbd">D</span> → ได้รูปสำเนาเยื้องออกมา (เช่น วาดเสาต้นเดียวแล้วคัดลอกไปวางที่อื่น)</li>
+      <li><b>ตั้งชื่อ:</b> กดไอคอน <b>✎</b> ตั้งชื่อ เช่น "ผนัง", "เสา C1" — ชื่อจะแสดงบนแบบ</li>
+      <li><b>ลบรูป:</b> กดไอคอน <b>✕</b> ในรายการ หรือเลือกรูปแล้วกด <span class="kbd">Delete</span></li>
+    </ul>
+    <h3>🗂️ ชั้นงาน (Layer)</h3>
+    <p>แยกงานเป็นชั้นได้ เช่น "ชั้น 1", "ชั้น 2", "งานระบบ" เพื่อจัดระเบียบและเปิด-ปิดการแสดงผล</p>
+    <ul>
+      <li><b>เพิ่มชั้น:</b> กดปุ่ม <b>＋</b> ข้างช่องเลือกชั้น แล้วตั้งชื่อ</li>
+      <li><b>เลือกชั้นที่จะวาด:</b> เลือกจาก dropdown "วาดในชั้น:" รูปใหม่จะถูกใส่ในชั้นนั้น</li>
+      <li><b>ซ่อน/แสดง:</b> ติ๊กช่องหน้าชื่อชั้น เพื่อเปิด-ปิดการแสดงผล (ชั้นที่ซ่อนจะไม่ถูกเลือก/snap)</li>
+      <li><b>ย้ายรูปข้ามชั้น:</b> เปลี่ยน dropdown ชั้นที่มุมขวาล่างของแต่ละรายการ</li>
+    </ul>
+    <h3>📊 สรุปปริมาณรวมตามชื่อ</h3>
+    <p>ใต้รายการที่วาด จะมีตารางสรุปที่ <b>รวมปริมาณของรูปที่ตั้งชื่อเหมือนกัน</b> เข้าด้วยกันอัตโนมัติ — เช่น ทุกรูปที่ชื่อ "ผนัง" จะถูกรวมพื้นที่เป็นยอดเดียว สะดวกต่อการนำไปใส่ BOQ</p>
+
+    <h3>📐 หลายมาตราส่วนในหน้าเดียว</h3>
+    <p>กรณีแบบมีรายละเอียด (detail) หลายมาตราส่วนในหน้าเดียวกัน: <b>ตั้งสเกลใหม่ก่อนวัดแต่ละบริเวณ</b> รูปที่วัดไปแล้วจะจดจำสเกลของตัวเองไว้ ไม่เปลี่ยนตามค่าใหม่ (แต่ละรูปเก็บมาตราส่วนของมันเอง)</p>
+
+    <!-- SECTION 7: BOQ -->
+    <h2><span class="no">7</span> การคำนวณราคา (BOQ)</h2>
+    <h3>การใส่ปริมาณ</h3>
+    <p>แต่ละรายการใส่ปริมาณได้เอง หรือเลือกรูปที่วาดไว้แล้วกด <b>"← shape"</b> เพื่อดึงค่ามาอัตโนมัติ (พื้นที่/ความยาว/จำนวน)</p>
+    <h3>📐 คำนวณปริมาตร (หน่วย ลบ.ม.)</h3>
+    <p>รายการที่หน่วยเป็น ลบ.ม. จะมีช่อง <b>"× ความหนา/สูง"</b> ใส่ค่าเป็นเมตร ระบบจะคูณ พื้นที่ × ความหนา = ปริมาตร อัตโนมัติ (เช่น พื้น 50 ตร.ม. × 0.10 ม. = 5.00 ลบ.ม.)</p>
+    <h3>♻️ เผื่อเศษวัสดุ (Waste %)</h3>
+    <p>ใส่เปอร์เซ็นต์เผื่อเสียหายของวัสดุแต่ละรายการ ระบบจะเพิ่มปริมาณให้ตามสัดส่วน</p>
+    <h3>📊 Factor F และราคากลาง</h3>
+    <table>
+      <tr><th>รายการ</th><th>ความหมาย</th></tr>
+      <tr><td>ค่าแรงรวม</td><td>ผลรวมค่าแรงทุกรายการ (รวมเผื่อเสียแล้ว)</td></tr>
+      <tr><td>ค่าวัสดุรวม</td><td>ผลรวมค่าวัสดุทุกรายการ</td></tr>
+      <tr><td>ต้นทุนรวม (Direct Cost)</td><td>ค่าแรง + ค่าวัสดุ</td></tr>
+      <tr><td><b>ราคากลาง</b></td><td><b>ต้นทุนรวม × Factor F</b></td></tr>
+    </table>
+    <div class="note warn"><div class="h">⚠️ เรื่อง Factor F</div>ค่า Factor F ต้องเปิดจาก <b>ตารางของกรมบัญชีกลาง</b> ตามประเภทงาน (อาคาร / ทาง / ชลประทาน) และวงเงินค่าก่อสร้าง แล้วนำมากรอกในช่อง โปรแกรมจะคำนวณราคากลางให้ — ค่า F รวมค่าอำนวยการ กำไร และภาษีไว้แล้ว</div>
+    <div class="note info"><div class="h">ℹ️ หมายเหตุราคาวัสดุ</div>ราคาค่าวัสดุในโปรแกรมเป็น <b>ราคาประมาณการ</b> เพื่อความถูกต้องควรสืบราคาจริงจากท้องตลาด หรือราคาพาณิชย์จังหวัด</div>
+
+    <!-- SECTION 8: รายงาน -->
+    <h2><span class="no">8</span> การออกรายงาน</h2>
+    <table>
+      <tr><th>รูปแบบ</th><th>การใช้งาน</th></tr>
+      <tr><td><b>📊 Excel (.xlsx)</b></td><td>เปิดแก้ไขต่อใน Excel มี 2 ชีต: BOQ และรายการที่วัด</td></tr>
+      <tr><td><b>📄 CSV</b></td><td>ไฟล์ข้อความ เปิดได้ทุกโปรแกรมตาราง</td></tr>
+      <tr><td><b>🖨️ PDF</b></td><td>ใบประมาณราคาพร้อมหัวกระดาษและช่องลายเซ็น กดปุ่มพิมพ์ แล้วเลือก "บันทึกเป็น PDF"</td></tr>
+    </table>
+    <p>ก่อนออก PDF ให้กรอก <b>ชื่อโครงการ / หน่วยงาน / สถานที่</b> ในช่องข้อมูลรายงาน</p>
+
+    <!-- SECTION 9: บันทึก/ทีม -->
+    <h2><span class="no">9</span> บันทึกงานและการทำงานเป็นทีม</h2>
+    <ul>
+      <li><b>💾 บันทึกงาน:</b> เซฟทั้งโปรเจกต์ (รูปแบบ + สเกล + รูปที่วาด + BOQ + Factor F) เป็นไฟล์ <b>.json</b> ไฟล์เดียว</li>
+      <li><b>📂 เปิดงาน:</b> เปิดไฟล์ .json กลับมาทำงานต่อได้ทันที</li>
+    </ul>
+    <h3>แนวทางทำงานเป็นทีม</h3>
+    <ol>
+      <li>หัวหน้าทีมแชร์ไฟล์ <b>cost-estimator-v2.html</b> ให้ทุกคน (LINE / อีเมล / Google Drive)</li>
+      <li>แต่ละคนทำงานในเครื่องตัวเอง แล้วกด 💾 บันทึก ตั้งชื่อชัดเจน เช่น <b>"อาคารA_ชั้น1_สมชาย.json"</b></li>
+      <li>ส่งไฟล์ .json กลับให้หัวหน้ารวมงาน/ตรวจสอบ</li>
+    </ol>
+
+    <!-- SECTION 10: คีย์ลัด -->
+    <h2><span class="no">10</span> คีย์ลัด (Shortcut)</h2>
+    <table>
+      <tr><th style="width:30%">ปุ่ม</th><th>การทำงาน</th></tr>
+      <tr><td><span class="kbd">F3</span></td><td>เปิด/ปิด Snap</td></tr>
+      <tr><td><span class="kbd">F8</span></td><td>เปิด/ปิด Ortho (ล็อกแนวแกน)</td></tr>
+      <tr><td><span class="kbd">Shift</span> (ค้าง)</td><td>Ortho ชั่วคราว</td></tr>
+      <tr><td><span class="kbd">Enter</span></td><td>จบการวาด (เส้น/พื้นที่/นับจำนวน)</td></tr>
+      <tr><td><span class="kbd">Esc</span></td><td>ยกเลิกการวาดที่กำลังทำอยู่</td></tr>
+      <tr><td><span class="kbd">Ctrl</span> + <span class="kbd">Z</span></td><td>ถอยจุดสุดท้ายที่วาง</td></tr>
+      <tr><td><span class="kbd">Ctrl</span> + <span class="kbd">D</span></td><td>คัดลอกรูปที่เลือก (Duplicate)</td></tr>
+      <tr><td><b>ดับเบิลคลิก</b> บนเส้น</td><td>แทรกจุดใหม่ (เมื่อเลือกรูปอยู่)</td></tr>
+      <tr><td><b>คลิกขวา</b> ที่จุด</td><td>ลบจุดนั้น (เมื่อเลือกรูปอยู่)</td></tr>
+      <tr><td><span class="kbd">Delete</span></td><td>ลบรูปที่เลือกอยู่</td></tr>
+      <tr><td><b>ล้อเมาส์</b></td><td>ซูมเข้า/ออก</td></tr>
+      <tr><td><span class="kbd">Alt</span> + ลากเมาส์</td><td>เลื่อนภาพ (Pan)</td></tr>
+    </table>
+
+    <!-- SECTION 11: FAQ -->
+    <h2><span class="no">11</span> ปัญหาที่พบบ่อย (FAQ)</h2>
+    <h3>❓ วัดแล้วได้หน่วยเป็น px ไม่ใช่เมตร</h3>
+    <p>ยังไม่ได้ตั้งสเกล → ใช้เครื่องมือ 📐 สเกล ตั้งค่าก่อน</p>
+    <h3>❓ ค่าที่วัดได้ไม่ตรงกับระยะจริง</h3>
+    <p>ตั้งสเกลผิด → ตั้งใหม่โดยคลิกที่เส้นบอกระยะที่ชัดเจนในแบบ และใส่ค่าให้ถูกต้อง · ตรวจว่าเลือกหน้า PDF ที่มีมาตราส่วนเดียวกัน</p>
+    <h3>❓ เปิดไฟล์ DWG ไม่ได้</h3>
+    <p>ต้อง Save เป็น PDF จาก AutoCAD ก่อน</p>
+    <h3>❓ ภาษาไทยใน PDF เป็นสี่เหลี่ยม</h3>
+    <p>ใช้การพิมพ์ผ่านเบราว์เซอร์ (ปุ่ม 🖨️ PDF) จะแสดงภาษาไทยถูกต้อง · ต้องต่ออินเทอร์เน็ตเพื่อโหลดฟอนต์</p>
+    <h3>❓ ทำงานต่อในเครื่องอื่นได้ไหม</h3>
+    <p>ได้ — บันทึกเป็นไฟล์ .json แล้วเปิดในไฟล์ HTML ตัวเดียวกันที่เครื่องอื่น</p>
+
+    <div class="footer">
+      โปรแกรมประมาณราคาก่อสร้าง เวอร์ชัน 2.0 · อ้างอิงบัญชีค่าแรงงาน ว.809 ลงวันที่ 14 พฤศจิกายน 2568 กรมบัญชีกลาง<br>
+      คู่มือนี้จัดทำเพื่อการใช้งานภายในทีม · กดปุ่ม "🖨️ บันทึกเป็น PDF" มุมขวาบนเพื่อบันทึกเป็นไฟล์ PDF แจกจ่าย
+    </div>
+  </div>
+</div>
+</body>
+</html>

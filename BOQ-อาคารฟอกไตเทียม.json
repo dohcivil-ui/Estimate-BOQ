@@ -1,0 +1,142 @@
+{
+  "project": "อาคารฟอกไตเทียม โรงพยาบาลสุมาลย์ อ.กุสุมาลย์ จ.สกลนคร",
+  "factorF": 1.2768,
+  "boq": [
+    {"name":"===== หมวด 1: งานฐานราก =====","unit":"ตร.ม.","rate":0,"qty":0,"isMat":false,"thick":null,"waste":0},
+
+    {"name":"ขุดดินฐานราก F1 (1.50×1.50) ×35 ฐาน + F1 (1.10×1.10) ×5 ฐาน","unit":"ลบ.ม.","rate":181,"qty":65,"isMat":false,"thick":null,"waste":0},
+    {"name":"ทรายรองพื้นฐานราก หนา 0.05 ม.","unit":"ลบ.ม.","rate":850,"qty":4.5,"isMat":true,"thick":null,"waste":5},
+    {"name":"คอนกรีตหยาบรองพื้นฐานราก หนา 0.05 ม.","unit":"ลบ.ม.","rate":427,"qty":4.5,"isMat":false,"thick":null,"waste":3},
+    {"name":"ค่าแรง คอนกรีตฐานราก F1 (1.50×1.50) ×35 ฐาน","unit":"ลบ.ม.","rate":421,"qty":23.63,"isMat":false,"thick":null,"waste":3},
+    {"name":"ค่าวัสดุ คอนกรีตผสมเสร็จ 240ksc ฐานราก ×35","unit":"ลบ.ม.","rate":2300,"qty":23.63,"isMat":true,"thick":null,"waste":3},
+    {"name":"ค่าแรง คอนกรีตฐานราก F1 (1.10×1.10) ×5 ฐาน","unit":"ลบ.ม.","rate":421,"qty":1.51,"isMat":false,"thick":null,"waste":3},
+    {"name":"ค่าวัสดุ คอนกรีตผสมเสร็จ 240ksc ฐานราก ×5","unit":"ลบ.ม.","rate":2300,"qty":1.51,"isMat":true,"thick":null,"waste":3},
+    {"name":"ค่าแรง ไม้แบบฐานราก ×40 ฐาน","unit":"ตร.ม.","rate":163,"qty":68.5,"isMat":false,"thick":null,"waste":0},
+    {"name":"ค่าวัสดุ ไม้แบบฐานราก","unit":"ตร.ม.","rate":250,"qty":68.5,"isMat":true,"thick":null,"waste":5},
+    {"name":"ค่าแรง เหล็ก DB16 ฐานราก (10-16มม.) ×40 ฐาน","unit":"ตัน","rate":3900,"qty":2.16,"isMat":false,"thick":null,"waste":0},
+    {"name":"ค่าวัสดุ เหล็ก DB16 ฐานราก","unit":"ตัน","rate":25000,"qty":2.16,"isMat":true,"thick":null,"waste":0},
+
+    {"name":"===== หมวด 2: งานเสา =====","unit":"ตร.ม.","rate":0,"qty":0,"isMat":false,"thick":null,"waste":0},
+
+    {"name":"ค่าแรง คอนกรีตเสา C1 (0.25×0.25) ×35 ต้น H=4.00ม.","unit":"ลบ.ม.","rate":421,"qty":8.75,"isMat":false,"thick":null,"waste":3},
+    {"name":"ค่าวัสดุ คอนกรีตผสมเสร็จ 240ksc เสา","unit":"ลบ.ม.","rate":2300,"qty":8.75,"isMat":true,"thick":null,"waste":3},
+    {"name":"ค่าแรง ไม้แบบเสา ×35 ต้น","unit":"ตร.ม.","rate":163,"qty":140,"isMat":false,"thick":null,"waste":0},
+    {"name":"ค่าวัสดุ ไม้แบบเสา","unit":"ตร.ม.","rate":250,"qty":140,"isMat":true,"thick":null,"waste":5},
+    {"name":"ค่าแรง เหล็กยืน DB20 เสา (>16มม.) ×35 ต้น","unit":"ตัน","rate":3500,"qty":1.77,"isMat":false,"thick":null,"waste":0},
+    {"name":"ค่าวัสดุ เหล็ก DB20 เสา","unit":"ตัน","rate":24000,"qty":1.77,"isMat":true,"thick":null,"waste":0},
+    {"name":"ค่าแรง เหล็กปลอก RB9 เสา (<10มม.) ×35 ต้น","unit":"ตัน","rate":4900,"qty":0.78,"isMat":false,"thick":null,"waste":0},
+    {"name":"ค่าวัสดุ เหล็ก RB9 ปลอกเสา","unit":"ตัน","rate":22000,"qty":0.78,"isMat":true,"thick":null,"waste":0},
+
+    {"name":"===== หมวด 3: งานคาน =====","unit":"ตร.ม.","rate":0,"qty":0,"isMat":false,"thick":null,"waste":0},
+
+    {"name":"ค่าแรง คอนกรีตคาน B1 (0.25×0.60) ~220 ม.","unit":"ลบ.ม.","rate":421,"qty":33,"isMat":false,"thick":null,"waste":3},
+    {"name":"ค่าวัสดุ คอนกรีตผสมเสร็จ 240ksc คาน","unit":"ลบ.ม.","rate":2300,"qty":33,"isMat":true,"thick":null,"waste":3},
+    {"name":"ค่าแรง ไม้แบบคาน B1","unit":"ตร.ม.","rate":163,"qty":319,"isMat":false,"thick":null,"waste":0},
+    {"name":"ค่าวัสดุ ไม้แบบคาน","unit":"ตร.ม.","rate":250,"qty":319,"isMat":true,"thick":null,"waste":5},
+    {"name":"ค่าแรง เหล็กหลัก DB20 คาน (>16มม.)","unit":"ตัน","rate":3500,"qty":5.42,"isMat":false,"thick":null,"waste":0},
+    {"name":"ค่าวัสดุ เหล็ก DB20 คาน","unit":"ตัน","rate":24000,"qty":5.42,"isMat":true,"thick":null,"waste":0},
+    {"name":"ค่าแรง เหล็ก DB16 คาน (10-16มม.)","unit":"ตัน","rate":3900,"qty":2.23,"isMat":false,"thick":null,"waste":0},
+    {"name":"ค่าวัสดุ เหล็ก DB16 คาน","unit":"ตัน","rate":25000,"qty":2.23,"isMat":true,"thick":null,"waste":0},
+    {"name":"ค่าแรง เหล็กปลอก RB9 คาน (<10มม.)","unit":"ตัน","rate":4900,"qty":2.38,"isMat":false,"thick":null,"waste":0},
+    {"name":"ค่าวัสดุ เหล็ก RB9 ปลอกคาน","unit":"ตัน","rate":22000,"qty":2.38,"isMat":true,"thick":null,"waste":0},
+
+    {"name":"===== หมวด 4: งานพื้น =====","unit":"ตร.ม.","rate":0,"qty":0,"isMat":false,"thick":null,"waste":0},
+
+    {"name":"พื้นสำเร็จรูป PS + คอนกรีตทับหน้า ~350 ตร.ม.","unit":"ตร.ม.","rate":450,"qty":350,"isMat":true,"thick":null,"waste":3},
+    {"name":"ค่าแรง เทคอนกรีตทับหน้าพื้น 0.05 ม.","unit":"ลบ.ม.","rate":421,"qty":18,"isMat":false,"thick":null,"waste":3},
+    {"name":"ค่าวัสดุ คอนกรีตทับหน้า","unit":"ลบ.ม.","rate":2300,"qty":18,"isMat":true,"thick":null,"waste":3},
+
+    {"name":"===== หมวด 5: งานหลังคาเหล็ก =====","unit":"ตร.ม.","rate":0,"qty":0,"isMat":false,"thick":null,"waste":0},
+
+    {"name":"โครงหลังคาเหล็ก (แป+จันทัน+คอนสี+คิ้ง) ประมาณ","unit":"ตัน","rate":35000,"qty":9,"isMat":true,"thick":null,"waste":5},
+    {"name":"ค่าแรง ติดตั้งโครงหลังคาเหล็ก","unit":"ตัน","rate":8000,"qty":9,"isMat":false,"thick":null,"waste":0},
+    {"name":"กระเบื้องมุงหลังคา (เผื่อ 10%)","unit":"ตร.ม.","rate":180,"qty":579,"isMat":true,"thick":null,"waste":0},
+    {"name":"ค่าแรง มุงกระเบื้องหลังคา","unit":"ตร.ม.","rate":55,"qty":526,"isMat":false,"thick":null,"waste":0},
+    {"name":"ครอบสันหลังคา+อุปกรณ์","unit":"เมตร","rate":250,"qty":80,"isMat":true,"thick":null,"waste":10},
+
+    {"name":"===== หมวด 6: งานก่อ/ฉาบ/ทาสี =====","unit":"ตร.ม.","rate":0,"qty":0,"isMat":false,"thick":null,"waste":0},
+
+    {"name":"ค่าแรง ก่ออิฐมวลเบา 7.5 ซม.","unit":"ตร.ม.","rate":73,"qty":671,"isMat":false,"thick":null,"waste":0},
+    {"name":"ค่าวัสดุ อิฐมวลเบา 7.5 ซม. (~8.5 ก้อน/ตร.ม.)","unit":"ตร.ม.","rate":120,"qty":671,"isMat":true,"thick":null,"waste":5},
+    {"name":"ค่าแรง เสาเอ็น/ทับหลัง","unit":"เมตร","rate":51,"qty":180,"isMat":false,"thick":null,"waste":0},
+    {"name":"ค่าวัสดุ เสาเอ็น/ทับหลัง (คอนกรีต+เหล็ก)","unit":"เมตร","rate":200,"qty":180,"isMat":true,"thick":null,"waste":5},
+    {"name":"ค่าแรง ฉาบปูนภายนอก","unit":"ตร.ม.","rate":109,"qty":273,"isMat":false,"thick":null,"waste":0},
+    {"name":"ค่าวัสดุ ปูนฉาบภายนอก","unit":"ตร.ม.","rate":50,"qty":273,"isMat":true,"thick":null,"waste":5},
+    {"name":"ค่าแรง ฉาบปูนภายใน","unit":"ตร.ม.","rate":96,"qty":1069,"isMat":false,"thick":null,"waste":0},
+    {"name":"ค่าวัสดุ ปูนฉาบภายใน","unit":"ตร.ม.","rate":45,"qty":1069,"isMat":true,"thick":null,"waste":5},
+    {"name":"ค่าแรง ทาสีภายนอก (TOA/Beger)","unit":"ตร.ม.","rate":35,"qty":273,"isMat":false,"thick":null,"waste":0},
+    {"name":"ค่าวัสดุ สีภายนอก (2 เที่ยว+รองพื้น)","unit":"ตร.ม.","rate":80,"qty":273,"isMat":true,"thick":null,"waste":5},
+    {"name":"ค่าแรง ทาสีภายใน","unit":"ตร.ม.","rate":31,"qty":1069,"isMat":false,"thick":null,"waste":0},
+    {"name":"ค่าวัสดุ สีภายใน (2 เที่ยว)","unit":"ตร.ม.","rate":65,"qty":1069,"isMat":true,"thick":null,"waste":5},
+
+    {"name":"===== หมวด 7: งานพื้น/ผนังกระเบื้อง =====","unit":"ตร.ม.","rate":0,"qty":0,"isMat":false,"thick":null,"waste":0},
+
+    {"name":"ค่าแรง ปูกระเบื้องพื้น 24×24 นิ้ว","unit":"ตร.ม.","rate":178,"qty":340,"isMat":false,"thick":null,"waste":0},
+    {"name":"ค่าวัสดุ กระเบื้องพื้น 24×24 นิ้ว","unit":"ตร.ม.","rate":350,"qty":340,"isMat":true,"thick":null,"waste":10},
+    {"name":"ค่าแรง ปูกระเบื้องผนังห้องน้ำ","unit":"ตร.ม.","rate":178,"qty":35,"isMat":false,"thick":null,"waste":0},
+    {"name":"ค่าวัสดุ กระเบื้องผนังห้องน้ำ","unit":"ตร.ม.","rate":350,"qty":35,"isMat":true,"thick":null,"waste":10},
+
+    {"name":"===== หมวด 8: ประตู-หน้าต่าง =====","unit":"ตร.ม.","rate":0,"qty":0,"isMat":false,"thick":null,"waste":0},
+
+    {"name":"ประตูอลูมิเนียมบานเลื่อน Fix บ1 (4.00×2.50)","unit":"ชุด","rate":25000,"qty":2,"isMat":true,"thick":null,"waste":0},
+    {"name":"ประตู UPVC บ2 (0.90×2.05)","unit":"ชุด","rate":5500,"qty":6,"isMat":true,"thick":null,"waste":0},
+    {"name":"ประตู UPVC กระจก บ3 (0.90×2.05)","unit":"ชุด","rate":6500,"qty":4,"isMat":true,"thick":null,"waste":0},
+    {"name":"ประตู UPVC+เหล็ก บ4 (1.00×2.10)","unit":"ชุด","rate":7000,"qty":2,"isMat":true,"thick":null,"waste":0},
+    {"name":"หน้าต่างอลูมิเนียม น1 (1.36×1.22)","unit":"ชุด","rate":4500,"qty":10,"isMat":true,"thick":null,"waste":0},
+    {"name":"หน้าต่าง Glass Block น2 (1.30×1.40)","unit":"ชุด","rate":5000,"qty":4,"isMat":true,"thick":null,"waste":0},
+    {"name":"หน้าต่าง UPVC ไม้เกล็ด น3 (1.00×1.60)","unit":"ชุด","rate":4000,"qty":3,"isMat":true,"thick":null,"waste":0},
+    {"name":"ค่าแรง ติดตั้งประตู-หน้าต่างทั้งหมด","unit":"ชุด","rate":800,"qty":31,"isMat":false,"thick":null,"waste":0},
+
+    {"name":"===== หมวด 9: ฝ้าเพดาน =====","unit":"ตร.ม.","rate":0,"qty":0,"isMat":false,"thick":null,"waste":0},
+
+    {"name":"ค่าวัสดุ ฝ้าเพดานแคลเซียมซิลิเกต+โครงคร่าว","unit":"ตร.ม.","rate":280,"qty":364,"isMat":true,"thick":null,"waste":5},
+    {"name":"ค่าแรง ติดตั้งฝ้าเพดาน","unit":"ตร.ม.","rate":100,"qty":364,"isMat":false,"thick":null,"waste":0},
+
+    {"name":"===== หมวด 10: สุขภัณฑ์ =====","unit":"ตร.ม.","rate":0,"qty":0,"isMat":false,"thick":null,"waste":0},
+
+    {"name":"โถส้วมนั่งราบ (ชักโครก) American Standard","unit":"ชุด","rate":4500,"qty":3,"isMat":true,"thick":null,"waste":0},
+    {"name":"อ่างล้างหน้าฝังเคาน์เตอร์","unit":"ชุด","rate":3500,"qty":2,"isMat":true,"thick":null,"waste":0},
+    {"name":"กระจกเงา","unit":"ชุด","rate":1200,"qty":2,"isMat":true,"thick":null,"waste":0},
+    {"name":"ฝักบัวสายอ่อน/สายฉีดชำระ","unit":"ชุด","rate":800,"qty":3,"isMat":true,"thick":null,"waste":0},
+    {"name":"ฝักบัวอาบน้ำ","unit":"ชุด","rate":1500,"qty":2,"isMat":true,"thick":null,"waste":0},
+    {"name":"ที่ใส่กระดาษชำระ+อุปกรณ์อื่นๆ","unit":"ชุด","rate":500,"qty":5,"isMat":true,"thick":null,"waste":0},
+    {"name":"ค่าแรง ติดตั้งสุขภัณฑ์ทั้งหมด","unit":"ชุด","rate":600,"qty":17,"isMat":false,"thick":null,"waste":0},
+
+    {"name":"===== หมวด 11: ระบบประปา =====","unit":"ตร.ม.","rate":0,"qty":0,"isMat":false,"thick":null,"waste":0},
+
+    {"name":"ท่อ PVC ø1/2 นิ้ว Class 8.5 พร้อมอุปกรณ์","unit":"เมตร","rate":45,"qty":80,"isMat":true,"thick":null,"waste":10},
+    {"name":"ท่อ PVC ø3/4 นิ้ว Class 8.5 พร้อมอุปกรณ์","unit":"เมตร","rate":55,"qty":40,"isMat":true,"thick":null,"waste":10},
+    {"name":"ท่อ PVC ø1 นิ้ว Class 8.5 พร้อมอุปกรณ์","unit":"เมตร","rate":75,"qty":30,"isMat":true,"thick":null,"waste":10},
+    {"name":"วาล์วน้ำ (Ball Valve + Gate Valve)","unit":"ชุด","rate":350,"qty":10,"isMat":true,"thick":null,"waste":0},
+    {"name":"ค่าแรง เดินท่อประปาทั้งระบบ","unit":"เมตร","rate":35,"qty":150,"isMat":false,"thick":null,"waste":0},
+
+    {"name":"===== หมวด 12: ระบบระบายน้ำ/สุขาภิบาล =====","unit":"ตร.ม.","rate":0,"qty":0,"isMat":false,"thick":null,"waste":0},
+
+    {"name":"ท่อ PVC ø2 นิ้ว ระบายน้ำ","unit":"เมตร","rate":40,"qty":30,"isMat":true,"thick":null,"waste":10},
+    {"name":"ท่อ PVC ø4 นิ้ว ระบายน้ำ+ส้วม","unit":"เมตร","rate":80,"qty":60,"isMat":true,"thick":null,"waste":10},
+    {"name":"Floor Drain w/Bell Trap","unit":"ชุด","rate":250,"qty":8,"isMat":true,"thick":null,"waste":0},
+    {"name":"บ่อพักน้ำ (Manhole) คอนกรีต","unit":"บ่อ","rate":3500,"qty":4,"isMat":true,"thick":null,"waste":0},
+    {"name":"บ่อเกรอะ-บ่อซึม (Septic Tank) คสล.","unit":"ชุด","rate":45000,"qty":1,"isMat":true,"thick":null,"waste":0},
+    {"name":"ค่าแรง เดินท่อระบาย+ติดตั้งบ่อพัก","unit":"เมตร","rate":40,"qty":90,"isMat":false,"thick":null,"waste":0},
+    {"name":"รางระบายน้ำฝน+ท่อน้ำฝน","unit":"เมตร","rate":350,"qty":80,"isMat":true,"thick":null,"waste":5},
+
+    {"name":"===== หมวด 13: ระบบไฟฟ้า =====","unit":"ตร.ม.","rate":0,"qty":0,"isMat":false,"thick":null,"waste":0},
+
+    {"name":"ดวงโคม Delight กลม 1×18W Philips","unit":"ชุด","rate":850,"qty":30,"isMat":true,"thick":null,"waste":0},
+    {"name":"ดวงโคม Delight เหลี่ยม 1×36W Philips","unit":"ชุด","rate":1200,"qty":15,"isMat":true,"thick":null,"waste":0},
+    {"name":"ดวงโคม Delight ฝังฝ้า 2×36W Philips","unit":"ชุด","rate":1800,"qty":8,"isMat":true,"thick":null,"waste":0},
+    {"name":"Downlight 3นิ้ว 3W","unit":"ชุด","rate":350,"qty":10,"isMat":true,"thick":null,"waste":0},
+    {"name":"สวิตช์ 1 ทาง National","unit":"ชุด","rate":120,"qty":20,"isMat":true,"thick":null,"waste":0},
+    {"name":"สวิตช์ 2 ทาง National","unit":"ชุด","rate":180,"qty":6,"isMat":true,"thick":null,"waste":0},
+    {"name":"เต้ารับคู่ Duplex 220V","unit":"ชุด","rate":200,"qty":25,"isMat":true,"thick":null,"waste":0},
+    {"name":"ตู้ MDB + Load Center SJ","unit":"ชุด","rate":15000,"qty":1,"isMat":true,"thick":null,"waste":0},
+    {"name":"KWH Meter + BREAKER","unit":"ชุด","rate":3500,"qty":1,"isMat":true,"thick":null,"waste":0},
+    {"name":"พัดลมดูดอากาศ Bathroom Exhaust Fan","unit":"ชุด","rate":1500,"qty":2,"isMat":true,"thick":null,"waste":0},
+    {"name":"กริ่ง Electric Buzzer 220V","unit":"ชุด","rate":450,"qty":4,"isMat":true,"thick":null,"waste":0},
+    {"name":"สายไฟ THW 1×2.5 + ท่อ PVC","unit":"เมตร","rate":25,"qty":300,"isMat":true,"thick":null,"waste":10},
+    {"name":"สายไฟ THW 1×4 + ท่อ PVC","unit":"เมตร","rate":35,"qty":100,"isMat":true,"thick":null,"waste":10},
+    {"name":"สายไฟวงจร THW 2×1.5+1×1.5 + ท่อ PVC","unit":"เมตร","rate":30,"qty":200,"isMat":true,"thick":null,"waste":10},
+    {"name":"สายเมน THW,THW.500","unit":"เมตร","rate":120,"qty":50,"isMat":true,"thick":null,"waste":5},
+    {"name":"ค่าแรง เดินสายไฟ+ติดตั้งอุปกรณ์ไฟฟ้าทั้งระบบ","unit":"จุด","rate":350,"qty":120,"isMat":false,"thick":null,"waste":0}
+  ]
+}

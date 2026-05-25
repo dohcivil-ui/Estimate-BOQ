@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ประมาณราคาก่อสร้าง | ว.809 (14 พ.ย. 68)</title>
+<link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0f1218;
+  --panel: #181d26;
+  --border: #2a3040;
+  --accent: #3b82f6;
+  --accent2: #60a5fa;
+  --warn: #f59e0b;
+  --danger: #ef4444;
+  --success: #10b981;
+  --text: #e2e8f0;
+  --dim: #94a3b8;
+  --bright: #f8fafc;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:'Prompt',sans-serif; background:var(--bg); color:var(--text); font-size:13px; overflow:hidden; height:100vh; }
+.app { display:flex; height:100vh; }
+
+/* LEFT PANEL */
+.panel { width:340px; min-width:340px; background:var(--panel); border-right:1px solid var(--border); display:flex; flex-direction:column; overflow:hidden; }
+.panel-header { padding:14px 16px 10px; border-bottom:1px solid var(--border); }
+.panel-header h1 { font-size:16px; font-weight:800; color:var(--accent2); letter-spacing:0.5px; }
+.panel-header p { font-size:11px; color:var(--dim); margin-top:4px; }
+
+/* TABS */
+.tabs { display:flex; border-bottom:1px solid var(--border); }
+.tabs button { flex:1; padding:10px 0; border:none; cursor:pointer; background:transparent; color:var(--dim); font-weight:500; font-size:12px; font-family:inherit; border-bottom:2px solid transparent; transition:all .15s; }
+.tabs button.active { background:rgba(59,130,246,0.09); color:var(--accent); border-bottom-color:var(--accent); font-weight:700; }
+.tabs button:hover:not(.active) { color:var(--text); }
+
+.tab-content { flex:1; overflow:auto; padding:12px; }
+.tab-content::-webkit-scrollbar { width:6px; }
+.tab-content::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
+
+/* BUTTONS */
+.btn { padding:6px 14px; border-radius:6px; border:1px solid var(--border); background:transparent; color:var(--text); cursor:pointer; font-size:13px; font-weight:500; font-family:inherit; transition:all .15s; display:inline-flex; align-items:center; gap:5px; }
+.btn:hover { border-color:var(--accent); color:var(--accent); }
+.btn.active { border:2px solid var(--accent); background:rgba(59,130,246,0.13); color:var(--accent); font-weight:700; }
+.btn.active-green { border:2px solid var(--success); background:rgba(16,185,129,0.13); color:var(--success); font-weight:700; }
+.btn.active-red { border:2px solid #ff3366; background:rgba(255,51,102,0.13); color:#ff6688; font-weight:700; }
+.btn.active-warn { border:2px solid var(--warn); background:rgba(245,158,11,0.13); color:var(--warn); font-weight:700; }
+.btn-sm { padding:4px 8px; font-size:11px; }
+
+/* INPUTS */
+input[type=text], input[type=number], input[type=search] {
+  padding:6px 10px; border-radius:5px; border:1px solid var(--border);
+  background:var(--bg); color:var(--text); font-size:13px; font-family:inherit;
+}
+input:focus { outline:none; border-color:var(--accent); }
+
+/* FILE UPLOAD */
+.file-label { display:block; padding:12px; border:2px dashed var(--border); border-radius:8px; text-align:center; cursor:pointer; color:var(--dim); transition:border-color .2s; }
+.file-label:hover { border-color:var(--accent); color:var(--accent2); }
+
+/* SECTION */
+.section-title { font-size:11px; color:var(--dim); margin-bottom:6px; font-weight:600; }
+
+/* TOOL GROUP */
+.tool-group { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px; }
+
+/* SHAPE LIST */
+.shape-item { padding:8px 10px; border-radius:6px; cursor:pointer; background:var(--bg); border:1px solid var(--border); margin-bottom:4px; transition:border-color .15s; }
+.shape-item.selected { border-color:var(--accent); background:rgba(59,130,246,0.08); }
+.shape-item:hover { border-color:var(--dim); }
+.shape-header { display:flex; justify-content:space-between; align-items:center; }
+.shape-label { font-weight:600; }
+.shape-meta { font-size:11px; color:var(--dim); margin-top:2px; }
+.del-btn { background:none; border:none; color:var(--danger); cursor:pointer; font-size:14px; padding:0 4px; }
+
+/* CALIBRATION BOX */
+.calib-box { background:rgba(255,51,102,0.08); border:1px solid rgba(255,51,102,0.25); border-radius:8px; padding:10px; margin-bottom:12px; }
+.calib-title { font-size:12px; font-weight:600; color:#ff6688; margin-bottom:6px; }
+
+/* SNAP TOGGLE */
+.snap-row { display:flex; align-items:center; gap:8px; margin-bottom:12px; }
+.snap-row label { display:flex; align-items:center; gap:6px; cursor:pointer; font-size:12px; }
+
+/* HELP */
+.help-box { margin-top:16px; background:var(--bg); border-radius:8px; padding:10px; font-size:11px; line-height:1.9; color:var(--dim); }
+.help-box .title { font-weight:700; color:var(--bright); margin-bottom:4px; }
+
+/* BOQ ITEM */
+.boq-card { background:var(--bg); border-radius:8px; padding:10px; border:1px solid var(--border); margin-bottom:8px; }
+.boq-name { font-weight:600; font-size:12px; }
+.boq-rate { font-size:11px; color:var(--dim); margin:4px 0 6px; }
+.boq-row { display:flex; align-items:center; gap:6px; }
+.boq-total { text-align:right; font-size:13px; font-weight:700; margin-top:6px; color:var(--accent2); }
+.boq-fill-btn { padding:3px 8px; border-radius:4px; border:1px solid rgba(16,185,129,0.25); background:rgba(16,185,129,0.08); color:var(--success); cursor:pointer; font-size:11px; font-family:inherit; }
+
+/* GRAND TOTAL */
+.total-box { margin-top:16px; padding:14px; border-radius:10px; background:linear-gradient(135deg,rgba(59,130,246,0.14),rgba(16,185,129,0.09)); border:1px solid rgba(59,130,246,0.25); }
+.total-label { font-size:12px; color:var(--dim); margin-bottom:4px; }
+.total-amount { font-size:22px; font-weight:800; color:var(--accent2); }
+.total-note { font-size:11px; color:var(--dim); margin-top:4px; }
+
+/* RATE CATEGORY */
+.rate-cat { margin-bottom:14px; }
+.rate-cat-title { font-size:12px; font-weight:700; color:var(--accent); margin-bottom:6px; padding-bottom:4px; border-bottom:1px solid var(--border); }
+.rate-item { padding:6px 8px; margin-bottom:3px; border-radius:6px; cursor:pointer; display:flex; justify-content:space-between; align-items:center; background:var(--bg); border:1px solid var(--border); transition:border-color .15s; }
+.rate-item:hover { border-color:var(--accent); }
+.rate-name { font-size:12px; font-weight:500; }
+.rate-price { font-size:11px; color:var(--dim); }
+.rate-add { font-size:16px; color:var(--success); margin-left:6px; flex-shrink:0; }
+
+/* CANVAS AREA */
+.canvas-area { flex:1; position:relative; overflow:hidden; }
+.top-bar { position:absolute; top:10px; left:10px; right:10px; z-index:10; display:flex; justify-content:space-between; align-items:center; background:rgba(24,29,38,0.93); border-radius:8px; padding:6px 12px; border:1px solid var(--border); backdrop-filter:blur(8px); }
+.top-bar .zoom-info { font-size:12px; color:var(--dim); display:flex; align-items:center; gap:8px; }
+.top-bar .tool-name { font-size:12px; font-weight:600; color:var(--accent); }
+.top-bar .coords { font-size:11px; color:var(--dim); }
+.snap-indicator { color:var(--success); margin-left:6px; }
+
+.canvas-wrap { width:100%; height:100%; background:#0a0d12; }
+canvas { display:block; }
+
+.placeholder { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; pointer-events:none; }
+.placeholder .icon { font-size:64px; margin-bottom:16px; }
+.placeholder .title { font-size:18px; font-weight:700; color:var(--dim); margin-bottom:8px; }
+.placeholder .desc { font-size:13px; color:var(--dim); text-align:center; line-height:2; }
+
+.bottom-bar { position:absolute; bottom:12px; left:12px; right:12px; z-index:10; background:rgba(24,29,38,0.93); border-radius:10px; padding:10px 14px; border:1px solid rgba(245,158,11,0.33); backdrop-filter:blur(8px); display:flex; justify-content:space-between; align-items:center; }
+.bottom-bar .sel-label { font-weight:700; color:var(--warn); }
+.bottom-bar .sel-value { font-size:16px; font-weight:800; color:var(--bright); }
+
+/* EXPORT BTN */
+.export-row { margin-top:12px; display:flex; gap:6px; }
+.export-btn { padding:8px 14px; border-radius:6px; border:1px solid var(--accent); background:var(--accent); color:#fff; cursor:pointer; font-size:12px; font-weight:600; font-family:inherit; transition:all .15s; }
+.export-btn:hover { background:var(--accent2); }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- LEFT PANEL -->
+  <div class="panel">
+    <div class="panel-header">
+      <h1>🏗️ ประมาณราคาก่อสร้าง</h1>
+      <p>ว.809 (14 พ.ย. 2568) บัญชีค่าแรง กรมบัญชีกลาง</p>
+    </div>
+    <div class="tabs">
+      <button class="active" data-tab="draw" onclick="switchTab('draw')">📐 วาด/วัด</button>
+      <button data-tab="boq" onclick="switchTab('boq')">📋 BOQ</button>
+      <button data-tab="rates" onclick="switchTab('rates')">💰 บัญชีค่าแรง</button>
+    </div>
+    <div class="tab-content" id="tabContent"></div>
+  </div>
+
+  <!-- CANVAS AREA -->
+  <div class="canvas-area">
+    <div class="top-bar">
+      <div class="zoom-info">
+        <span id="zoomDisplay">🔍 100%</span>
+        <button class="btn btn-sm" onclick="resetView()">Reset</button>
+      </div>
+      <div class="tool-name" id="toolName">⬡ วาดพื้นที่ (Polygon)</div>
+      <div class="coords" id="coordsDisplay"></div>
+    </div>
+    <div class="canvas-wrap" id="canvasWrap">
+      <canvas id="mainCanvas"></canvas>
+    </div>
+    <div class="placeholder" id="placeholder">
+      <div class="icon">📐</div>
+      <div class="title">โปรแกรมประมาณราคาก่อสร้าง</div>
+      <div class="desc">
+        เปิดไฟล์แบบก่อสร้าง (JPG, PNG) จากแผงซ้าย<br>
+        ตั้งสเกล → วาดพื้นที่/วัดระยะ → เพิ่มรายการ BOQ<br>
+        อ้างอิงบัญชีค่าแรงงาน ว.809 ลว.14 พ.ย. 2568
+      </div>
+    </div>
+    <div class="bottom-bar" id="bottomBar" style="display:none">
+      <span class="sel-label" id="selLabel"></span>
+      <span class="sel-value" id="selValue"></span>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// STATE
+// ============================================================
+let image = null, imgEl = null;
+let imgW = 0, imgH = 0;
+let tool = 'polygon'; // polygon | line | calibrate | select
+let drawingPts = [];
+let shapes = [];
+let selectedIdx = null;
+let scale = 0; // px per meter (0 = not calibrated)
+let calibDist = '1';
+let snapEnabled = true;
+const SNAP_R = 12;
+let cursorPt = null, snappedPt = null;
+let zoom = 1, panX = 0, panY = 0;
+let isPanning = false, panStartX = 0, panStartY = 0;
+let currentTab = 'draw';
+let boqItems = [];
+let searchRate = '';
+
+// ============================================================
+// LABOR RATES (ว.809)
+// ============================================================
+const RATES = {
+  structure: { label:'1. งานโครงสร้างวิศวกรรม', items:[
+    {id:'1.3.1a',name:'ขุดหลุมฐานรากถมคืน (ดินทั่วไป >100 ลบ.ม.)',unit:'ลบ.ม.',rate:121},
+    {id:'1.3.1b',name:'ขุดหลุมฐานรากถมคืน (ดินทั่วไป 25-100 ลบ.ม.)',unit:'ลบ.ม.',rate:153},
+    {id:'1.3.1c',name:'ขุดหลุมฐานรากถมคืน (ดินทั่วไป <25 ลบ.ม.)',unit:'ลบ.ม.',rate:181},
+    {id:'1.4',name:'ดินถมหรือทรายปรับระดับ',unit:'ลบ.ม.',rate:121},
+    {id:'1.5a',name:'วัสดุรองก้นหลุม (อิฐหัก)',unit:'ลบ.ม.',rate:127},
+    {id:'1.5b',name:'วัสดุรองก้นหลุม (ทราย)',unit:'ลบ.ม.',rate:112},
+    {id:'1.6.1',name:'คอนกรีตหยาบ (ผสมเอง) รองก้นหลุม',unit:'ลบ.ม.',rate:427},
+    {id:'1.6.2a',name:'คอนกรีตโครงสร้าง (ผสมเอง) ทางเท้า/ถนน',unit:'ลบ.ม.',rate:467},
+    {id:'1.6.2b',name:'คอนกรีตโครงสร้าง (ผสมเอง) อาคารชั้นเดียว',unit:'ลบ.ม.',rate:533},
+    {id:'1.6.2c',name:'คอนกรีตโครงสร้าง (ผสมเอง) อาคารหลายชั้น',unit:'ลบ.ม.',rate:581},
+    {id:'1.7a',name:'คอนกรีตผสมเสร็จ ทางเท้า/ถนน',unit:'ลบ.ม.',rate:329},
+    {id:'1.7b',name:'คอนกรีตผสมเสร็จ อาคารชั้นเดียว',unit:'ลบ.ม.',rate:421},
+    {id:'1.7c',name:'คอนกรีตผสมเสร็จ อาคารหลายชั้น',unit:'ลบ.ม.',rate:522},
+    {id:'1.8.1a',name:'แบบหล่อทั่วไป (≥5,000 ตร.ม.)',unit:'ตร.ม.',rate:144},
+    {id:'1.8.1b',name:'แบบหล่อทั่วไป (<5,000 ตร.ม.)',unit:'ตร.ม.',rate:163},
+    {id:'1.8.2a',name:'แบบหล่อเปลือยผิว ชนิดผิวเรียบ',unit:'ตร.ม.',rate:192},
+    {id:'1.8.2b',name:'แบบหล่อเปลือยผิว ชนิดมีบัวลวดลาย',unit:'ตร.ม.',rate:241},
+    {id:'1.9.1',name:'แผ่นพื้นสำเร็จรูป ท้องเรียบ/กลวง 5-8 ซม.',unit:'ตร.ม.',rate:26},
+    {id:'1.9.2',name:'แผ่นพื้นสำเร็จรูป อัดแรงกลวง 10-13 ซม.',unit:'ตร.ม.',rate:36},
+    {id:'1.9.3',name:'แผ่นพื้นสำเร็จรูป อัดแรงกลวง 15-18 ซม.',unit:'ตร.ม.',rate:51},
+    {id:'1.10.1',name:'เหล็กเสริม ผิวเรียบ (<10มม.)',unit:'ตัน',rate:4900},
+    {id:'1.10.2',name:'เหล็กเสริม ผิวเรียบ/ข้ออ้อย (10-16มม.)',unit:'ตัน',rate:3900},
+    {id:'1.10.3',name:'เหล็กเสริม ผิวเรียบ/ข้ออ้อย (>16มม.)',unit:'ตัน',rate:3500},
+    {id:'1.10.4',name:'ตะแกรงเหล็กสำเร็จรูป (Wire Mesh)',unit:'ตร.ม.',rate:6},
+    {id:'1.11.1',name:'เหล็กรูปพรรณ โครงหลังคาทั่วไป',unit:'กก.',rate:12},
+    {id:'1.11.2',name:'เหล็กรูปพรรณ โครง TRUSS',unit:'กก.',rate:14},
+    {id:'1.11.3a',name:'เหล็กรูปพรรณ โครงสร้าง E60',unit:'กก.',rate:14},
+    {id:'1.11.3b',name:'เหล็กรูปพรรณ โครงสร้าง E70',unit:'กก.',rate:16},
+    {id:'1.11.3c',name:'เหล็กรูปพรรณ โครงสร้าง E80',unit:'กก.',rate:18},
+  ]},
+  architecture: { label:'2. งานสถาปัตยกรรม', items:[
+    {id:'2.1.1a',name:'กระเบื้องลอนคู่ ทรงจั่ว/เพิ่งแหงน',unit:'ตร.ม.',rate:46},
+    {id:'2.1.1b',name:'กระเบื้องลอนคู่ ทรงปั้นหยา',unit:'ตร.ม.',rate:51},
+    {id:'2.1.3',name:'กระเบื้องคอนกรีต (ซีแพคโมเนีย)',unit:'ตร.ม.',rate:76},
+    {id:'2.1.8a',name:'หลังคาเหล็กรีดลอน ทรงเพิง/จั่ว/ปั้นหยา',unit:'ตร.ม.',rate:72},
+    {id:'2.1.8b',name:'หลังคาเหล็กรีดลอน ทรงตัดโค้ง',unit:'ตร.ม.',rate:82},
+    {id:'2.1.9',name:'หลังคาสังกะสี',unit:'ตร.ม.',rate:25},
+    {id:'2.2.3',name:'ฝ้ายิบซั่ม โครงเหล็กชุบสังกะสี ฉาบเรียบ',unit:'ตร.ม.',rate:77},
+    {id:'2.2.4',name:'ฝ้ายิบซั่ม โครง ที-บาร์',unit:'ตร.ม.',rate:53},
+    {id:'2.3.1a',name:'ก่ออิฐมอญ ครึ่งแผ่น',unit:'ตร.ม.',rate:104},
+    {id:'2.3.1b',name:'ก่ออิฐมอญ เต็มแผ่น',unit:'ตร.ม.',rate:195},
+    {id:'2.3.1c',name:'ก่ออิฐกลวง ครึ่งแผ่น',unit:'ตร.ม.',rate:91},
+    {id:'2.3.1d',name:'ก่ออิฐกลวง เต็มแผ่น',unit:'ตร.ม.',rate:166},
+    {id:'2.3.1e',name:'ก่ออิฐมวลเบา 0.20x0.60x0.075',unit:'ตร.ม.',rate:73},
+    {id:'2.3.1f',name:'ก่ออิฐมวลเบา 0.20x0.60x0.10',unit:'ตร.ม.',rate:76},
+    {id:'2.3.1g',name:'ก่ออิฐมวลเบา 0.20x0.60x0.15',unit:'ตร.ม.',rate:85},
+    {id:'2.3.1h',name:'ก่อคอนกรีตบล็อก 0.19x0.39x0.07',unit:'ตร.ม.',rate:93},
+    {id:'2.3.1i',name:'ก่อคอนกรีตบล็อก 0.19x0.39x0.09',unit:'ตร.ม.',rate:100},
+    {id:'2.3.1j',name:'ก่อคอนกรีตบล็อก 0.19x0.39x0.19',unit:'ตร.ม.',rate:114},
+    {id:'2.3.1k',name:'เสาเอ็น/คานทับหลัง ครึ่งแผ่น 7.5x10 ซม.',unit:'เมตร',rate:51},
+    {id:'2.3.1l',name:'เสาเอ็น/คานทับหลัง เต็มแผ่น 15x10 ซม.',unit:'เมตร',rate:73},
+    {id:'2.3.12a',name:'ฉาบปูนโครงสร้าง (ภายใน)',unit:'ตร.ม.',rate:109},
+    {id:'2.3.12b',name:'ฉาบปูนโครงสร้าง (ภายนอก)',unit:'ตร.ม.',rate:132},
+    {id:'2.3.12c',name:'ฉาบปูนผนัง (ภายใน)',unit:'ตร.ม.',rate:96},
+    {id:'2.3.12d',name:'ฉาบปูนผนัง (ภายนอก)',unit:'ตร.ม.',rate:109},
+    {id:'2.3.12e',name:'ฉาบปูนทรายรองพื้น (เตรียมผิว)',unit:'ตร.ม.',rate:77},
+    {id:'2.4.1a',name:'เทปูนทรายปรับระดับ ขัดเรียบ/หยาบ',unit:'ตร.ม.',rate:75},
+    {id:'2.4.1b',name:'เทปูนทรายปรับระดับ ขัดมัน',unit:'ตร.ม.',rate:96},
+    {id:'2.4.6a',name:'พื้นกระเบื้องเซรามิค 8x8, 12x12, 16x16',unit:'ตร.ม.',rate:161},
+    {id:'2.4.6b',name:'พื้นกระเบื้องเซรามิค 18x18, 20x20, 24x24',unit:'ตร.ม.',rate:178},
+    {id:'2.4.8a',name:'พื้นแกรนิตโต้ 12x12 ถึง 16x16',unit:'ตร.ม.',rate:188},
+    {id:'2.4.8b',name:'พื้นแกรนิตโต้ 18x18 ถึง 20x20',unit:'ตร.ม.',rate:221},
+    {id:'2.4.8c',name:'พื้นแกรนิตโต้ 24x24 ขึ้นไป',unit:'ตร.ม.',rate:228},
+    {id:'2.4.11a',name:'พื้นหินอ่อน/แกรนิต 0.30x0.30, 0.40x0.40',unit:'ตร.ม.',rate:181},
+    {id:'2.4.14',name:'พื้นลามิเนต (≥100 ตร.ม.)',unit:'ตร.ม.',rate:72},
+    {id:'2.5.2a',name:'ติดตั้งวงกบ ประตู/ช่องแสง',unit:'ตร.ม.',rate:103},
+    {id:'2.5.3a',name:'ติดตั้งบานประตูไม้',unit:'ตร.ม.',rate:108},
+    {id:'2.5.3b',name:'ติดตั้งบานประตูไฟเบอร์/สำเร็จรูป',unit:'ตร.ม.',rate:77},
+    {id:'2.6.1',name:'ส้วมนั่งราบ มีหม้อน้ำ/ฟลัชวาล์ว',unit:'ชุด',rate:461},
+    {id:'2.6.2',name:'ส้วมนั่งยอง ราดน้ำ',unit:'ชุด',rate:154},
+    {id:'2.6.6',name:'อ่างล้างหน้าพร้อมอุปกรณ์',unit:'ชุด',rate:461},
+    {id:'2.6.30',name:'ซิงค์สแตนเลส 2 หลุม',unit:'ชุด',rate:328},
+    {id:'2.8.1a',name:'ทาสีน้ำ ภายใน (≥5,000 ตร.ม.)',unit:'ตร.ม.',rate:29},
+    {id:'2.8.1b',name:'ทาสีน้ำ ภายใน (<5,000 ตร.ม.)',unit:'ตร.ม.',rate:31},
+    {id:'2.8.1c',name:'ทาสีน้ำ ภายนอก (≥5,000 ตร.ม.)',unit:'ตร.ม.',rate:32},
+    {id:'2.8.1d',name:'ทาสีน้ำ ภายนอก (<5,000 ตร.ม.)',unit:'ตร.ม.',rate:35},
+    {id:'2.8.2a',name:'ทาสีน้ำมัน (≥5,000 ตร.ม.)',unit:'ตร.ม.',rate:36},
+    {id:'2.8.2b',name:'ทาสีน้ำมัน (<5,000 ตร.ม.)',unit:'ตร.ม.',rate:39},
+    {id:'2.8.3a',name:'ทาสีเหล็กกันสนิม (≥5,000 ตร.ม.)',unit:'ตร.ม.',rate:31},
+    {id:'2.8.3b',name:'ทาสีเหล็กกันสนิม (<5,000 ตร.ม.)',unit:'ตร.ม.',rate:36},
+  ]},
+  plumbing: { label:'3. งานระบบสุขาภิบาลและดับเพลิง', items:[
+    {id:'3.1a',name:'ท่อเหล็กหล่อปากระฆัง Dia 2"',unit:'เมตร',rate:169},
+    {id:'3.1b',name:'ท่อเหล็กหล่อปากระฆัง Dia 3"',unit:'เมตร',rate:282},
+    {id:'3.1c',name:'ท่อเหล็กหล่อปากระฆัง Dia 4"',unit:'เมตร',rate:359},
+    {id:'3.7a',name:'ท่อ PVC ระบายน้ำ Dia 1.5"',unit:'เมตร',rate:31},
+    {id:'3.7b',name:'ท่อ PVC ระบายน้ำ Dia 2"',unit:'เมตร',rate:41},
+    {id:'3.7c',name:'ท่อ PVC ระบายน้ำ Dia 3"',unit:'เมตร',rate:77},
+    {id:'3.7d',name:'ท่อ PVC ระบายน้ำ Dia 4"',unit:'เมตร',rate:103},
+    {id:'3.7e',name:'ท่อ PVC ระบายน้ำ Dia 6"',unit:'เมตร',rate:205},
+    {id:'3.8a',name:'ท่อ PVC ประปา Dia 1/2"',unit:'เมตร',rate:31},
+    {id:'3.8b',name:'ท่อ PVC ประปา Dia 3/4"',unit:'เมตร',rate:31},
+    {id:'3.8c',name:'ท่อ PVC ประปา Dia 1"',unit:'เมตร',rate:31},
+    {id:'3.8d',name:'ท่อ PVC ประปา Dia 2"',unit:'เมตร',rate:41},
+    {id:'3.9a',name:'ท่อ PP/HDPE ระบายน้ำ Dia 2"',unit:'เมตร',rate:41},
+    {id:'3.9b',name:'ท่อ PP/HDPE ระบายน้ำ Dia 4"',unit:'เมตร',rate:123},
+  ]},
+  electrical: { label:'4. งานระบบไฟฟ้าและสื่อสาร', items:[
+    {id:'4.2a',name:'สาย THW 1.5 sq.mm.',unit:'เมตร',rate:5},
+    {id:'4.2b',name:'สาย THW 2.5 sq.mm.',unit:'เมตร',rate:7},
+    {id:'4.2c',name:'สาย THW 4 sq.mm.',unit:'เมตร',rate:10},
+    {id:'4.2d',name:'สาย THW 6 sq.mm.',unit:'เมตร',rate:12},
+    {id:'4.2e',name:'สาย THW 10 sq.mm.',unit:'เมตร',rate:16},
+    {id:'4.2f',name:'สาย THW 16 sq.mm.',unit:'เมตร',rate:21},
+    {id:'4.2g',name:'สาย THW 25 sq.mm.',unit:'เมตร',rate:26},
+    {id:'4.2h',name:'สาย THW 35 sq.mm.',unit:'เมตร',rate:31},
+    {id:'4.38a',name:'RSC Conduit dia 15 mm.',unit:'เมตร',rate:27},
+    {id:'4.38b',name:'RSC Conduit dia 20 mm.',unit:'เมตร',rate:31},
+    {id:'4.38c',name:'RSC Conduit dia 25 mm.',unit:'เมตร',rate:36},
+    {id:'4.38d',name:'RSC Conduit dia 32 mm.',unit:'เมตร',rate:41},
+    {id:'4.44a',name:'PVC Conduit dia 20 mm.',unit:'เมตร',rate:24},
+    {id:'4.44b',name:'PVC Conduit dia 25 mm.',unit:'เมตร',rate:26},
+    {id:'4.44c',name:'PVC Conduit dia 32 mm.',unit:'เมตร',rate:28},
+    {id:'4.53a',name:'Single Switch 1 Gang',unit:'ชุด',rate:82},
+    {id:'4.53b',name:'Single Switch 2 Gang',unit:'ชุด',rate:92},
+    {id:'4.53c',name:'Single Switch 3 Gang',unit:'ชุด',rate:103},
+    {id:'4.53d',name:'Single Receptacle',unit:'ชุด',rate:92},
+    {id:'4.53e',name:'Duplex Receptacle 2P+G',unit:'ชุด',rate:92},
+    {id:'4.53f',name:'Duplex Receptacle 2P+G (WP)',unit:'ชุด',rate:118},
+    {id:'4.58a',name:'โคม Downlight dia 4"-6"',unit:'ชุด',rate:118},
+    {id:'4.58b',name:'โคมเรืองแสงเหลี่ยม 1x18 วัตต์',unit:'ชุด',rate:118},
+    {id:'4.58c',name:'โคมเรืองแสงเหลี่ยม 1x36 วัตต์',unit:'ชุด',rate:118},
+    {id:'4.58d',name:'โคมเรืองแสงเหลี่ยม 2x18 วัตต์',unit:'ชุด',rate:138},
+    {id:'4.58e',name:'โคมเรืองแสงเหลี่ยม 2x36 วัตต์',unit:'ชุด',rate:154},
+  ]},
+  hvac: { label:'5. งานระบบปรับอากาศ', items:[
+    {id:'5.1a',name:'แอร์ Ceiling Mounted 9,000 BTU',unit:'ชุด',rate:1538},
+    {id:'5.1b',name:'แอร์ Ceiling Mounted 12,000 BTU',unit:'ชุด',rate:1538},
+    {id:'5.1c',name:'แอร์ Ceiling Mounted 18,000 BTU',unit:'ชุด',rate:1538},
+    {id:'5.1d',name:'แอร์ Ceiling Mounted 24,000 BTU',unit:'ชุด',rate:1538},
+    {id:'5.1e',name:'แอร์ Ceiling Mounted 36,000 BTU',unit:'ชุด',rate:2050},
+    {id:'5.1f',name:'แอร์ Ceiling Concealed (Duct) 12,000 BTU',unit:'ชุด',rate:1538},
+    {id:'5.1g',name:'แอร์ Ceiling Concealed (Duct) 24,000 BTU',unit:'ชุด',rate:1538},
+    {id:'5.1h',name:'แอร์ Ceiling Concealed (Duct) 36,000 BTU',unit:'ชุด',rate:2050},
+    {id:'5.2a',name:'พัดลมระบายอากาศ Wall Mount dia 8"',unit:'ชุด',rate:410},
+    {id:'5.2b',name:'พัดลมระบายอากาศ Wall Mount dia 10"',unit:'ชุด',rate:461},
+    {id:'5.2c',name:'พัดลมระบายอากาศ Wall Mount dia 12"',unit:'ชุด',rate:461},
+  ]},
+};
+
+// ============================================================
+// HELPERS
+// ============================================================
+function fmt(n){ return n.toLocaleString('th-TH',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function dist(a,b){ return Math.hypot(a.x-b.x,a.y-b.y); }
+function polyArea(pts){
+  let a=0;
+  for(let i=0;i<pts.length;i++){const j=(i+1)%pts.length; a+=pts[i].x*pts[j].y-pts[j].x*pts[i].y;}
+  return Math.abs(a/2);
+}
+function polyLen(pts){
+  let l=0; for(let i=1;i<pts.length;i++) l+=dist(pts[i],pts[i-1]); return l;
+}
+function esc(s){ return s.replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// ============================================================
+// CANVAS
+// ============================================================
+const canvas = document.getElementById('mainCanvas');
+const ctx = canvas.getContext('2d');
+const wrap = document.getElementById('canvasWrap');
+
+function resizeCanvas(){
+  const r = wrap.getBoundingClientRect();
+  const dpr = window.devicePixelRatio||1;
+  canvas.width = r.width*dpr; canvas.height = r.height*dpr;
+  canvas.style.width = r.width+'px'; canvas.style.height = r.height+'px';
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  draw();
+}
+window.addEventListener('resize', resizeCanvas);
+
+function screenToCanvas(sx,sy){
+  const r = wrap.getBoundingClientRect();
+  return { x:(sx-r.left-panX)/zoom, y:(sy-r.top-panY)/zoom };
+}
+
+function findSnap(pt){
+  if(!snapEnabled) return null;
+  let best=null, bestD=SNAP_R/zoom;
+  shapes.forEach(s=>s.points.forEach(n=>{ const d=dist(pt,n); if(d<bestD){bestD=d;best=n;} }));
+  drawingPts.forEach(n=>{ const d=dist(pt,n); if(d<bestD){bestD=d;best=n;} });
+  return best;
+}
+
+function draw(){
+  const r = wrap.getBoundingClientRect();
+  const dpr = window.devicePixelRatio||1;
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,r.width,r.height);
+  ctx.save();
+  ctx.translate(panX,panY);
+  ctx.scale(zoom,zoom);
+
+  // Image
+  if(imgEl) ctx.drawImage(imgEl,0,0);
+
+  // Shapes
+  shapes.forEach((s,i)=>{
+    const sel = i===selectedIdx;
+    ctx.beginPath();
+    if(s.type==='polygon' && s.points.length>0){
+      ctx.moveTo(s.points[0].x,s.points[0].y);
+      for(let j=1;j<s.points.length;j++) ctx.lineTo(s.points[j].x,s.points[j].y);
+      ctx.closePath();
+      ctx.fillStyle = sel?'rgba(255,200,0,0.35)':'rgba(0,150,255,0.2)';
+      ctx.fill();
+      ctx.strokeStyle = sel?'#ffb300':'#0077ff';
+      ctx.lineWidth = (sel?3:2)/zoom;
+      ctx.stroke();
+    } else if(s.type==='line' && s.points.length>0){
+      ctx.moveTo(s.points[0].x,s.points[0].y);
+      for(let j=1;j<s.points.length;j++) ctx.lineTo(s.points[j].x,s.points[j].y);
+      ctx.strokeStyle = sel?'#ffb300':'#00cc66';
+      ctx.lineWidth = (sel?3:2)/zoom;
+      ctx.stroke();
+    } else if(s.type==='calibrate' && s.points.length===2){
+      ctx.moveTo(s.points[0].x,s.points[0].y);
+      ctx.lineTo(s.points[1].x,s.points[1].y);
+      ctx.strokeStyle='#ff3366'; ctx.lineWidth=2.5/zoom;
+      ctx.setLineDash([8/zoom,4/zoom]); ctx.stroke(); ctx.setLineDash([]);
+    }
+    // Nodes
+    s.points.forEach(p=>{
+      ctx.beginPath(); ctx.arc(p.x,p.y,4/zoom,0,Math.PI*2);
+      ctx.fillStyle=sel?'#ffb300':'#fff'; ctx.fill();
+      ctx.strokeStyle='#333'; ctx.lineWidth=1.5/zoom; ctx.stroke();
+    });
+    // Label
+    if(s.label){
+      const cx=s.points.reduce((a,p)=>a+p.x,0)/s.points.length;
+      const cy=s.points.reduce((a,p)=>a+p.y,0)/s.points.length;
+      ctx.font=`bold ${14/zoom}px Prompt,sans-serif`;
+      ctx.fillStyle=sel?'#ffb300':'#0055cc'; ctx.textAlign='center';
+      ctx.fillText(s.label,cx,cy);
+    }
+  });
+
+  // Drawing in progress
+  if(drawingPts.length>0){
+    ctx.beginPath();
+    ctx.moveTo(drawingPts[0].x,drawingPts[0].y);
+    for(let i=1;i<drawingPts.length;i++) ctx.lineTo(drawingPts[i].x,drawingPts[i].y);
+    if(cursorPt && tool!=='select'){
+      const p=snappedPt||cursorPt; ctx.lineTo(p.x,p.y);
+    }
+    if(tool==='polygon'){ ctx.fillStyle='rgba(255,100,0,0.15)'; ctx.fill(); }
+    ctx.strokeStyle = tool==='calibrate'?'#ff3366':'#ff6600';
+    ctx.lineWidth=2/zoom;
+    if(tool==='calibrate'){ ctx.setLineDash([8/zoom,4/zoom]); }
+    ctx.stroke(); ctx.setLineDash([]);
+    drawingPts.forEach(p=>{
+      ctx.beginPath(); ctx.arc(p.x,p.y,5/zoom,0,Math.PI*2);
+      ctx.fillStyle='#ff6600'; ctx.fill();
+      ctx.strokeStyle='#fff'; ctx.lineWidth=1.5/zoom; ctx.stroke();
+    });
+  }
+
+  // Snap indicator
+  if(snappedPt && tool!=='select'){
+    ctx.beginPath(); ctx.arc(snappedPt.x,snappedPt.y,8/zoom,0,Math.PI*2);
+    ctx.strokeStyle='#00ff88'; ctx.lineWidth=2.5/zoom; ctx.stroke();
+    ctx.beginPath(); ctx.arc(snappedPt.x,snappedPt.y,3/zoom,0,Math.PI*2);
+    ctx.fillStyle='#00ff88'; ctx.fill();
+  }
+
+  // Crosshair
+  if(cursorPt && tool!=='select' && !isPanning){
+    const p=snappedPt||cursorPt;
+    ctx.strokeStyle='rgba(255,255,255,0.5)'; ctx.lineWidth=1/zoom;
+    ctx.setLineDash([4/zoom,4/zoom]);
+    ctx.beginPath();
+    ctx.moveTo(p.x-20/zoom,p.y); ctx.lineTo(p.x+20/zoom,p.y);
+    ctx.moveTo(p.x,p.y-20/zoom); ctx.lineTo(p.x,p.y+20/zoom);
+    ctx.stroke(); ctx.setLineDash([]);
+  }
+
+  ctx.restore();
+}
+
+// ============================================================
+// MOUSE
+// ============================================================
+wrap.addEventListener('mousedown', e=>{
+  if(e.button===1||(e.button===0&&e.altKey)){
+    isPanning=true; panStartX=e.clientX-panX; panStartY=e.clientY-panY; wrap.style.cursor='grabbing'; return;
+  }
+  if(e.button!==0) return;
+  const pt = screenToCanvas(e.clientX,e.clientY);
+  const snap = findSnap(pt);
+  const fp = snap||pt;
+
+  if(tool==='select'){
+    let found=-1;
+    for(let i=shapes.length-1;i>=0;i--){
+      const s=shapes[i];
+      if(s.type==='polygon'){
+        let inside=false; const pts=s.points;
+        for(let a=0,b=pts.length-1;a<pts.length;b=a++){
+          if(pts[a].y>pt.y!==pts[b].y>pt.y && pt.x<((pts[b].x-pts[a].x)*(pt.y-pts[a].y))/(pts[b].y-pts[a].y)+pts[a].x) inside=!inside;
+        }
+        if(inside){found=i;break;}
+      } else if(s.type==='line'){
+        for(let j=0;j<s.points.length-1;j++){
+          const a2=s.points[j],b2=s.points[j+1]; const len=dist(a2,b2); if(len===0) continue;
+          const t=Math.max(0,Math.min(1,((pt.x-a2.x)*(b2.x-a2.x)+(pt.y-a2.y)*(b2.y-a2.y))/(len*len)));
+          const proj={x:a2.x+t*(b2.x-a2.x),y:a2.y+t*(b2.y-a2.y)};
+          if(dist(pt,proj)<10/zoom){found=i;break;}
+        }
+        if(found>=0) break;
+      }
+    }
+    selectedIdx = found>=0?found:null;
+    updateBottomBar(); renderTab(); draw(); return;
+  }
+
+  if(tool==='calibrate'){
+    if(drawingPts.length===0){ drawingPts=[fp]; }
+    else{
+      const pxLen=dist(drawingPts[0],fp);
+      const d=parseFloat(calibDist)||1;
+      scale=pxLen/d;
+      shapes.push({type:'calibrate',points:[drawingPts[0],fp],label:d+' ม.'});
+      drawingPts=[]; tool='polygon'; updateToolName(); renderTab();
+    }
+    draw(); return;
+  }
+
+  // Close polygon
+  if(tool==='polygon'&&drawingPts.length>=3&&dist(fp,drawingPts[0])<12/zoom){
+    const area=polyArea(drawingPts)/(scale*scale||1);
+    shapes.push({type:'polygon',points:[...drawingPts],areaSqm:area,label:fmt(area)+' ตร.ม.'});
+    drawingPts=[]; renderTab(); draw(); return;
+  }
+  drawingPts.push(fp); draw();
+});
+
+wrap.addEventListener('mousemove', e=>{
+  if(isPanning){ panX=e.clientX-panStartX; panY=e.clientY-panStartY; draw(); return; }
+  const pt=screenToCanvas(e.clientX,e.clientY);
+  cursorPt=pt; snappedPt=findSnap(pt);
+  document.getElementById('coordsDisplay').innerHTML =
+    `X: ${pt.x.toFixed(0)}, Y: ${pt.y.toFixed(0)}` + (snappedPt?'<span class="snap-indicator"> ● SNAP</span>':'');
+  draw();
+});
+
+wrap.addEventListener('mouseup', ()=>{ isPanning=false; wrap.style.cursor=tool==='select'?'default':'crosshair'; });
+wrap.addEventListener('mouseleave', ()=>{ isPanning=false; cursorPt=null; snappedPt=null; draw(); });
+
+wrap.addEventListener('dblclick', ()=>{
+  if(tool==='line'&&drawingPts.length>=2){
+    const len=polyLen(drawingPts)/(scale||1);
+    shapes.push({type:'line',points:[...drawingPts],lengthM:len,label:fmt(len)+' ม.'});
+    drawingPts=[]; renderTab(); draw();
+  } else if(tool==='polygon'&&drawingPts.length>=3){
+    const area=polyArea(drawingPts)/(scale*scale||1);
+    shapes.push({type:'polygon',points:[...drawingPts],areaSqm:area,label:fmt(area)+' ตร.ม.'});
+    drawingPts=[]; renderTab(); draw();
+  }
+});
+
+wrap.addEventListener('wheel', e=>{
+  e.preventDefault();
+  const r=wrap.getBoundingClientRect();
+  const mx=e.clientX-r.left, my=e.clientY-r.top;
+  const f=e.deltaY<0?1.15:1/1.15;
+  const nz=Math.max(0.1,Math.min(20,zoom*f));
+  panX=mx-(mx-panX)*(nz/zoom);
+  panY=my-(my-panY)*(nz/zoom);
+  zoom=nz;
+  document.getElementById('zoomDisplay').textContent='🔍 '+(zoom*100).toFixed(0)+'%';
+  draw();
+},{passive:false});
+
+wrap.addEventListener('contextmenu', e=>e.preventDefault());
+
+document.addEventListener('keydown', e=>{
+  if(e.key==='Escape'){ drawingPts=[]; draw(); }
+  else if(e.key==='z'&&e.ctrlKey&&drawingPts.length>0){ drawingPts.pop(); draw(); }
+  else if(e.key==='Delete'&&selectedIdx!==null){
+    shapes.splice(selectedIdx,1); selectedIdx=null; updateBottomBar(); renderTab(); draw();
+  }
+});
+
+function resetView(){ zoom=1; panX=0; panY=0; document.getElementById('zoomDisplay').textContent='🔍 100%'; draw(); }
+
+function updateToolName(){
+  const names={polygon:'⬡ วาดพื้นที่ (Polygon)',line:'📏 วัดความยาว (Polyline)',calibrate:'📐 ตั้งสเกล (Calibrate)',select:'🖱️ เลือก (Select)'};
+  document.getElementById('toolName').textContent=names[tool]||'';
+  wrap.style.cursor=tool==='select'?'default':'crosshair';
+}
+
+function updateBottomBar(){
+  const bb=document.getElementById('bottomBar');
+  if(selectedIdx!==null&&shapes[selectedIdx]){
+    const s=shapes[selectedIdx];
+    bb.style.display='flex';
+    document.getElementById('selLabel').textContent='✦ '+(s.type==='polygon'?'พื้นที่':'เส้น')+' #'+(selectedIdx+1);
+    document.getElementById('selValue').textContent=s.label;
+  } else { bb.style.display='none'; }
+}
+
+// ============================================================
+// FILE LOAD
+// ============================================================
+function loadFile(e){
+  const file=e.target.files?.[0]; if(!file) return;
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    const img=new Image();
+    img.onload=()=>{
+      imgEl=img; imgW=img.width; imgH=img.height;
+      image=ev.target.result;
+      zoom=1; panX=0; panY=0; shapes=[]; drawingPts=[]; selectedIdx=null;
+      document.getElementById('placeholder').style.display='none';
+      resizeCanvas();
+    };
+    img.src=ev.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+// ============================================================
+// TOOL SWITCH
+// ============================================================
+function setTool(t){ tool=t; drawingPts=[]; updateToolName(); renderTab(); draw(); }
+
+// ============================================================
+// TAB RENDERING
+// ============================================================
+function switchTab(t){
+  currentTab=t;
+  document.querySelectorAll('.tabs button').forEach(b=>b.classList.toggle('active',b.dataset.tab===t));
+  renderTab();
+}
+
+function renderTab(){
+  const el=document.getElementById('tabContent');
+  if(currentTab==='draw') renderDrawTab(el);
+  else if(currentTab==='boq') renderBoqTab(el);
+  else renderRatesTab(el);
+}
+
+function renderDrawTab(el){
+  let h='';
+  h+=`<div style="margin-bottom:12px"><label class="file-label">📁 เปิดไฟล์แบบ (JPG, PNG)<input type="file" accept="image/*" onchange="loadFile(event)" style="display:none"></label></div>`;
+  h+=`<div class="section-title">เครื่องมือ</div>`;
+  h+=`<div class="tool-group">`;
+  h+=`<button class="btn ${tool==='polygon'?'active':''}" onclick="setTool('polygon')">⬡ วาดพื้นที่</button>`;
+  h+=`<button class="btn ${tool==='line'?'active-green':''}" onclick="setTool('line')">📏 วัดความยาว</button>`;
+  h+=`<button class="btn ${tool==='calibrate'?'active-red':''}" onclick="setTool('calibrate')">📐 ตั้งสเกล</button>`;
+  h+=`<button class="btn ${tool==='select'?'active-warn':''}" onclick="setTool('select')">🖱️ เลือก</button>`;
+  h+=`</div>`;
+  if(tool==='calibrate'){
+    h+=`<div class="calib-box"><div class="calib-title">📐 ตั้งสเกล: คลิก 2 จุดที่ทราบระยะจริง</div>`;
+    h+=`<div style="display:flex;align-items:center;gap:6px"><span style="font-size:12px;color:var(--dim)">ระยะจริง:</span>`;
+    h+=`<input type="number" value="${calibDist}" onchange="calibDist=this.value" style="width:70px"> <span style="font-size:12px;color:var(--dim)">เมตร</span></div></div>`;
+  }
+  h+=`<div class="snap-row"><label><input type="checkbox" ${snapEnabled?'checked':''} onchange="snapEnabled=this.checked" style="accent-color:var(--success)"> 🧲 Snap เข้าจุด</label>`;
+  h+=`<span style="font-size:11px;color:var(--dim)">สเกล: ${scale>0?(1/scale*100).toFixed(1)+' px/ม.':'ยังไม่ตั้ง'}</span></div>`;
+  const shapeList = shapes.filter(s=>s.type!=='calibrate');
+  h+=`<div class="section-title">รายการที่วาด (${shapeList.length})</div>`;
+  shapes.forEach((s,i)=>{
+    if(s.type==='calibrate') return;
+    h+=`<div class="shape-item ${selectedIdx===i?'selected':''}" onclick="selectedIdx=${i};tool='select';updateToolName();updateBottomBar();renderTab();draw()">`;
+    h+=`<div class="shape-header"><span class="shape-label">${s.type==='polygon'?'⬡':'📏'} ${esc(s.label)}</span>`;
+    h+=`<button class="del-btn" onclick="event.stopPropagation();shapes.splice(${i},1);if(selectedIdx===${i})selectedIdx=null;updateBottomBar();renderTab();draw()">✕</button></div>`;
+    h+=`<div class="shape-meta">${s.type==='polygon'?'พื้นที่ '+fmt(s.areaSqm)+' ตร.ม. ('+s.points.length+' จุด)':'ความยาว '+fmt(s.lengthM)+' ม. ('+s.points.length+' จุด)'}</div></div>`;
+  });
+  h+=`<div class="help-box"><div class="title">💡 วิธีใช้</div>`;
+  h+=`<div>• <b>ตั้งสเกล</b>: เลือก 📐 แล้วคลิก 2 จุดที่ทราบระยะ</div>`;
+  h+=`<div>• <b>วาดพื้นที่</b>: คลิกมุมทีละจุด ปิดรูปคลิกจุดแรก / Double-click</div>`;
+  h+=`<div>• <b>วัดความยาว</b>: คลิกจุดต่อจุด Double-click จบ</div>`;
+  h+=`<div>• <b>Snap</b>: จะ snap เข้าจุดมุมที่มีอยู่อัตโนมัติ</div>`;
+  h+=`<div>• <b>Zoom</b>: ล้อ mouse / <b>Pan</b>: Alt+ลาก หรือ middle click</div>`;
+  h+=`<div>• <b>Esc</b>: ยกเลิก | <b>Ctrl+Z</b>: undo จุด | <b>Del</b>: ลบ shape</div></div>`;
+  el.innerHTML=h;
+}
+
+function renderBoqTab(el){
+  let h='';
+  h+=`<div style="font-size:11px;color:var(--dim);margin-bottom:8px">เลือกรายการจากแท็บ "บัญชีค่าแรง" แล้วกดเพิ่มเข้า BOQ`;
+  if(selectedIdx!==null) h+=` <span style="color:var(--warn)">(เลือก shape #${selectedIdx+1})</span>`;
+  h+=`</div>`;
+  if(boqItems.length===0){
+    h+=`<div style="text-align:center;padding:30px;color:var(--dim)">ยังไม่มีรายการ<br>ไปที่แท็บ "บัญชีค่าแรง" เพื่อเพิ่ม</div>`;
+  } else {
+    boqItems.forEach((item,i)=>{
+      h+=`<div class="boq-card">`;
+      h+=`<div style="display:flex;justify-content:space-between"><span class="boq-name">${esc(item.name)}</span>`;
+      h+=`<button class="del-btn" onclick="boqItems.splice(${i},1);renderTab()">✕</button></div>`;
+      h+=`<div class="boq-rate">อัตราค่าแรง: ${fmt(item.rate)} บาท/${item.unit}</div>`;
+      h+=`<div class="boq-row"><span style="font-size:12px">ปริมาณ:</span>`;
+      h+=`<input type="number" id="boqQty${i}" value="${item.qty||''}" onchange="boqItems[${i}].qty=parseFloat(this.value)||0;renderTab()" style="width:80px">`;
+      h+=`<span style="font-size:12px;color:var(--dim)">${item.unit}</span>`;
+      if(selectedIdx!==null){
+        h+=`<button class="boq-fill-btn" onclick="autoFillBoq(${i})">← จาก shape</button>`;
+      }
+      h+=`</div>`;
+      h+=`<div class="boq-total">${fmt((item.qty||0)*item.rate)} บาท</div></div>`;
+    });
+  }
+  const total=boqItems.reduce((s,it)=>s+(it.qty||0)*it.rate,0);
+  if(boqItems.length>0){
+    h+=`<div class="total-box"><div class="total-label">ค่าแรงรวมทั้งสิ้น</div>`;
+    h+=`<div class="total-amount">฿ ${fmt(total)}</div>`;
+    h+=`<div class="total-note">* เป็นเฉพาะค่าแรง ไม่รวมค่าวัสดุ | อ้างอิง ว.809 (14 พ.ย. 68)</div></div>`;
+    h+=`<div class="export-row"><button class="export-btn" onclick="exportCSV()">📥 Export CSV</button></div>`;
+  }
+  el.innerHTML=h;
+}
+
+function renderRatesTab(el){
+  let h='';
+  h+=`<input type="search" placeholder="🔍 ค้นหา เช่น ก่ออิฐ, คอนกรีต, ฉาบปูน..." value="${esc(searchRate)}" oninput="searchRate=this.value;renderTab()" style="width:100%;margin-bottom:10px">`;
+  const q=searchRate.toLowerCase();
+  Object.entries(RATES).forEach(([key,cat])=>{
+    const items=q?cat.items.filter(it=>it.name.toLowerCase().includes(q)||it.id.toLowerCase().includes(q)):cat.items;
+    if(items.length===0) return;
+    h+=`<div class="rate-cat"><div class="rate-cat-title">${cat.label}</div>`;
+    items.forEach((it,idx)=>{
+      h+=`<div class="rate-item" onclick="addToBoq('${key}',${cat.items.indexOf(it)})">`;
+      h+=`<div><div class="rate-name">${esc(it.name)}</div><div class="rate-price">${fmt(it.rate)} บาท/${it.unit}</div></div>`;
+      h+=`<span class="rate-add">＋</span></div>`;
+    });
+    h+=`</div>`;
+  });
+  el.innerHTML=h;
+}
+
+function addToBoq(catKey,itemIdx){
+  const item=RATES[catKey].items[itemIdx];
+  boqItems.push({...item,qty:0,shapeIdx:selectedIdx});
+  switchTab('boq');
+}
+
+function autoFillBoq(idx){
+  if(selectedIdx===null) return;
+  const shape=shapes[selectedIdx]; if(!shape) return;
+  const item=boqItems[idx];
+  let qty=0;
+  if(item.unit==='ตร.ม.'&&shape.areaSqm) qty=shape.areaSqm;
+  else if(item.unit==='เมตร'&&shape.lengthM) qty=shape.lengthM;
+  else if(item.unit==='ลบ.ม.'&&shape.areaSqm) qty=shape.areaSqm;
+  boqItems[idx].qty=parseFloat(qty.toFixed(2));
+  renderTab();
+}
+
+function exportCSV(){
+  let csv='ลำดับ,รายการ,หน่วย,ปริมาณ,อัตราค่าแรง(บาท),รวมค่าแรง(บาท)\n';
+  boqItems.forEach((it,i)=>{
+    csv+=`${i+1},"${it.name}",${it.unit},${it.qty||0},${it.rate},${(it.qty||0)*it.rate}\n`;
+  });
+  const total=boqItems.reduce((s,it)=>s+(it.qty||0)*it.rate,0);
+  csv+=`,,,,รวมทั้งสิ้น,${total}\n`;
+  const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8;'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download='BOQ_ค่าแรง.csv'; a.click();
+}
+
+// ============================================================
+// INIT
+// ============================================================
+resizeCanvas();
+renderTab();
+</script>
+</body>
+</html>
