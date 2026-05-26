@@ -3,23 +3,23 @@
  *
  * รองรับ 6 engine:
  *   - claude        → Claude Sonnet 4.6 ผ่าน OpenRouter
- *   - gpt41         → OpenAI GPT-4.1 ผ่าน OpenRouter (1M context)
+ *   - gpt54         → OpenAI GPT-5.4 ผ่าน OpenRouter (1M context)
  *   - gpt41mini     → OpenAI GPT-4.1 Mini ผ่าน OpenRouter (ตัวถูก/เร็ว)
  *   - gemini-pro    → Google Gemini 2.5 Pro (OpenAI-compatible)
  *   - gemini-flash  → Google Gemini 2.5 Flash (OpenAI-compatible)
  *   - qwen          → Alibaba Qwen 3.5 Flash (OpenAI-compatible, DashScope)
  *
- * Default priority: claude > gpt41 > gpt41mini > gemini-pro > gemini-flash > qwen
+ * Default priority: claude > gpt54 > gpt41mini > gemini-pro > gemini-flash > qwen
  *
  * Key mapping:
- *   - VITE_OPENROUTER_API_KEY → claude + gpt41 + gpt41mini
+ *   - VITE_OPENROUTER_API_KEY → claude + gpt54 + gpt41mini
  *   - VITE_GEMINI_API_KEY     → gemini-pro + gemini-flash
  *   - VITE_QWEN_API_KEY_DEV   → qwen
  */
 
 export type AIEngine =
   | 'claude'
-  | 'gpt41'
+  | 'gpt54'
   | 'gpt41mini'
   | 'gemini-pro'
   | 'gemini-flash'
@@ -78,14 +78,14 @@ export function getEngineConfig(engine: AIEngine): AIEngineConfig {
         timeoutMs: 180_000,
         supportsSystemRole: true,
       };
-    case 'gpt41':
+    case 'gpt54':
       return {
-        id: 'gpt41',
-        label: 'GPT-4.1',
-        shortLabel: '4.1',
+        id: 'gpt54',
+        label: 'GPT-5.4',
+        shortLabel: '5.4',
         icon: '🧠',
         endpoint: OPENROUTER_ENDPOINT,
-        model: 'openai/gpt-4.1',
+        model: 'openai/gpt-5.4',
         apiKey: import.meta.env.VITE_OPENROUTER_API_KEY || '',
         extraHeaders: OPENROUTER_HEADERS,
         maxOutputTokens: 16_384,
@@ -95,7 +95,7 @@ export function getEngineConfig(engine: AIEngine): AIEngineConfig {
         imageQuality: 0.85,
         refImageDim: 1500,
         refImageQuality: 0.8,
-        // GPT-4.1 รองรับ 1M context — ตอบช้ากว่า 4o
+        // GPT-5.4 รองรับ context ใหญ่ — อาจตอบช้ากว่า
         timeoutMs: 180_000,
         supportsSystemRole: true,
       };
@@ -184,10 +184,10 @@ export function getEngineConfig(engine: AIEngine): AIEngineConfig {
   }
 }
 
-/** ลำดับ default — claude > gpt41 > gpt41mini > gemini-pro > gemini-flash > qwen */
+/** ลำดับ default — claude > gpt54 > gpt41mini > gemini-pro > gemini-flash > qwen */
 const ENGINE_PRIORITY: AIEngine[] = [
   'claude',
-  'gpt41',
+  'gpt54',
   'gpt41mini',
   'gemini-pro',
   'gemini-flash',
@@ -197,7 +197,7 @@ const ENGINE_PRIORITY: AIEngine[] = [
 function hasKey(engine: AIEngine): boolean {
   switch (engine) {
     case 'claude':
-    case 'gpt41':
+    case 'gpt54':
     case 'gpt41mini':
       // ทั้ง 3 ใช้ OpenRouter — key เดียวกันเปิด 3 engine
       return Boolean(import.meta.env.VITE_OPENROUTER_API_KEY);
@@ -229,7 +229,7 @@ export function getEngineShortLabel(engine: AIEngine): string {
 export function isAIEngine(value: unknown): value is AIEngine {
   return (
     value === 'claude' ||
-    value === 'gpt41' ||
+    value === 'gpt54' ||
     value === 'gpt41mini' ||
     value === 'gemini-pro' ||
     value === 'gemini-flash' ||
@@ -239,14 +239,16 @@ export function isAIEngine(value: unknown): value is AIEngine {
 
 /**
  * Migrate engine id เก่า → ใหม่
- *  - 'gemini'   (เดิมเป็น Flash)            → 'gemini-flash'
- *  - 'gpt4o'    (rename เป็น GPT-4.1)       → 'gpt41'
- *  - 'gpt5mini' (เลิกใช้ — เปลี่ยนเป็น Mini) → 'gpt41mini'
+ *  - 'gemini'   (เดิมเป็น Flash)               → 'gemini-flash'
+ *  - 'gpt4o'    (rename สู่ GPT-5.4)            → 'gpt54'
+ *  - 'gpt41'    (rename สู่ GPT-5.4)            → 'gpt54'
+ *  - 'gpt5mini' (เลิกใช้ — เปลี่ยนเป็น 4.1 Mini) → 'gpt41mini'
  *  คืน null ถ้า value ไม่ใช่ id เก่าที่ต้อง migrate
  */
 export function migrateLegacyEngineId(value: unknown): AIEngine | null {
   if (value === 'gemini') return 'gemini-flash';
-  if (value === 'gpt4o') return 'gpt41';
+  if (value === 'gpt4o') return 'gpt54';
+  if (value === 'gpt41') return 'gpt54';
   if (value === 'gpt5mini') return 'gpt41mini';
   return null;
 }

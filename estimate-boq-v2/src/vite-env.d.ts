@@ -12,7 +12,7 @@ interface ImportMetaEnv {
   /** Google AI Studio — เปิด gemini-pro + gemini-flash */
   readonly VITE_GEMINI_API_KEY?: string;
   readonly VITE_GEMINI_ENDPOINT?: string;
-  /** OpenRouter — เปิด claude + gpt41 + gpt41mini (1 key, 3 engine) */
+  /** OpenRouter — เปิด claude + gpt54 + gpt41mini (1 key, 3 engine) */
   readonly VITE_OPENROUTER_API_KEY?: string;
 }
 
