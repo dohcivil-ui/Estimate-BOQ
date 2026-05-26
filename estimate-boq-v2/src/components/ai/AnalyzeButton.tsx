@@ -228,11 +228,12 @@ function getEngineShortLabel(engine: AIEngine): string {
 
 /**
  * สีต่อ engine — ใช้ตอน active (pill state)
- *   claude=orange, gpt4o=green, gemini-pro=teal, gemini-flash=sky, qwen=purple
+ *   claude=orange, gpt41=green, gpt41mini=amber, gemini-pro=teal, gemini-flash=sky, qwen=purple
  */
 const ENGINE_ACTIVE_CLASS: Record<AIEngine, string> = {
   claude: 'border-orange-400 bg-orange-400/15 text-orange-200',
-  gpt4o: 'border-green-400 bg-green-400/15 text-green-200',
+  gpt41: 'border-green-400 bg-green-400/15 text-green-200',
+  gpt41mini: 'border-amber-400 bg-amber-400/15 text-amber-200',
   'gemini-pro': 'border-teal-400 bg-teal-400/15 text-teal-200',
   'gemini-flash': 'border-sky-400 bg-sky-400/15 text-sky-200',
   qwen: 'border-purple-400 bg-purple-400/15 text-purple-200',
