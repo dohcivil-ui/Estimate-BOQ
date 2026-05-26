@@ -1054,10 +1054,10 @@ RB6=0.222, RB9=0.499, DB10=0.617, DB12=0.888, DB16=1.578, DB20=2.466, DB25=3.853
 
 ### 6. ค่าคงที่ที่ใช้บ่อย
 - ความหนาแน่นเหล็ก = 7,850 kg/m³ = 7.85 g/cm³
-- Yield strength: SS400 = 2,400 ksc, SD40 = 4,000 ksc, SD50 = 5,000 ksc
+- Yield strength: SS400 = 2,500 ksc (245 MPa), SD40 = 4,000 ksc, SD50 = 5,000 ksc
 - Modulus of elasticity E = 2.04×10⁶ ksc = 200 GPa
-- Allowable bending stress Fb = 0.60×Fy = 1,440 ksc (SS400)
-- Allowable shear stress Fv = 0.40×Fy = 960 ksc (SS400)`;
+- Allowable bending stress Fb = 0.60×Fy = 1,500 ksc (SS400)
+- Allowable shear stress Fv = 0.40×Fy = 1,000 ksc (SS400)`;
 
 // ═══════════════════════════════════════════════════════════════════════
 // MODE 3: ⚡ ELECTRICAL
