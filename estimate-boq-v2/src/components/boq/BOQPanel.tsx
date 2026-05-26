@@ -23,6 +23,7 @@ import { GPTExportModal } from './GPTExportModal';
 import { CreateFromMeasurementsModal } from './CreateFromMeasurementsModal';
 import { SyncPricesModal } from './SyncPricesModal';
 import { exportBOQToExcel } from '@/services/excelExport';
+import { exportGovBOQ, type GovExportMode } from '@/services/govExcelExport';
 import { printBOQ } from '@/services/printPdf';
 
 export function BOQPanel() {
@@ -41,6 +42,7 @@ export function BOQPanel() {
   const [showCreateFromMeas, setShowCreateFromMeas] = useState(false);
   const [showSyncPrices, setShowSyncPrices] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
 
   const totals = totalsByKind(items);
   const direct = directCostTotal(items);
@@ -65,10 +67,15 @@ export function BOQPanel() {
     });
   };
 
-  const handleExcel = async () => {
+  const handleExcel = async (variant: 'classic' | GovExportMode) => {
+    setExportMenuOpen(false);
     setExporting(true);
     try {
-      await exportBOQToExcel({ items, meta });
+      if (variant === 'classic') {
+        await exportBOQToExcel({ items, meta });
+      } else {
+        await exportGovBOQ({ items, meta, mode: variant });
+      }
     } catch (err) {
       alert(`Export ไม่สำเร็จ: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
@@ -133,14 +140,13 @@ export function BOQPanel() {
 
         <span className="mx-1 h-5 w-px bg-bg-border" />
 
-        <button
-          type="button"
-          onClick={handleExcel}
+        <ExcelExportDropdown
+          open={exportMenuOpen}
+          setOpen={setExportMenuOpen}
           disabled={items.length === 0 || exporting}
-          className="rounded bg-success/20 px-2.5 py-1 text-xs font-medium text-success hover:bg-success/30 disabled:opacity-50"
-        >
-          {exporting ? 'กำลัง export…' : '📊 Excel'}
-        </button>
+          busy={exporting}
+          onExport={handleExcel}
+        />
         <button
           type="button"
           onClick={printBOQ}
@@ -238,6 +244,93 @@ function TotalsRow({
       <span className={`font-mono ${color ?? 'text-ink-primary'} ${bold ? 'font-bold' : ''}`}>
         ฿ {formatCurrency(value)}
       </span>
+    </div>
+  );
+}
+
+type ExcelVariant = 'classic' | GovExportMode;
+
+function ExcelExportDropdown({
+  open,
+  setOpen,
+  disabled,
+  busy,
+  onExport,
+}: {
+  open: boolean;
+  setOpen: (v: boolean) => void;
+  disabled: boolean;
+  busy: boolean;
+  onExport: (variant: ExcelVariant) => void;
+}) {
+  const items: Array<{
+    id: ExcelVariant;
+    label: string;
+    desc: string;
+    highlight?: boolean;
+  }> = [
+    {
+      id: 'full',
+      label: '📋 ปร.4 + ปร.5 + ปร.6 + Factor F (ครบชุด)',
+      desc: 'ราคากลางมาตรฐานกรมบัญชีกลาง — 4 sheets พร้อม cross-sheet formula',
+      highlight: true,
+    },
+    {
+      id: 'por4',
+      label: '📑 ปร.4(ก) อย่างเดียว',
+      desc: 'แบบแสดงรายการ ปริมาณงาน และราคา',
+    },
+    {
+      id: 'classic',
+      label: '🗒️ BOQ แบบเดิม',
+      desc: 'ตารางเดียว ครบทุก field (รวม source/หมายเหตุ)',
+    },
+  ];
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        disabled={disabled}
+        className="flex items-center gap-1 rounded bg-success/20 px-2.5 py-1 text-xs font-medium text-success hover:bg-success/30 disabled:opacity-50"
+        title="เลือกรูปแบบ Excel ที่จะ export"
+      >
+        {busy ? 'กำลัง export…' : '📊 Excel'}
+        {!busy && <span className="ml-0.5 text-[10px] opacity-70">▾</span>}
+      </button>
+
+      {open && !disabled && (
+        <>
+          <button
+            type="button"
+            aria-label="ปิด"
+            onClick={() => setOpen(false)}
+            className="fixed inset-0 z-40 cursor-default bg-transparent"
+          />
+          <div className="absolute left-0 top-full z-50 mt-1 w-72 rounded border border-bg-border bg-bg-panel p-1 shadow-xl">
+            {items.map((it) => (
+              <button
+                key={it.id}
+                type="button"
+                onClick={() => onExport(it.id)}
+                className={`flex w-full flex-col items-start gap-0.5 rounded px-2.5 py-2 text-left transition-colors hover:bg-bg-hover ${
+                  it.highlight
+                    ? 'bg-success/10 hover:bg-success/20'
+                    : ''
+                }`}
+              >
+                <span className="text-xs font-medium text-ink-primary">
+                  {it.label}
+                </span>
+                <span className="text-[10px] leading-tight text-ink-muted">
+                  {it.desc}
+                </span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }

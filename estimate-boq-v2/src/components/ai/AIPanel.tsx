@@ -17,8 +17,19 @@ import { AnalyzeButton } from './AnalyzeButton';
 import { AIElementsTable } from './AIElementsTable';
 import { RefPagesBlock } from './RefPagesBlock';
 import { AiChat } from './AiChat';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
-export function AIPanel() {
+function renderNote(note: unknown): string {
+  if (typeof note === 'string') return note;
+  if (note && typeof note === 'object') {
+    const obj = note as Record<string, unknown>;
+    if (obj.text) return `${obj.text}${obj.reason ? ` (${obj.reason})` : ''}`;
+    return JSON.stringify(obj);
+  }
+  return String(note);
+}
+
+function AIPanelContent() {
   const page = useActivePage();
   const latest = useLatestAnalysisForPage(page?.id ?? null);
   const suggestions = useSuggestionsForAnalysis(latest?.id ?? null);
@@ -47,47 +58,68 @@ export function AIPanel() {
         <div className="space-y-2">
           <StatusBlock />
           {latest.status === 'success' && latest.result && (
-            <>
-              <SummaryBlock
-                summary={latest.result.items.length > 0 ? `พบ ${latest.result.items.length} รายการ` : 'ไม่พบรายการในหน้านี้'}
-                pageType={latest.result.drawing_type ?? '—'}
-                scale={latest.result.scale}
-                discipline={latest.discipline}
-                buildingInfo={latest.result.building_info}
-                mode={latest.mode}
-                detected={latest.detected?.detected_discipline}
-                engine={latest.engine}
-              />
-              <AIElementsTable suggestions={suggestions} />
-              {(latest.result.notes?.length ?? 0) > 0 && (
-                <NotesBlock title="📝 หมายเหตุ" items={latest.result.notes!} />
-              )}
-              {(latest.result.unreadable?.length ?? 0) > 0 && (
-                <NotesBlock
-                  title="❓ อ่านไม่ชัด — ต้องยืนยัน"
-                  items={latest.result.unreadable!}
-                  color="warning"
-                />
-              )}
-              <AiChat />
-              <div className="flex justify-end">
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (page && confirm('ล้างผลวิเคราะห์ของหน้านี้?')) {
-                      removeAnalysesForPage(page.id);
-                    }
-                  }}
-                  className="text-[10px] text-ink-muted hover:text-danger"
-                >
-                  🗑️ ล้างผลของหน้านี้
-                </button>
-              </div>
-            </>
+            <ErrorBoundary scope="AI results" resetKey={latest.id}>
+              {(() => {
+                const itemCount = latest.result.items?.length ?? 0;
+                const notes = latest.result.notes ?? [];
+                const unreadable = latest.result.unreadable ?? [];
+                return (
+                  <>
+                    <SummaryBlock
+                      summary={
+                        itemCount > 0
+                          ? `พบ ${itemCount} รายการ`
+                          : 'ไม่พบรายการในหน้านี้'
+                      }
+                      pageType={latest.result.drawing_type ?? '—'}
+                      scale={latest.result.scale}
+                      discipline={latest.discipline}
+                      buildingInfo={latest.result.building_info}
+                      mode={latest.mode}
+                      detected={latest.detected?.detected_discipline}
+                      engine={latest.engine}
+                    />
+                    <AIElementsTable suggestions={suggestions} />
+                    {notes.length > 0 && (
+                      <NotesBlock title="📝 หมายเหตุ" items={notes} />
+                    )}
+                    {unreadable.length > 0 && (
+                      <NotesBlock
+                        title="❓ อ่านไม่ชัด — ต้องยืนยัน"
+                        items={unreadable}
+                        color="warning"
+                      />
+                    )}
+                    <AiChat />
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (page && confirm('ล้างผลวิเคราะห์ของหน้านี้?')) {
+                            removeAnalysesForPage(page.id);
+                          }
+                        }}
+                        className="text-[10px] text-ink-muted hover:text-danger"
+                      >
+                        🗑️ ล้างผลของหน้านี้
+                      </button>
+                    </div>
+                  </>
+                );
+              })()}
+            </ErrorBoundary>
           )}
         </div>
       )}
     </div>
+  );
+}
+
+export function AIPanel() {
+  return (
+    <ErrorBoundary scope="AI panel">
+      <AIPanelContent />
+    </ErrorBoundary>
   );
 }
 
@@ -248,7 +280,7 @@ function NotesBlock({
   color = 'ink',
 }: {
   title: string;
-  items: string[];
+  items: unknown[];
   color?: 'ink' | 'warning';
 }) {
   const cls =
@@ -261,7 +293,7 @@ function NotesBlock({
       <ul className="space-y-0.5 pl-3">
         {items.map((n, i) => (
           <li key={i} className="list-disc">
-            {n}
+            {renderNote(n)}
           </li>
         ))}
       </ul>

@@ -23,19 +23,24 @@ function presetById(id: string): LaborPreset | null {
   return LABOR_PRESETS_W809.find((p) => p.id === id) ?? null;
 }
 
-/** ดึงค่าจริงต่อ row: ใช้ total_qty ถ้ามี ไม่งั้น qty */
+/** ดึงค่าจริงต่อ row: ใช้ total_qty ถ้ามี ไม่งั้น qty (กัน unit undefined) */
 function materialTotalQty(sub: AIMaterial, parentQty: number): number {
-  if (typeof sub.total_qty === 'number' && sub.total_qty > 0) return sub.total_qty;
-  if (sub.unit.includes('/')) {
-    // unit เช่น "ลบ.ม./ฐาน" = per-piece → คูณด้วย parentQty
-    return sub.qty * (parentQty || 1);
+  if (typeof sub.total_qty === 'number' && sub.total_qty > 0) {
+    return sub.total_qty;
   }
-  return sub.qty;
+  const qty = typeof sub.qty === 'number' && Number.isFinite(sub.qty) ? sub.qty : 0;
+  const unit = typeof sub.unit === 'string' ? sub.unit : '';
+  if (unit.includes('/')) {
+    // unit เช่น "ลบ.ม./ฐาน" = per-piece → คูณด้วย parentQty
+    return qty * (parentQty || 1);
+  }
+  return qty;
 }
 
-/** ตัด suffix "/<หน่วยหลัก>" ออกจาก unit เพื่อให้เหลือ unit จริง */
-function cleanUnit(unit: string): string {
-  return unit.split('/')[0]!.trim();
+/** ตัด suffix "/<หน่วยหลัก>" ออกจาก unit เพื่อให้เหลือ unit จริง (กัน undefined) */
+function cleanUnit(unit: string | undefined | null): string {
+  if (typeof unit !== 'string' || !unit) return 'หน่วย';
+  return unit.split('/')[0]!.trim() || 'หน่วย';
 }
 
 function subMaterialToItem(
@@ -48,10 +53,13 @@ function subMaterialToItem(
   return {
     id: uid(),
     category: parent.category || 'อื่นๆ',
-    name: sub.name,
+    name: typeof sub.name === 'string' && sub.name ? sub.name : '(ไม่มีชื่อ)',
     unit: cleanUnit(sub.unit),
     quantity: total,
-    unitPrice: sub.unit_price ?? 0,
+    unitPrice:
+      typeof sub.unit_price === 'number' && Number.isFinite(sub.unit_price)
+        ? sub.unit_price
+        : 0,
     isMaterial,
     wastePct: 0, // sub ที่ AI ส่ง มักจะรวมเผื่อแล้ว
     thickness: undefined,
@@ -110,17 +118,19 @@ function buildPresetItem(
   };
 }
 
-/** main entry — แปลง 1 item → BOQItem[] */
+/** main entry — แปลง 1 item → BOQItem[] (กัน input ที่ field ผิด schema) */
 export function itemToBOQItems(item: AIItem, sourceRef: string): BOQItem[] {
   const out: BOQItem[] = [];
+  if (!item || typeof item !== 'object') return out;
 
   // ─── Path 1: arrays ของ breakdown ──────────────────────────────────
   const breakdowns: AIMaterial[] = [];
-  if (item.materials) breakdowns.push(...item.materials);
-  if (item.sub_items) breakdowns.push(...item.sub_items);
-  if (item.accessories) breakdowns.push(...item.accessories);
+  if (Array.isArray(item.materials)) breakdowns.push(...item.materials);
+  if (Array.isArray(item.sub_items)) breakdowns.push(...item.sub_items);
+  if (Array.isArray(item.accessories)) breakdowns.push(...item.accessories);
 
   for (const sub of breakdowns) {
+    if (!sub || typeof sub !== 'object') continue;
     if (!isFiniteNumber(sub.qty) && !isFiniteNumber(sub.total_qty)) continue;
     out.push(subMaterialToItem(sub, item, sourceRef));
   }
@@ -172,13 +182,18 @@ export function itemToBOQItems(item: AIItem, sourceRef: string): BOQItem[] {
   }
 
   // ─── Path 3: labor (เพิ่มเข้าไป เสมอถ้ามี — เพราะ structural breakdown ไม่มี labor) ──
-  if (item.labor && item.labor.rate > 0 && out.length > 0) {
+  if (
+    item.labor &&
+    isFiniteNumber(item.labor.rate) &&
+    item.labor.rate > 0 &&
+    out.length > 0
+  ) {
     // มี labor + มี materials/sub_items แล้ว → เพิ่ม labor row
     out.push(laborToItem(item.labor, item, sourceRef));
   }
 
   // ─── Path 4: generic — electrical/sanitary มี unit_price ที่ item level ──
-  if (out.length === 0 && item.quantity > 0) {
+  if (out.length === 0 && isFiniteNumber(item.quantity) && item.quantity > 0) {
     out.push({
       id: uid(),
       category: item.category || 'อื่นๆ',
@@ -199,7 +214,11 @@ export function itemToBOQItems(item: AIItem, sourceRef: string): BOQItem[] {
       updatedAt: now(),
     });
     // ถ้ามี labor ด้วย เพิ่มอีก row
-    if (item.labor && item.labor.rate > 0) {
+    if (
+      item.labor &&
+      isFiniteNumber(item.labor.rate) &&
+      item.labor.rate > 0
+    ) {
       out.push(laborToItem(item.labor, item, sourceRef));
     }
   }

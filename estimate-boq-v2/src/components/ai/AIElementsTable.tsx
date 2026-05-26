@@ -17,6 +17,23 @@ const CONFIDENCE_STYLE: Record<AIConfidence, { text: string; color: string }> = 
   low: { text: '● ต่ำ — ตรวจ', color: 'text-danger bg-danger/10 border-danger/30' },
 };
 
+/** safe number for rendering — กัน NaN/undefined ทำ render crash */
+function safeNumber(v: unknown, fallback = 0): number {
+  return typeof v === 'number' && Number.isFinite(v) ? v : fallback;
+}
+
+/** safe string — กัน undefined.includes() ฯลฯ */
+function safeString(v: unknown, fallback = ''): string {
+  return typeof v === 'string' ? v : fallback;
+}
+
+/** format number → string ไทย แบบกันพัง */
+function formatNum(v: unknown, maxFrac = 2): string {
+  const n = safeNumber(v, NaN);
+  if (!Number.isFinite(n)) return '—';
+  return n.toLocaleString('th-TH', { maximumFractionDigits: maxFrac });
+}
+
 export function AIElementsTable({ suggestions }: Props) {
   const setStatus = useAIStore((s) => s.setSuggestionStatus);
   const setEdited = useAIStore((s) => s.setSuggestionEdited);
@@ -190,7 +207,9 @@ function ItemCard({
 
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-baseline gap-1.5 text-xs">
-            <span className="font-semibold text-ink-primary">{item.name}</span>
+            <span className="font-semibold text-ink-primary">
+              {safeString(item.name, '(ไม่มีชื่อ)')}
+            </span>
             {item.dimensions && (
               <span className="text-ink-secondary">· {item.dimensions}</span>
             )}
@@ -198,10 +217,7 @@ function ItemCard({
           </div>
           <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px]">
             <span className="font-mono text-ink-primary">
-              {item.quantity?.toLocaleString('th-TH', {
-                maximumFractionDigits: 4,
-              }) ?? '—'}{' '}
-              {item.unit}
+              {formatNum(item.quantity, 4)} {safeString(item.unit)}
             </span>
             {item.source && (
               <span className="rounded border border-bg-border bg-bg-panel px-1 text-ink-muted">
@@ -216,7 +232,7 @@ function ItemCard({
             )}
             {item.labor && (
               <span className="rounded bg-amber-500/10 px-1 text-amber-300">
-                ค่าแรง {item.labor.rate}/{item.labor.unit}
+                ค่าแรง {formatNum(item.labor.rate)}/{safeString(item.labor.unit, '—')}
               </span>
             )}
           </div>
@@ -309,13 +325,15 @@ function ItemCard({
             <div className="rounded border border-amber-500/30 bg-amber-500/5 px-2 py-1 text-[11px]">
               <div className="flex items-center gap-2">
                 <span className="font-semibold text-amber-300">ค่าแรง:</span>
-                <span className="text-ink-primary">{item.labor.description}</span>
+                <span className="text-ink-primary">
+                  {safeString(item.labor.description, '(ไม่ระบุ)')}
+                </span>
               </div>
               <div className="mt-0.5 text-[10px] text-ink-muted">
                 <span className="font-mono text-ink-secondary">
-                  {item.labor.rate}
+                  {formatNum(item.labor.rate)}
                 </span>{' '}
-                {item.labor.unit}
+                {safeString(item.labor.unit, '—')}
                 {item.labor.ref && (
                   <span className="ml-2">ref: {item.labor.ref}</span>
                 )}
@@ -390,19 +408,23 @@ function BreakdownTable({
         </thead>
         <tbody>
           {items.map((sub, idx) => {
+            const unit = safeString(sub?.unit);
+            const qty = safeNumber(sub?.qty);
             const total =
-              sub.total_qty ??
-              (sub.unit.includes('/')
-                ? sub.qty * (parentQty || 1)
-                : sub.qty);
+              typeof sub?.total_qty === 'number' &&
+              Number.isFinite(sub.total_qty)
+                ? sub.total_qty
+                : unit.includes('/')
+                  ? qty * (parentQty || 1)
+                  : qty;
             return (
               <tr key={idx} className="border-t border-bg-border">
                 <td className="px-1 py-1">
                   <EditableCell
-                    value={sub.name}
+                    value={safeString(sub?.name)}
                     onCommit={(v) => onUpdate(idx, { name: v })}
                   />
-                  {sub.note && (
+                  {sub?.note && (
                     <div className="text-[9px] italic text-ink-muted">
                       {sub.note}
                     </div>
@@ -410,7 +432,7 @@ function BreakdownTable({
                 </td>
                 <td className="px-1 py-1 text-right">
                   <EditableCell
-                    value={String(sub.qty)}
+                    value={String(qty)}
                     type="number"
                     align="right"
                     onCommit={(v) => onUpdate(idx, { qty: Number(v) || 0 })}
@@ -418,17 +440,19 @@ function BreakdownTable({
                 </td>
                 <td className="px-1 py-1 text-center">
                   <EditableCell
-                    value={sub.unit}
+                    value={unit}
                     align="center"
                     onCommit={(v) => onUpdate(idx, { unit: v })}
                   />
                 </td>
                 <td className="px-1 py-1 text-right font-mono text-ink-secondary">
-                  {total.toLocaleString('th-TH', { maximumFractionDigits: 2 })}
+                  {formatNum(total)}
                 </td>
                 <td className="px-1 py-1 text-right">
                   <EditableCell
-                    value={String(sub.unit_price ?? '')}
+                    value={
+                      sub?.unit_price != null ? String(sub.unit_price) : ''
+                    }
                     type="number"
                     align="right"
                     onCommit={(v) =>
@@ -532,6 +556,8 @@ function EditableCell({
         type={type === 'number' ? 'number' : 'text'}
         step={type === 'number' ? 'any' : undefined}
         value={draft}
+        title="แก้ไขค่า (Enter=บันทึก, Esc=ยกเลิก)"
+        aria-label="แก้ไขค่า"
         onChange={(e) => setDraft(e.target.value)}
         onBlur={() => {
           onCommit(draft);

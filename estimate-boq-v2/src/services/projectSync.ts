@@ -115,6 +115,130 @@ export interface ProjectListItem {
 // SAVE
 // ═══════════════════════════════════════════════════════════════════════
 
+/**
+ * Error class สำหรับกรณี RLS policy บล็อก — UI แสดงขั้นตอนแก้ได้
+ */
+export class RLSError extends Error {
+  readonly tableName: string;
+  readonly operation: string;
+  readonly originalMessage: string;
+  constructor(tableName: string, operation: string, originalMessage: string) {
+    super(
+      `RLS บล็อก ${operation} บน ${tableName}\n` +
+        `เหตุผลที่เป็นไปได้:\n` +
+        `  • Migration ยังไม่ได้รัน — เปิดไฟล์ supabase/fix-rls-policies.sql แล้ว copy ไปรันใน Supabase SQL Editor\n` +
+        `  • โปรเจกต์นี้ owner เป็นบัญชีอื่น — เริ่มโปรเจกต์ใหม่ หรือให้ admin โอน owner_id\n` +
+        `  • Profile ของบัญชีนี้ยังไม่มีใน DB — ออกแล้ว login ใหม่`,
+    );
+    this.name = 'RLSError';
+    this.tableName = tableName;
+    this.operation = operation;
+    this.originalMessage = originalMessage;
+  }
+}
+
+interface SupabaseLikeError {
+  message?: string;
+  code?: string;
+}
+
+function isRLSError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const e = err as SupabaseLikeError;
+  const msg = e.message?.toLowerCase() ?? '';
+  return (
+    msg.includes('row-level security') ||
+    msg.includes('row level security') ||
+    e.code === '42501'
+  );
+}
+
+function wrapDbError(
+  err: unknown,
+  tableName: string,
+  operation: string,
+): Error {
+  if (err instanceof RLSError) return err;
+  const original = err instanceof Error ? err.message : String(err);
+  if (isRLSError(err)) {
+    return new RLSError(tableName, operation, original);
+  }
+  return new Error(`${operation} ${tableName} ไม่สำเร็จ: ${original}`);
+}
+
+/**
+ * ตรวจว่าพร้อม save แล้ว:
+ *   1. มี session จริง (auth.uid() ใช้ได้)
+ *   2. profile row มีอยู่ใน DB (กัน FK constraint fail ตอน upsert projects)
+ *   3. ถ้า projectId เดิมมีอยู่แล้ว ตรวจ owner_id ตรงกับ user ปัจจุบัน
+ *
+ * คืน { ownerId, projectIdToUse }
+ */
+async function assertReadyForSave(
+  client: ReturnType<typeof requireSupabase>,
+  storedProjectId: string | null,
+): Promise<{ ownerId: string; projectIdToUse: string; isNewProject: boolean }> {
+  // 1. session
+  const { data: userData, error: userErr } = await client.auth.getUser();
+  if (userErr || !userData.user) {
+    throw new Error(
+      'ยังไม่ได้ login กับ Supabase — ปิด VITE_DEV_BYPASS_AUTH (ถ้าเปิดอยู่) แล้ว login ด้วย Google',
+    );
+  }
+  const ownerId = userData.user.id;
+
+  // 2. ensure profile (กัน FK fail) — เรียก RPC ที่มี security definer
+  // ถ้า function ไม่มี (ยังไม่ได้รัน fix-rls-policies.sql) จะ silent fail แล้ว fallback เป็น direct upsert
+  const ensureRes = await client.rpc('ensure_profile');
+  if (ensureRes.error) {
+    // fallback: upsert profile โดยตรง (RLS อนุญาตให้ user upsert ของตัวเอง)
+    const { error: upErr } = await client
+      .from('profiles')
+      .upsert(
+        {
+          id: ownerId,
+          email: userData.user.email ?? `${ownerId}@unknown`,
+          role: 'user',
+        },
+        { onConflict: 'id' },
+      );
+    if (upErr && !isRLSError(upErr)) {
+      console.warn('[save] ensure_profile fallback failed:', upErr.message);
+    }
+  }
+
+  // 3. ตรวจ ownership ของ project เก่า (ถ้ามี)
+  if (storedProjectId) {
+    const { data: existing, error: selErr } = await client
+      .from('projects')
+      .select('id, owner_id')
+      .eq('id', storedProjectId)
+      .maybeSingle();
+    if (selErr && !isRLSError(selErr)) {
+      throw new Error(`ตรวจ project เก่าไม่สำเร็จ: ${selErr.message}`);
+    }
+    if (existing && (existing as { owner_id: string }).owner_id !== ownerId) {
+      throw new Error(
+        `โปรเจกต์เดิม (id: ${storedProjectId.slice(0, 8)}…) เป็นของบัญชีอื่น — ` +
+          `กรุณากด "📂 รายการโปรเจกต์" แล้วเริ่มโปรเจกต์ใหม่ หรือเลือกโปรเจกต์ของคุณ`,
+      );
+    }
+    // โปรเจกต์เดิมเป็นของเรา → ใช้ id เดิม
+    return {
+      ownerId,
+      projectIdToUse: storedProjectId,
+      isNewProject: !existing,
+    };
+  }
+
+  // ไม่มี projectId เดิม → สร้าง id ใหม่
+  return {
+    ownerId,
+    projectIdToUse: crypto.randomUUID(),
+    isNewProject: true,
+  };
+}
+
 export async function saveProject(): Promise<string> {
   const client = requireSupabase();
   const meta = useProjectMeta.getState();
@@ -126,15 +250,13 @@ export async function saveProject(): Promise<string> {
   const boq = useBOQStore.getState();
   const rawFiles = useRawFileStore.getState();
 
-  // ─── 1. รับ user.id (สำหรับ owner_id ตอน insert) ──────────────────────
-  const { data: userData, error: userErr } = await client.auth.getUser();
-  if (userErr || !userData.user) {
-    throw new Error('ยังไม่ได้เข้าสู่ระบบ — ออกแล้วเข้าใหม่');
-  }
-  const ownerId = userData.user.id;
+  // ─── 1. ตรวจ session + profile + ownership ─────────────────────────────
+  const { ownerId, projectIdToUse: projectId } = await assertReadyForSave(
+    client,
+    current.projectId,
+  );
 
   // ─── 2. upsert project ────────────────────────────────────────────────
-  const projectId = current.projectId ?? crypto.randomUUID();
   {
     const { error } = await client.from('projects').upsert(
       {
@@ -149,7 +271,7 @@ export async function saveProject(): Promise<string> {
       },
       { onConflict: 'id' },
     );
-    if (error) throw new Error(`บันทึก project ไม่สำเร็จ: ${error.message}`);
+    if (error) throw wrapDbError(error, 'projects', 'บันทึก');
   }
 
   // ─── 3. upload Storage + upsert drawing_files ─────────────────────────
@@ -170,7 +292,11 @@ export async function saveProject(): Promise<string> {
             contentType: blobMime(file.sourceType),
           });
         if (error)
-          throw new Error(`upload "${file.name}" ไม่สำเร็จ: ${error.message}`);
+          throw wrapDbError(
+            error,
+            `Storage:drawings/${file.name}`,
+            'upload',
+          );
         rawFiles.markUploaded(file.id);
       }
     }
@@ -188,8 +314,7 @@ export async function saveProject(): Promise<string> {
       },
       { onConflict: 'id' },
     );
-    if (error)
-      throw new Error(`บันทึก file "${file.name}" ไม่สำเร็จ: ${error.message}`);
+    if (error) throw wrapDbError(error, 'drawing_files', 'บันทึก');
   }
 
   // ─── 4. upsert drawing_pages ──────────────────────────────────────────
@@ -207,8 +332,7 @@ export async function saveProject(): Promise<string> {
     const { error } = await client
       .from('drawing_pages')
       .upsert(pageRows, { onConflict: 'id' });
-    if (error)
-      throw new Error(`บันทึก pages ไม่สำเร็จ: ${error.message}`);
+    if (error) throw wrapDbError(error, 'drawing_pages', 'บันทึก');
   }
 
   // ─── 5. delete + insert shapes (เพราะ undo อาจลบ measurement) ────────
@@ -217,15 +341,14 @@ export async function saveProject(): Promise<string> {
       .from('shapes')
       .delete()
       .eq('project_id', projectId);
-    if (delErr) throw new Error(`ลบ shapes เก่าไม่สำเร็จ: ${delErr.message}`);
+    if (delErr) throw wrapDbError(delErr, 'shapes', 'ลบ');
 
     const shapeRows = measurements.measurements.map((m) =>
       measurementToRow(m, projectId),
     );
     if (shapeRows.length > 0) {
       const { error } = await client.from('shapes').insert(shapeRows);
-      if (error)
-        throw new Error(`บันทึก measurements ไม่สำเร็จ: ${error.message}`);
+      if (error) throw wrapDbError(error, 'shapes', 'บันทึก measurements ใน');
     }
   }
 
@@ -235,12 +358,12 @@ export async function saveProject(): Promise<string> {
       .from('boq_items')
       .delete()
       .eq('project_id', projectId);
-    if (delErr) throw new Error(`ลบ BOQ เก่าไม่สำเร็จ: ${delErr.message}`);
+    if (delErr) throw wrapDbError(delErr, 'boq_items', 'ลบ');
 
     const boqRows = boq.items.map((it) => boqToRow(it, projectId));
     if (boqRows.length > 0) {
       const { error } = await client.from('boq_items').insert(boqRows);
-      if (error) throw new Error(`บันทึก BOQ ไม่สำเร็จ: ${error.message}`);
+      if (error) throw wrapDbError(error, 'boq_items', 'บันทึก');
     }
   }
 

@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { initDirtyTracking } from './stores/dirtyTracking';
 import './index.css';
 
@@ -12,6 +13,8 @@ initDirtyTracking();
 
 createRoot(rootEl).render(
   <StrictMode>
-    <App />
+    <ErrorBoundary scope="app">
+      <App />
+    </ErrorBoundary>
   </StrictMode>,
 );

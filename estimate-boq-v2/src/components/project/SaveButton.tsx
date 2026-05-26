@@ -4,7 +4,7 @@
 import { useState } from 'react';
 import { useCurrentProject } from '@/stores/currentProjectStore';
 import { useProjectMeta } from '@/stores/projectMetaStore';
-import { saveProject } from '@/services/projectSync';
+import { RLSError, saveProject } from '@/services/projectSync';
 import { isAuthBypassed } from '@/stores/authStore';
 import { isSupabaseConfigured } from '@/lib/supabase';
 
@@ -14,7 +14,7 @@ export function SaveButton() {
   const lastSaved = useCurrentProject((s) => s.lastSavedAt);
   const name = useProjectMeta((s) => s.name);
   const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
+  const [err, setErr] = useState<Error | null>(null);
 
   const disabled =
     !isSupabaseConfigured() || isAuthBypassed() || busy;
@@ -29,7 +29,9 @@ export function SaveButton() {
     try {
       await saveProject();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
+      const error = e instanceof Error ? e : new Error(String(e));
+      setErr(error);
+      console.error('[save] failed:', error);
     } finally {
       setBusy(false);
     }
@@ -60,16 +62,53 @@ export function SaveButton() {
       >
         {busy ? '⌛ บันทึก…' : dirty ? '💾 บันทึก•' : '💾 บันทึก'}
       </button>
-      {err && (
-        <div className="absolute right-0 top-full z-50 mt-1 w-72 rounded border border-danger/40 bg-bg-panel p-2 text-xs text-danger shadow-xl">
-          {err}
-          <button
-            type="button"
-            onClick={() => setErr(null)}
-            className="ml-2 text-ink-muted hover:text-ink-primary"
-          >
-            ✕
-          </button>
+      {err && <SaveErrorPopover error={err} onClose={() => setErr(null)} />}
+    </div>
+  );
+}
+
+function SaveErrorPopover({
+  error,
+  onClose,
+}: {
+  error: Error;
+  onClose: () => void;
+}) {
+  const isRls = error instanceof RLSError;
+  return (
+    <div className="absolute right-0 top-full z-50 mt-1 w-96 rounded border border-danger/40 bg-bg-panel p-3 text-xs shadow-xl">
+      <div className="mb-2 flex items-start justify-between gap-2">
+        <p className="font-semibold text-danger">
+          {isRls ? '🔒 RLS Policy บล็อกการบันทึก' : '⚠️ บันทึกไม่สำเร็จ'}
+        </p>
+        <button
+          type="button"
+          onClick={onClose}
+          className="flex-shrink-0 text-ink-muted hover:text-ink-primary"
+          aria-label="ปิด"
+        >
+          ✕
+        </button>
+      </div>
+      <pre className="whitespace-pre-wrap break-words text-[11px] leading-relaxed text-ink-secondary">
+        {error.message}
+      </pre>
+      {isRls && (
+        <div className="mt-2 space-y-1 border-t border-bg-border pt-2 text-[11px] text-ink-muted">
+          <p className="font-semibold text-ink-primary">วิธีแก้ (ทำตามลำดับ):</p>
+          <ol className="list-decimal space-y-0.5 pl-4">
+            <li>
+              เปิดไฟล์{' '}
+              <code className="rounded bg-bg-raised px-1">
+                supabase/fix-rls-policies.sql
+              </code>
+            </li>
+            <li>
+              ไปที่ Supabase Dashboard → SQL Editor → New query
+            </li>
+            <li>Copy เนื้อหา SQL ทั้งหมด → paste → กด Run</li>
+            <li>กลับมาที่นี่แล้วกด 💾 บันทึก อีกครั้ง</li>
+          </ol>
         </div>
       )}
     </div>
