@@ -1,7 +1,7 @@
 /**
  * แสดงรายการหน้าอ้างอิงที่เลือก + ปุ่มเปิด RefPageSelector
  */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useDrawingFiles, useDrawingStore } from '@/stores/drawingStore';
 import { useAIReferenceStore } from '@/stores/aiReferenceStore';
 import { RefPageSelector } from './RefPageSelector';
@@ -9,9 +9,17 @@ import { RefPageSelector } from './RefPageSelector';
 export function RefPagesBlock() {
   const refIds = useAIReferenceStore((s) => s.pageIds);
   const remove = useAIReferenceStore((s) => s.remove);
+  const pruneInvalid = useAIReferenceStore((s) => s.pruneInvalid);
   const allPages = useDrawingStore((s) => s.pages);
   const files = useDrawingFiles();
   const [showSelector, setShowSelector] = useState(false);
+
+  const validPageIds = useMemo(() => allPages.map((p) => p.id), [allPages]);
+
+  // prune ghost refs จาก localStorage เมื่อเปิด PDF/project ใหม่
+  useEffect(() => {
+    pruneInvalid(validPageIds);
+  }, [pruneInvalid, validPageIds]);
 
   const selected = useMemo(
     () =>
@@ -39,7 +47,7 @@ export function RefPagesBlock() {
           📋 หน้าอ้างอิง
           {selected.length > 0 && (
             <span className="rounded-full bg-accent-subtle px-1.5 text-[10px] text-accent">
-              {selected.length}/3
+              {selected.length}/4
             </span>
           )}
         </h4>

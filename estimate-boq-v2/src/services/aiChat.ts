@@ -20,17 +20,16 @@ import type {
 } from '@/types/ai';
 import { getSystemPromptForMode } from './aiPrompts';
 import {
-  callQwen,
+  callAI,
+  cleanJsonResponse,
   downsampleCanvasToDataUrl,
   tryParseAIResponse,
   type ChatContentPart,
   type ChatMessage,
 } from './aiAnalyze';
+import { getEngineConfig, type AIEngine } from './aiEngines';
 
 const HISTORY_TURN_LIMIT = 10; // เก็บ user+assistant รวม 10 ข้อความล่าสุด
-const TARGET_MAX_DIM = 1500;
-const TARGET_QUALITY = 0.85;
-
 const FOLLOWUP_SUFFIX = `\n\nคำแนะนำ:
 - ถ้าเป็นคำสั่งแก้ไข BOQ → ตอบเป็น JSON format เดิม (discipline/drawing_type/items/notes/unreadable) มี items[] ที่ถูกต้องตามคำสั่ง
 - ถ้าเป็นคำถามที่ไม่ต้องแก้ผล → ตอบเป็น JSON: {"answer": "<คำตอบภาษาไทย>"}
@@ -42,6 +41,7 @@ export interface SendChatOptions {
   targetBitmap: HTMLCanvasElement | null;
   referenceImages?: AIReferenceImage[];
   userMessage: string;
+  engine: AIEngine;
   hd?: boolean;
 }
 
@@ -56,6 +56,7 @@ const now = (): string => new Date().toISOString();
 
 export async function sendChatMessage(opts: SendChatOptions): Promise<SendChatResult> {
   const { analysis, conversation, targetBitmap, userMessage } = opts;
+  const config = getEngineConfig(opts.engine);
   const refs = opts.referenceImages ?? [];
 
   if (!targetBitmap) {
@@ -70,8 +71,8 @@ export async function sendChatMessage(opts: SendChatOptions): Promise<SendChatRe
 
   const targetImageDataUrl = downsampleCanvasToDataUrl(
     targetBitmap,
-    TARGET_MAX_DIM,
-    TARGET_QUALITY,
+    opts.hd ? config.maxImageDimHD : config.maxImageDim,
+    config.imageQuality,
   );
 
   // ─── Build messages array ─────────────────────────────────────────────
@@ -127,12 +128,14 @@ export async function sendChatMessage(opts: SendChatOptions): Promise<SendChatRe
     `[ai-chat] sending — turns: ${history.length}, refs: ${refs.length}`,
   );
   const start = Date.now();
-  const out = await callQwen(messages, opts.hd ?? false);
+  const out = await callAI(messages, opts.engine, opts.hd ?? false);
   console.info(
     `[ai-chat] reply — ${((Date.now() - start) / 1000).toFixed(1)}s, tokens ${out.tokens?.prompt_tokens ?? '?'}/${out.tokens?.completion_tokens ?? '?'}`,
   );
 
-  const parsed = tryParseAIResponse(out.text);
+  // ทำความสะอาด JSON ก่อน parse — กัน code fence หรือ text นอก JSON จาก AI
+  const cleaned = cleanJsonResponse(out.text);
+  const parsed = tryParseAIResponse(cleaned);
   let newResult: AIAnalysisResponse | undefined;
 
   // ตรวจว่าเป็นผลวิเคราะห์ใหม่ (มี items) หรือคำตอบ (answer only)

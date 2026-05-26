@@ -9,7 +9,7 @@
 import { create } from 'zustand';
 
 const STORAGE_KEY = 'boq:ai_ref_pages';
-const MAX_REF_PAGES = 3; // จำกัดเพื่อกัน token limit + timeout
+const MAX_REF_PAGES = 4; // จำกัดเพื่อกัน token limit + timeout
 
 function loadFromStorage(): string[] {
   if (typeof window === 'undefined') return [];
@@ -45,6 +45,8 @@ interface AIReferenceState {
   remove: (pageId: string) => void;
   clear: () => void;
   setAll: (ids: string[]) => void;
+  /** ลบ pageIds ที่ไม่อยู่ในชุด validIds (กัน localStorage ค้างจาก PDF เก่า) */
+  pruneInvalid: (validIds: string[]) => void;
   has: (pageId: string) => boolean;
 }
 
@@ -95,5 +97,14 @@ export const useAIReferenceStore = create<AIReferenceState>((set, get) => ({
     const trimmed = ids.slice(0, MAX_REF_PAGES);
     saveToStorage(trimmed);
     set({ pageIds: trimmed });
+  },
+
+  pruneInvalid: (validIds) => {
+    const valid = new Set(validIds);
+    const cur = get().pageIds;
+    const next = cur.filter((id) => valid.has(id));
+    if (next.length === cur.length) return;
+    saveToStorage(next);
+    set({ pageIds: next });
   },
 }));

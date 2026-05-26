@@ -1,3 +1,5 @@
+import type { AIEngine } from '@/services/aiEngines';
+
 /**
  * AI analysis types — 4 disciplines + 'auto' detect + rich item schema
  *
@@ -139,6 +141,8 @@ export type AIAnalysisStatus = 'idle' | 'pending' | 'success' | 'error';
 export interface AIAnalysis {
   id: string;
   pageId: string;
+  /** AI engine ที่ใช้เรียกจริง */
+  engine: AIEngine;
   /** mode ที่ user เลือก (อาจเป็น 'auto') */
   mode: AIMode;
   /** discipline จริงที่ใช้ — กรณี auto = ค่าที่ตรวจจับได้ */

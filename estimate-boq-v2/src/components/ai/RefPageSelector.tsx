@@ -1,7 +1,7 @@
 /**
  * Modal: เลือกหน้าอ้างอิง — แสดง thumbnail ทุกหน้า, click toggle
  */
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useDrawingFiles, useDrawingStore } from '@/stores/drawingStore';
 import { useAIReferenceStore } from '@/stores/aiReferenceStore';
 
@@ -15,7 +15,19 @@ export function RefPageSelector({ onClose }: Props) {
   const refIds = useAIReferenceStore((s) => s.pageIds);
   const toggle = useAIReferenceStore((s) => s.toggle);
   const clear = useAIReferenceStore((s) => s.clear);
+  const pruneInvalid = useAIReferenceStore((s) => s.pruneInvalid);
   const maxRef = useAIReferenceStore((s) => s.maxPages);
+
+  const validPageIds = useMemo(() => allPages.map((p) => p.id), [allPages]);
+  const validRefIds = useMemo(
+    () => refIds.filter((id) => validPageIds.includes(id)),
+    [refIds, validPageIds],
+  );
+
+  // กัน localStorage ค้างจาก PDF/project เก่า ทำให้ refIds เต็ม 3 แต่ไม่มีหน้าไหน selected จริง
+  useEffect(() => {
+    pruneInvalid(validPageIds);
+  }, [pruneInvalid, validPageIds]);
 
   /** group pages by file */
   const grouped = useMemo(() => {
@@ -64,7 +76,7 @@ export function RefPageSelector({ onClose }: Props) {
             </h3>
             <p className="text-[11px] text-ink-secondary">
               หน้าที่เลือกจะถูกส่งให้ AI ก่อนภาพหลัก — แนะนำหน้า "รายการวัสดุ/สัญลักษณ์"
-              ({refIds.length}/{maxRef} หน้า)
+              ({validRefIds.length}/{maxRef} หน้า)
             </p>
           </div>
           <button
@@ -85,14 +97,14 @@ export function RefPageSelector({ onClose }: Props) {
               </h4>
               <div className="grid grid-cols-4 gap-2 sm:grid-cols-5 md:grid-cols-6">
                 {pages.map((page) => {
-                  const isRef = refIds.includes(page.id);
+                  const isRef = validRefIds.includes(page.id);
                   const ratio = page.pageHeight / Math.max(1, page.pageWidth);
                   return (
                     <button
                       key={page.id}
                       type="button"
                       onClick={() => toggle(page.id)}
-                      disabled={!isRef && refIds.length >= maxRef}
+                      disabled={!isRef && validRefIds.length >= maxRef}
                       className={`flex flex-col gap-1 rounded border p-1.5 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
                         isRef
                           ? 'border-accent bg-accent-subtle/40 text-ink-primary'
@@ -130,7 +142,7 @@ export function RefPageSelector({ onClose }: Props) {
           <button
             type="button"
             onClick={clear}
-            disabled={refIds.length === 0}
+            disabled={validRefIds.length === 0}
             className="text-xs text-ink-muted hover:text-danger disabled:opacity-30"
           >
             🗑️ ล้างทั้งหมด
@@ -140,7 +152,7 @@ export function RefPageSelector({ onClose }: Props) {
             onClick={onClose}
             className="rounded bg-accent px-4 py-1.5 text-sm font-medium text-ink-inverse hover:bg-accent-hover"
           >
-            ✅ เสร็จ ({refIds.length})
+            ✅ เสร็จ ({validRefIds.length})
           </button>
         </div>
       </div>

@@ -12,7 +12,7 @@ import {
 } from '@/stores/aiStore';
 import { useAIReferenceStore } from '@/stores/aiReferenceStore';
 import { buildUserMessage, sendChatMessage } from '@/services/aiChat';
-import { buildReferenceImage } from '@/services/aiAnalyze';
+import { buildReferenceImage, cleanJsonResponse } from '@/services/aiAnalyze';
 import type { AIChatMessage, AIReferenceImage } from '@/types/ai';
 
 const EXAMPLES = [
@@ -30,6 +30,7 @@ export function AiChat() {
   const chatBusy = useAIStore(
     (s) => s.chatBusyAnalysisId === (latest?.id ?? '__none__'),
   );
+  const engine = useAIStore((s) => s.engine);
   const setChatBusy = useAIStore((s) => s.setChatBusy);
   const appendChatMessage = useAIStore((s) => s.appendChatMessage);
   const setChatMessageApplied = useAIStore((s) => s.setChatMessageApplied);
@@ -52,7 +53,7 @@ export function AiChat() {
   const referenceImages = useMemo<AIReferenceImage[]>(() => {
     if (refIds.length === 0) return [];
     const out: AIReferenceImage[] = [];
-    for (const id of refIds.slice(0, 3)) {
+    for (const id of refIds.slice(0, 4)) {
       const p = allPages.find((x) => x.id === id);
       if (!p || !p.bitmap) continue;
       const f = files.find((x) => x.id === p.fileId);
@@ -63,6 +64,7 @@ export function AiChat() {
             bitmap: p.bitmap,
             pageNum: p.pageNumber,
             label: f?.name ?? '—',
+            engine,
           }),
         );
       } catch (err) {
@@ -70,7 +72,7 @@ export function AiChat() {
       }
     }
     return out;
-  }, [refIds, allPages, files]);
+  }, [refIds, allPages, files, engine]);
 
   if (!latest || !latest.result) {
     return (
@@ -103,6 +105,7 @@ export function AiChat() {
         targetBitmap: page.bitmap,
         referenceImages,
         userMessage: text,
+        engine,
       });
       appendChatMessage(latest.id, res.assistantMessage);
     } catch (err) {
@@ -278,9 +281,7 @@ function ChatBubble({
 
 function extractAnswer(raw: string): string {
   try {
-    const m = raw.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
-    const txt = m ? m[1]! : raw;
-    const obj = JSON.parse(txt);
+    const obj = JSON.parse(cleanJsonResponse(raw));
     if (obj && typeof obj.answer === 'string') return obj.answer;
   } catch {
     // ignore

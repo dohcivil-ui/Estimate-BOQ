@@ -8,6 +8,11 @@ import {
   useSuggestionsForAnalysis,
 } from '@/stores/aiStore';
 import { DISCIPLINE_LABELS } from '@/types/ai';
+import {
+  getEngineConfig,
+  isAIEngine,
+  type AIEngine,
+} from '@/services/aiEngines';
 import { AnalyzeButton } from './AnalyzeButton';
 import { AIElementsTable } from './AIElementsTable';
 import { RefPagesBlock } from './RefPagesBlock';
@@ -51,6 +56,7 @@ export function AIPanel() {
                 buildingInfo={latest.result.building_info}
                 mode={latest.mode}
                 detected={latest.detected?.detected_discipline}
+                engine={latest.engine}
               />
               <AIElementsTable suggestions={suggestions} />
               {(latest.result.notes?.length ?? 0) > 0 && (
@@ -117,6 +123,17 @@ function StatusBlock() {
       <div className="rounded border border-success/40 bg-success/10 p-2 text-[11px] text-ink-secondary">
         <p className="text-success">✅ วิเคราะห์เสร็จ</p>
         <p className="mt-0.5">
+          {(() => {
+            const engine = getEngineConfig(latest.engine);
+            return (
+              <>
+                <span className="font-semibold text-ink-primary">
+                  {engine.icon} {engine.label}
+                </span>
+                {' · '}
+              </>
+            );
+          })()}
           model: <span className="font-mono">{latest.model}</span>
           {latest.elapsedMs != null && (
             <>
@@ -155,6 +172,7 @@ function SummaryBlock({
   buildingInfo,
   mode,
   detected,
+  engine,
 }: {
   summary: string;
   pageType: string;
@@ -168,12 +186,20 @@ function SummaryBlock({
   };
   mode: string;
   detected?: string;
+  engine?: AIEngine;
 }) {
+  const engineLabel = (() => {
+    if (engine && isAIEngine(engine)) {
+      const config = getEngineConfig(engine);
+      return `${config.icon} ${config.label}`;
+    }
+    return '🤖 AI';
+  })();
   return (
     <div className="rounded border border-bg-border bg-bg-raised p-2 text-xs">
       <div className="mb-1 flex flex-wrap items-center gap-2 text-[10px] text-ink-muted">
         <span className="rounded bg-accent-subtle px-1.5 py-0.5 text-accent">
-          {DISCIPLINE_LABELS[discipline]}
+          {engineLabel} — {DISCIPLINE_LABELS[discipline]}
         </span>
         {mode === 'auto' && detected && (
           <span className="text-ink-muted">

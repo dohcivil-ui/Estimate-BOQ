@@ -15,6 +15,39 @@ import type {
   AISuggestion,
   AISuggestionStatus,
 } from '@/types/ai';
+import {
+  getDefaultEngine,
+  isAIEngine,
+  migrateLegacyEngineId,
+  type AIEngine,
+} from '@/services/aiEngines';
+
+const ENGINE_STORAGE_KEY = 'boq:ai_engine';
+
+function loadEngine(): AIEngine {
+  if (typeof window === 'undefined') return getDefaultEngine();
+  const raw = window.localStorage.getItem(ENGINE_STORAGE_KEY);
+  if (isAIEngine(raw)) return raw;
+  // migrate id เก่า เช่น 'gemini' → 'gemini-flash'
+  const migrated = migrateLegacyEngineId(raw);
+  if (migrated) {
+    try {
+      window.localStorage.setItem(ENGINE_STORAGE_KEY, migrated);
+    } catch {
+      // ignore
+    }
+    return migrated;
+  }
+  return getDefaultEngine();
+}
+
+function saveEngine(engine: AIEngine): void {
+  try {
+    window.localStorage.setItem(ENGINE_STORAGE_KEY, engine);
+  } catch {
+    // ignore storage errors
+  }
+}
 
 interface AIState {
   analyses: AIAnalysis[];
@@ -23,8 +56,15 @@ interface AIState {
   busyPageId: string | null;
   /** กำลังส่ง chat อยู่หรือเปล่า (per analysisId) */
   chatBusyAnalysisId: string | null;
+  engine: AIEngine;
+  setEngine: (engine: AIEngine) => void;
 
-  startAnalyze: (pageId: string, hd: boolean, mode: AIMode) => string;
+  startAnalyze: (
+    pageId: string,
+    hd: boolean,
+    mode: AIMode,
+    engine: AIEngine,
+  ) => string;
   completeAnalyze: (
     analysisId: string,
     discipline: AIDiscipline,
@@ -62,8 +102,14 @@ export const useAIStore = create<AIState>((set) => ({
   conversations: [],
   busyPageId: null,
   chatBusyAnalysisId: null,
+  engine: loadEngine(),
 
-  startAnalyze: (pageId, hd, mode) => {
+  setEngine: (engine) => {
+    saveEngine(engine);
+    set({ engine });
+  },
+
+  startAnalyze: (pageId, hd, mode, engine) => {
     const id = uid();
     set((s) => ({
       busyPageId: pageId,
@@ -72,6 +118,7 @@ export const useAIStore = create<AIState>((set) => ({
         {
           id,
           pageId,
+          engine,
           mode,
           // discipline ชั่วคราว ใช้ mode ถ้าไม่ใช่ auto, ไม่งั้น default = 'structural'
           // จะถูก overwrite ใน completeAnalyze
@@ -256,6 +303,7 @@ export const useAIStore = create<AIState>((set) => ({
       conversations: [],
       busyPageId: null,
       chatBusyAnalysisId: null,
+      engine: loadEngine(),
     }),
 }));
 

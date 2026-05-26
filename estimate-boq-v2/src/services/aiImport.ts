@@ -21,6 +21,7 @@
  * }
  */
 import type { AIImportPayload, BOQItem } from '@/types/boq';
+import { cleanJsonResponse } from './aiAnalyze';
 
 export class AIImportError extends Error {
   constructor(message: string) {
@@ -29,14 +30,12 @@ export class AIImportError extends Error {
   }
 }
 
-/** parse + validate (loose) — แยก code-fence ออกถ้ามี */
+/** parse + validate (loose) — ใช้ cleanJsonResponse ก่อนเสมอ */
 export function parseAIPayload(raw: string): AIImportPayload {
-  let txt = raw.trim();
-  if (!txt) throw new AIImportError('โปรดวาง JSON ก่อน');
+  const trimmed = raw.trim();
+  if (!trimmed) throw new AIImportError('โปรดวาง JSON ก่อน');
 
-  // strip markdown code fence: ```json ... ```
-  const fenceMatch = txt.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
-  if (fenceMatch) txt = fenceMatch[1]!;
+  const txt = cleanJsonResponse(trimmed);
 
   let parsed: unknown;
   try {

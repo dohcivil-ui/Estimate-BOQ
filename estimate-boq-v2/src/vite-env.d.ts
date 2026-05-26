@@ -9,6 +9,11 @@ interface ImportMetaEnv {
   readonly VITE_QWEN_API_KEY_DEV?: string;
   readonly VITE_QWEN_ENDPOINT_DEV?: string;
   readonly VITE_QWEN_MODEL_DEV?: string;
+  /** Google AI Studio — เปิด gemini-pro + gemini-flash */
+  readonly VITE_GEMINI_API_KEY?: string;
+  readonly VITE_GEMINI_ENDPOINT?: string;
+  /** OpenRouter — เปิด claude + gpt4o (1 key, 2 engine) */
+  readonly VITE_OPENROUTER_API_KEY?: string;
 }
 
 interface ImportMeta {

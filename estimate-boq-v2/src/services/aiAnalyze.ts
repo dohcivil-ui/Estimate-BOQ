@@ -1,5 +1,5 @@
 /**
- * AI วิเคราะห์แบบ — Qwen via Edge Function หรือ DEV-DIRECT
+ * AI วิเคราะห์แบบ — Gemini/Qwen via Edge Function หรือ DEV-DIRECT
  *
  * รองรับ:
  *   - 5 mode (architectural/structural/electrical/sanitary/auto)
@@ -9,8 +9,7 @@
  *   - messages array แบบ OpenAI-compat (system + user image+text + ...)
  *
  * Resize:
- *   - target: 1500px (ปกติ) / 2400px (HD) @ jpeg 0.85
- *   - reference: 1000px @ jpeg 0.70 (ประหยัด token)
+ *   - target/reference ใช้ค่าจาก aiEngines.ts ตาม engine ที่เลือก
  */
 import { getSupabase } from '@/lib/supabase';
 import type {
@@ -25,13 +24,7 @@ import {
   getSystemPromptForMode,
   getUserPromptForDiscipline,
 } from './aiPrompts';
-
-const TARGET_MAX_DIM = 1500;
-const TARGET_HD_MAX_DIM = 2400;
-const TARGET_QUALITY = 0.85;
-const REF_MAX_DIM = 1000;
-const REF_QUALITY = 0.7;
-const TIMEOUT_MS = 120_000;
+import { getEngineConfig, type AIEngine } from './aiEngines';
 
 // ─── Progress stage messages (เวลาเป็น ms) ──────────────────────────────
 const PROGRESS_STAGES: Array<{ at: number; msg: string }> = [
@@ -47,9 +40,10 @@ export type ProgressCallback = (msg: string) => void;
 export interface AnalyzeOptions {
   pageId: string;
   bitmap: HTMLCanvasElement;
+  engine: AIEngine;
   mode: AIMode;
   hd?: boolean;
-  /** ภาพอ้างอิง (รายการวัสดุ/สัญลักษณ์/รายละเอียดทั่วไป) — สูงสุด 3 หน้า */
+  /** ภาพอ้างอิง (รายการวัสดุ/สัญลักษณ์/รายละเอียดทั่วไป) — สูงสุด 4 หน้า */
   referenceImages?: AIReferenceImage[];
   /** callback อัปเดต UI ระหว่างรอ */
   onProgress?: ProgressCallback;
@@ -61,6 +55,7 @@ export interface AnalyzeResult {
   result: AIAnalysisResponse;
   raw: string;
   model: string;
+  engine: AIEngine;
   elapsedMs: number;
   tokens?: { prompt_tokens?: number; completion_tokens?: number };
   detected?: AIDetectResult;
@@ -84,7 +79,7 @@ export class AutoDetectFailed extends Error {
 export function downsampleCanvasToDataUrl(
   canvas: HTMLCanvasElement,
   maxDim: number,
-  quality = TARGET_QUALITY,
+  quality = 0.85,
 ): string {
   const scale = Math.min(maxDim / canvas.width, maxDim / canvas.height, 1);
   if (scale >= 1) return canvas.toDataURL('image/jpeg', quality);
@@ -107,38 +102,154 @@ export function buildReferenceImage(opts: {
   bitmap: HTMLCanvasElement;
   pageNum: number;
   label: string;
+  engine: AIEngine;
 }): AIReferenceImage {
+  const config = getEngineConfig(opts.engine);
   return {
     pageId: opts.pageId,
     pageNum: opts.pageNum,
     label: opts.label,
-    dataUrl: downsampleCanvasToDataUrl(opts.bitmap, REF_MAX_DIM, REF_QUALITY),
+    dataUrl: downsampleCanvasToDataUrl(
+      opts.bitmap,
+      config.refImageDim,
+      config.refImageQuality,
+    ),
   };
 }
 
-function tryParseJSON(text: string): unknown | null {
+/**
+ * ทำความสะอาด text จาก AI ก่อน JSON.parse
+ *  - ตัด whitespace นอก
+ *  - ลอก markdown code fence (```json ... ``` หรือ ``` ... ```)
+ *  - ถ้ายังมี prefix/suffix ที่ไม่ใช่ JSON ให้เฉือนระหว่าง { ตัวแรก ... } ตัวสุดท้าย
+ *
+ * export ออกมาเพื่อให้ aiChat.ts (และ caller อื่น) import ใช้ก่อน JSON.parse ได้
+ */
+export function cleanJsonResponse(text: string): string {
   let s = text.trim();
-  const fence = s.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
-  if (fence) s = fence[1]!;
+
+  const fenceMatch = s.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/i);
+  if (fenceMatch) {
+    s = fenceMatch[1]!.trim();
+  } else {
+    s = s
+      .replace(/^```(?:json)?\s*\n?/i, '')
+      .replace(/\n?```\s*$/i, '')
+      .trim();
+  }
+
+  if (s.toLowerCase().startsWith('json\n')) {
+    s = s.slice(5).trim();
+  }
+
+  const start = s.indexOf('{');
+  const end = s.lastIndexOf('}');
+  if (start !== -1 && end !== -1 && end > start) {
+    s = s.substring(start, end + 1);
+  }
+
+  return s;
+}
+
+function tryJsonParse(text: string): unknown | null {
   try {
-    return JSON.parse(s);
+    return JSON.parse(text);
   } catch {
-    const first = s.indexOf('{');
-    const last = s.lastIndexOf('}');
-    if (first !== -1 && last !== -1 && last > first) {
-      try {
-        return JSON.parse(s.slice(first, last + 1));
-      } catch {
-        return null;
-      }
-    }
     return null;
   }
+}
+
+function extractFirstBalancedJSON(text: string): string | null {
+  const starts = [text.indexOf('{'), text.indexOf('[')].filter((x) => x >= 0);
+  if (starts.length === 0) return null;
+  const start = Math.min(...starts);
+
+  const stack: string[] = [];
+  let inString = false;
+  let escaped = false;
+
+  for (let i = start; i < text.length; i += 1) {
+    const ch = text[i]!;
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (ch === '\\') {
+        escaped = true;
+        continue;
+      }
+      if (ch === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
+    if (ch === '{' || ch === '[') {
+      stack.push(ch);
+      continue;
+    }
+    if (ch === '}' || ch === ']') {
+      const top = stack[stack.length - 1];
+      if (!top) return null;
+      if ((ch === '}' && top !== '{') || (ch === ']' && top !== '[')) {
+        return null;
+      }
+      stack.pop();
+      if (stack.length === 0) {
+        return text.slice(start, i + 1);
+      }
+    }
+  }
+
+  return null;
+}
+
+function looksLikeTruncatedJSON(text: string): boolean {
+  const s = cleanJsonResponse(text);
+  if (!s.includes('{') && !s.includes('[')) return false;
+  return extractFirstBalancedJSON(s) === null;
+}
+
+function tryParseJSON(text: string): unknown | null {
+  const normalized = cleanJsonResponse(text);
+
+  const direct = tryJsonParse(normalized);
+  if (direct !== null) {
+    // บาง engine ส่ง JSON ซ้อนเป็น string อีกชั้น
+    if (typeof direct === 'string') {
+      const nested = tryJsonParse(cleanJsonResponse(direct));
+      if (nested !== null) return nested;
+    }
+    return direct;
+  }
+
+  // กรณี JSON ถูก truncate — ตัดเอาเฉพาะ object แรกที่ balanced
+  const balanced = extractFirstBalancedJSON(normalized);
+  if (balanced) {
+    const parsed = tryJsonParse(balanced);
+    if (parsed !== null) return parsed;
+  }
+
+  return null;
 }
 
 export function tryParseAIResponse(text: string): unknown | null {
   return tryParseJSON(text);
 }
+
+const JSON_RETRY_PROMPT = `⚠️ คำตอบก่อนหน้าไม่เป็น JSON ที่ parse ได้ หรือถูกตัดกลางทาง
+
+ตอบใหม่ทั้งหมดให้เป็น JSON object เดียวที่สมบูรณ์และปิดวงเล็บครบ โดย:
+- กระชับสุด ๆ ไม่ต้องอธิบาย description ยาว
+- จำกัด items[] ไม่เกิน 25 รายการ (รวม category ที่ใกล้กันให้เป็น item เดียว)
+- เก็บแต่ฟิลด์สำคัญ: category, name, quantity, unit, source, confidence
+- ละ materials[]/sub_items[]/accessories[]/labor ที่ซับซ้อนหรือซ้ำ ๆ ออกไป (เก็บไว้แค่อันที่จำเป็น)
+- ห้ามมี markdown code fence หรือข้อความนอก JSON`;
 
 // ═══════════════════════════════════════════════════════════════════════
 // Progress watcher
@@ -175,20 +286,78 @@ export type ChatMessage =
   | { role: 'system'; content: string }
   | { role: 'user' | 'assistant'; content: string | ChatContentPart[] };
 
+async function callAIExpectingJSONObject(opts: {
+  messages: ChatMessage[];
+  engine: AIEngine;
+  hd: boolean;
+  onProgress?: ProgressCallback;
+  retryMessage?: string;
+  phaseLabel: 'detect' | 'analyze';
+}): Promise<{ parsed: Record<string, unknown>; out: AICallResult }> {
+  const config = getEngineConfig(opts.engine);
+
+  let out = await callAI(opts.messages, opts.engine, opts.hd, {
+    outputTokens: config.maxOutputTokens,
+  });
+  let parsed = tryParseJSON(out.text);
+  if (parsed && typeof parsed === 'object') {
+    return { parsed: parsed as Record<string, unknown>, out };
+  }
+
+  // วินิจฉัยสาเหตุที่ parse ไม่ผ่าน → เลือก retry strategy ที่เหมาะสม
+  const truncated =
+    out.finishReason === 'length' || looksLikeTruncatedJSON(out.text);
+  const retryNote = truncated
+    ? '🔁 คำตอบโดน max_tokens ตัด — ขอ AI ตอบใหม่แบบกระชับ...'
+    : '🔁 AI กำลังจัดรูปแบบ JSON ใหม่...';
+  opts.onProgress?.(retryNote);
+
+  const retryMessages: ChatMessage[] = [
+    ...opts.messages,
+    { role: 'user', content: opts.retryMessage ?? JSON_RETRY_PROMPT },
+  ];
+  out = await callAI(retryMessages, opts.engine, opts.hd, {
+    outputTokens: config.retryMaxOutputTokens,
+  });
+  parsed = tryParseJSON(out.text);
+  if (parsed && typeof parsed === 'object') {
+    return { parsed: parsed as Record<string, unknown>, out };
+  }
+
+  // ยังไม่ผ่าน — โยน error พร้อมข้อมูล diagnostic
+  const reason = out.finishReason ? ` (finish_reason=${out.finishReason})` : '';
+  const truncHint =
+    out.finishReason === 'length' || looksLikeTruncatedJSON(out.text)
+      ? ' คำตอบถูกตัดกลางทาง — ลองปิด HD หรือลดจำนวนหน้าอ้างอิง'
+      : '';
+  const prefix = opts.phaseLabel === 'detect' ? 'AI detect' : 'AI';
+  throw new Error(
+    `${prefix} ตอบไม่ใช่ JSON ที่ถูกต้อง${reason}.${truncHint}\nตัวอย่าง: ${out.text.slice(0, 350)}`,
+  );
+}
+
 // ═══════════════════════════════════════════════════════════════════════
 // MAIN — analyzePage
 // ═══════════════════════════════════════════════════════════════════════
 
 export async function analyzePage(opts: AnalyzeOptions): Promise<AnalyzeResult> {
-  const maxDim = opts.hd ? TARGET_HD_MAX_DIM : TARGET_MAX_DIM;
-  const targetImageDataUrl = downsampleCanvasToDataUrl(opts.bitmap, maxDim);
-  const refs = opts.referenceImages?.slice(0, 3) ?? [];
+  const config = getEngineConfig(opts.engine);
+  const maxDim = opts.hd ? config.maxImageDimHD : config.maxImageDim;
+  const targetImageDataUrl = downsampleCanvasToDataUrl(
+    opts.bitmap,
+    maxDim,
+    config.imageQuality,
+  );
+  const refs = opts.referenceImages?.slice(0, 4) ?? [];
 
   let activeDiscipline: AIDiscipline;
   let detected: AIDetectResult | undefined;
 
   // ─── auto detect path ───────────────────────────────────────────────
   if (opts.mode === 'auto') {
+    console.info(
+      `[ai] Engine: ${config.label} | Mode: auto | HD: ${opts.hd ?? false}`,
+    );
     console.info('[ai] mode=auto — กำลังตรวจจับประเภทแบบ…');
     const detectStart = Date.now();
     const detectMessages: ChatMessage[] = [
@@ -201,14 +370,15 @@ export async function analyzePage(opts: AnalyzeOptions): Promise<AnalyzeResult> 
         ],
       },
     ];
-    const detectRes = await callQwen(detectMessages, opts.hd ?? false);
-    const parsed = tryParseJSON(detectRes.text);
-    if (!parsed || typeof parsed !== 'object') {
-      throw new Error(
-        `AI detect ตอบไม่ใช่ JSON ที่ถูกต้อง: ${detectRes.text.slice(0, 200)}`,
-      );
-    }
-    detected = parsed as AIDetectResult;
+    const detectOut = await callAIExpectingJSONObject({
+      messages: detectMessages,
+      engine: opts.engine,
+      hd: opts.hd ?? false,
+      phaseLabel: 'detect',
+      retryMessage:
+        'คำตอบก่อนหน้า parse ไม่ได้ กรุณาตอบใหม่เป็น JSON object เดียวตาม schema detect',
+    });
+    detected = detectOut.parsed as unknown as AIDetectResult;
     console.info(
       `[ai] detect = ${detected.detected_discipline} (confidence: ${detected.confidence}) — ${((Date.now() - detectStart) / 1000).toFixed(1)}s`,
     );
@@ -225,7 +395,7 @@ export async function analyzePage(opts: AnalyzeOptions): Promise<AnalyzeResult> 
 
   // ─── full analyze ─────────────────────────────────────────────────────
   console.info(
-    `[ai] วิเคราะห์ discipline=${activeDiscipline} hd=${opts.hd ?? false} refs=${refs.length}`,
+    `[ai] Engine: ${config.label} | Mode: ${activeDiscipline} | HD: ${opts.hd ?? false} | refs=${refs.length}`,
   );
   const start = Date.now();
 
@@ -235,30 +405,36 @@ export async function analyzePage(opts: AnalyzeOptions): Promise<AnalyzeResult> 
     refs,
   );
   const out = await runWithProgress(
-    () => callQwen(messages, opts.hd ?? false),
+    () =>
+      callAIExpectingJSONObject({
+        messages,
+        engine: opts.engine,
+        hd: opts.hd ?? false,
+        onProgress: opts.onProgress,
+        phaseLabel: 'analyze',
+      }),
     opts.onProgress,
   );
 
-  const parsed = tryParseJSON(out.text);
-  if (!parsed || typeof parsed !== 'object') {
-    throw new Error(`AI ตอบไม่ใช่ JSON: ${out.text.slice(0, 200)}…`);
-  }
-  const result = parsed as AIAnalysisResponse;
+  const result = out.parsed as unknown as AIAnalysisResponse;
   result.discipline = activeDiscipline;
   if (!Array.isArray(result.items)) result.items = [];
 
   const elapsedMs = Date.now() - start;
+  const costStr =
+    out.out.costUsd != null ? ` | cost: $${out.out.costUsd.toFixed(4)}` : '';
   console.info(
-    `[ai] วิเคราะห์เสร็จ — items: ${result.items.length}, tokens: ${out.tokens?.prompt_tokens ?? '?'}/${out.tokens?.completion_tokens ?? '?'}, ${(elapsedMs / 1000).toFixed(1)}s`,
+    `[ai] ✅ วิเคราะห์เสร็จ — items: ${result.items.length} | tokens: ${fmtTokens(out.out.tokens?.prompt_tokens)}/${fmtTokens(out.out.tokens?.completion_tokens)} | ${(elapsedMs / 1000).toFixed(1)}s${costStr}`,
   );
 
   return {
     discipline: activeDiscipline,
     result,
-    raw: out.text,
-    model: out.model,
+    raw: out.out.text,
+    model: out.out.model,
+    engine: opts.engine,
     elapsedMs,
-    tokens: out.tokens,
+    tokens: out.out.tokens,
     detected,
   };
 }
@@ -314,33 +490,38 @@ export function buildAnalyzeMessages(
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// callQwen — รับ messages array แบบ OpenAI-compat
+// callAI — รับ messages array แบบ OpenAI-compat
 // ═══════════════════════════════════════════════════════════════════════
 
-interface QwenCallResult {
+interface AICallResult {
   text: string;
   model: string;
   tokens?: { prompt_tokens?: number; completion_tokens?: number };
+  finishReason?: string;
+  /** ค่าใช้จ่ายต่อ request เป็น USD (ถ้ารู้) — ปัจจุบันรองรับ OpenRouter ผ่าน header x-openrouter-cost */
+  costUsd?: number;
 }
 
-export async function callQwen(
+interface CallAIOptions {
+  outputTokens?: number;
+}
+
+export async function callAI(
   messages: ChatMessage[],
+  engine: AIEngine,
   hd: boolean,
-): Promise<QwenCallResult> {
-  // dev-direct (insecure) — เปิดใช้เมื่อมี VITE_QWEN_API_KEY_DEV
-  const devKey = import.meta.env.VITE_QWEN_API_KEY_DEV as string | undefined;
-  if (devKey && devKey.trim() && !devKey.includes('your-key-here')) {
-    console.warn(
-      '[ai] ⚠️ DEV-DIRECT mode active — VITE_QWEN_API_KEY_DEV exposed in browser!',
-    );
-    return callQwenDirect(messages, hd, devKey);
+  options: CallAIOptions = {},
+): Promise<AICallResult> {
+  const config = getEngineConfig(engine);
+  if (config.apiKey.trim()) {
+    return callAIDirect(messages, engine, hd, options);
   }
 
-  // Edge Function path: ส่ง messages array ผ่าน body
+  // Edge Function path: ส่ง messages array ผ่าน body (fallback ถ้าไม่ได้ใส่ browser key)
   const client = getSupabase();
   if (!client) {
     throw new Error(
-      'Supabase ยังไม่ได้ตั้งค่า — ตั้ง .env.local + deploy Edge Function ตาม docs/SUPABASE_SETUP.md',
+      `ยังไม่ได้ตั้ง API key ของ ${config.label} ใน .env.local และยังไม่มี Supabase Edge Function`,
     );
   }
 
@@ -353,6 +534,7 @@ export async function callQwen(
       imageDataUrl: fallback.imageDataUrl,
       prompt: fallback.prompt,
       hd,
+      engine,
       // ถ้า Edge fn รุ่นใหม่รองรับ messages array จะใช้ field นี้
       messages,
     },
@@ -370,51 +552,184 @@ export async function callQwen(
   }
   const ok = data as {
     raw: string;
-    meta: { model: string; tokens?: QwenCallResult['tokens'] };
+    meta: { model: string; tokens?: AICallResult['tokens'] };
   };
   return { text: ok.raw, model: ok.meta.model, tokens: ok.meta.tokens };
 }
 
-async function callQwenDirect(
+/** อ่าน cost จาก response header (รองรับหลายชื่อ — OpenRouter ใช้ x-openrouter-cost) */
+function parseCostHeader(headers: Headers): number | undefined {
+  const candidates = [
+    'x-openrouter-cost',
+    'openrouter-cost',
+    'x-cost-usd',
+    'x-stainless-cost',
+  ];
+  for (const name of candidates) {
+    const raw = headers.get(name);
+    if (raw == null) continue;
+    const n = Number(raw);
+    if (Number.isFinite(n)) return n;
+  }
+  return undefined;
+}
+
+const tokenFmt = new Intl.NumberFormat('en-US');
+function fmtTokens(n?: number): string {
+  if (n == null || !Number.isFinite(n)) return '?';
+  return tokenFmt.format(n);
+}
+
+/** Log การใช้ token + cost ของ AI call เพื่อ debug/ติดตามค่าใช้จ่าย */
+function logUsage(opts: {
+  engine: AIEngine;
+  promptTokens?: number;
+  completionTokens?: number;
+  finishReason?: string;
+  costUsd?: number;
+}): void {
+  const config = getEngineConfig(opts.engine);
+  console.info(
+    `[ai] ${config.icon} ${config.label} — input: ${fmtTokens(opts.promptTokens)} tokens, output: ${fmtTokens(opts.completionTokens)} tokens | finish_reason: ${opts.finishReason ?? '-'}`,
+  );
+  if (opts.costUsd != null) {
+    console.info(`[ai] 💰 Cost: $${opts.costUsd.toFixed(4)}`);
+  }
+}
+
+function extractAssistantText(payload: unknown): string {
+  if (!payload || typeof payload !== 'object') return '';
+  const obj = payload as Record<string, unknown>;
+  const choices = obj.choices;
+  if (Array.isArray(choices) && choices.length > 0) {
+    const first = choices[0] as Record<string, unknown>;
+    const msg = first?.message as Record<string, unknown> | undefined;
+    const content = msg?.content;
+    if (typeof content === 'string') return content;
+    if (Array.isArray(content)) {
+      const parts = content
+        .map((part) => {
+          if (typeof part === 'string') return part;
+          if (!part || typeof part !== 'object') return '';
+          const p = part as Record<string, unknown>;
+          const t = p.text;
+          return typeof t === 'string' ? t : '';
+        })
+        .filter(Boolean);
+      if (parts.length > 0) return parts.join('\n');
+    }
+  }
+  const candidates = obj.candidates;
+  if (Array.isArray(candidates) && candidates.length > 0) {
+    const content = (candidates[0] as Record<string, unknown>).content as
+      | Record<string, unknown>
+      | undefined;
+    const parts = content?.parts;
+    if (Array.isArray(parts)) {
+      const text = parts
+        .map((part) => {
+          if (!part || typeof part !== 'object') return '';
+          const t = (part as Record<string, unknown>).text;
+          return typeof t === 'string' ? t : '';
+        })
+        .filter(Boolean)
+        .join('\n');
+      if (text) return text;
+    }
+  }
+  return '';
+}
+
+async function callAIDirect(
   messages: ChatMessage[],
+  engine: AIEngine,
   hd: boolean,
-  apiKey: string,
-): Promise<QwenCallResult> {
-  const endpoint =
-    (import.meta.env.VITE_QWEN_ENDPOINT_DEV as string | undefined) ??
-    'https://dashscope-intl.aliyuncs.com/compatible-mode/v1';
-  const model =
-    (import.meta.env.VITE_QWEN_MODEL_DEV as string | undefined) ??
-    (hd ? 'qwen-vl-max' : 'qwen3.5-flash');
+  options: CallAIOptions = {},
+): Promise<AICallResult> {
+  const config = getEngineConfig(engine);
+  const outputTokens = options.outputTokens ?? config.maxOutputTokens;
 
   // เก็บสถิติ
   const totalChars = estimatePromptChars(messages);
-  console.info(`[ai] prompt total chars: ${totalChars}`);
+  console.info(
+    `[ai] ${config.label} | HD: ${hd} | prompt total chars: ${totalChars} | max_tokens: ${outputTokens}`,
+  );
+
+  // OpenRouter รองรับ `usage: { include: true }` → คืน cost ใน body (usage.cost)
+  // ตรวจจาก endpoint เพื่อเปิดเฉพาะ request ที่ผ่าน OpenRouter
+  const isOpenRouter = config.endpoint.includes('openrouter.ai');
 
   const ctrl = new AbortController();
-  const timeoutId = window.setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+  const timeoutId = window.setTimeout(() => ctrl.abort(), config.timeoutMs);
 
   try {
-    const res = await fetch(`${endpoint}/chat/completions`, {
+    const requestBody: Record<string, unknown> = {
+      model: config.model,
+      messages,
+      max_tokens: outputTokens,
+      temperature: 0.1,
+      response_format: { type: 'json_object' },
+    };
+    if (isOpenRouter) {
+      requestBody.usage = { include: true };
+    }
+
+    const res = await fetch(config.endpoint, {
       method: 'POST',
       signal: ctrl.signal,
       headers: {
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: `Bearer ${config.apiKey}`,
         'Content-Type': 'application/json',
+        ...(config.extraHeaders ?? {}),
       },
-      body: JSON.stringify({
-        model,
-        messages,
-        response_format: { type: 'json_object' },
-      }),
+      body: JSON.stringify(requestBody),
     });
     if (!res.ok) {
       const txt = await res.text();
-      throw new Error(`Qwen API ${res.status}: ${txt.slice(0, 500)}`);
+      throw new Error(`${config.label} error ${res.status}: ${txt.slice(0, 500)}`);
     }
-    const json = await res.json();
-    const text = json.choices?.[0]?.message?.content ?? '';
-    return { text, model, tokens: json.usage };
+    // อ่าน cost จาก header ก่อน (อาจถูก expose หรือไม่ก็ได้)
+    const costFromHeader = parseCostHeader(res.headers);
+
+    const json = (await res.json()) as Record<string, unknown>;
+    const text = extractAssistantText(json);
+    const finishReason =
+      Array.isArray(json.choices) && json.choices.length > 0
+        ? (((json.choices[0] as Record<string, unknown>)
+            ?.finish_reason as string | undefined) ??
+          undefined)
+        : undefined;
+    const usage = json.usage as
+      | {
+          prompt_tokens?: number;
+          completion_tokens?: number;
+          cost?: number;
+        }
+      | undefined;
+
+    // OpenRouter ส่ง cost (USD) มาใน usage.cost เมื่อขอ `usage: { include: true }`
+    // ใช้ body ก่อน fallback ไป header
+    const costFromBody =
+      typeof usage?.cost === 'number' && Number.isFinite(usage.cost)
+        ? usage.cost
+        : undefined;
+    const costUsd = costFromBody ?? costFromHeader;
+
+    logUsage({
+      engine,
+      promptTokens: usage?.prompt_tokens,
+      completionTokens: usage?.completion_tokens,
+      finishReason,
+      costUsd,
+    });
+
+    return {
+      text,
+      model: config.model,
+      tokens: usage,
+      finishReason,
+      costUsd,
+    };
   } catch (err) {
     if (err instanceof Error && err.name === 'AbortError') {
       throw new Error(
