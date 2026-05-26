@@ -22,3 +22,6 @@ pnpm-debug.log*
 
 # build artifacts
 *.tsbuildinfo
+
+# cursor prompt instruction files
+CURSOR-PROMPT-*.md
