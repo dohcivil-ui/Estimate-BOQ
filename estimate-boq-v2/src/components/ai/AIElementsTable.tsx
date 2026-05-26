@@ -15,6 +15,9 @@ const CONFIDENCE_STYLE: Record<AIConfidence, { text: string; color: string }> = 
   high: { text: '● มั่นใจสูง', color: 'text-success bg-success/10 border-success/30' },
   medium: { text: '● ปานกลาง', color: 'text-warning bg-warning/10 border-warning/30' },
   low: { text: '● ต่ำ — ตรวจ', color: 'text-danger bg-danger/10 border-danger/30' },
+  measured: { text: '● วัดจากแบบ', color: 'text-success bg-success/10 border-success/30' },
+  calculated: { text: '● คำนวณ', color: 'text-accent bg-accent/10 border-accent/30' },
+  estimated: { text: '● ประมาณ', color: 'text-warning bg-warning/10 border-warning/30' },
 };
 
 /** safe number for rendering — กัน NaN/undefined ทำ render crash */

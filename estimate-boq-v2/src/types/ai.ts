@@ -23,8 +23,20 @@ export type DisciplineMode = AIDiscipline;
 /** mode ที่เลือกใน UI — รวม 'auto' (ตรวจจับจาก AI ก่อน) */
 export type AIMode = AIDiscipline | 'auto';
 
-/** ความมั่นใจในการอ่าน */
-export type AIConfidence = 'high' | 'medium' | 'low';
+/**
+ * ความมั่นใจ/ที่มาของค่าใน item
+ * - high/medium/low: ระดับความมั่นใจเดิม (ยังใช้กับ auto-detect)
+ * - measured: อ่านค่าจากแบบโดยตรง (กฎข้อ 10)
+ * - calculated: คำนวณจากข้อมูลที่อ่านได้
+ * - estimated: ประมาณจากหลักวิศวกรรม
+ */
+export type AIConfidence =
+  | 'high'
+  | 'medium'
+  | 'low'
+  | 'measured'
+  | 'calculated'
+  | 'estimated';
 
 /** ที่มาของตัวเลข */
 export type AIDataSource =
