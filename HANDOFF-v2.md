@@ -1,8 +1,23 @@
 # 📋 HANDOFF v2 — โปรเจกต์โปรแกรมประมาณราคาก่อสร้าง
 
-> อัปเดต: 25 พ.ค. 2569
+> อัปเดต: 26 พ.ค. 2569 (เย็น)
 > แนบไฟล์นี้ + ไฟล์โปรแกรม + ไฟล์แบบทดสอบ แล้วบอก Claude Code ว่า
 > "อ่าน HANDOFF แล้วเริ่ม Phase 2"
+
+---
+
+## 🟢 สถานะล่าสุด (26 พ.ค. 2569 เย็น)
+
+> Phase 2 (Web App) สร้างเสร็จแล้วใน `estimate-boq-v2/` — รายละเอียดดู `estimate-boq-v2/CLAUDE.md`
+
+### ✅ งานที่เสร็จแล้ว
+- **ฝัง Steel Properties** — 131+128 sections (Lip Channel / Angle / H-Beam / Square Pipe) + สูตรน้ำหนัก 7 สูตร + SS400 245 MPa
+- **ทดสอบ AI accuracy** — Structural ≥93% / Architectural ≥85% + กฎ 5-12 (open-structure, มิติ cross-check, วัสดุมุงหลังคา, confidence taxonomy, นับฐาน/เสาจาก grid)
+- **HD resolution** — default 3000px / HD 4000px
+
+### ⬜ งานที่เหลือ
+1. **ปรับปรุง Canvas** (snap / measure / UI) — อ้างอิง style จาก changkid-engapp
+2. **Deploy production** → `/estimate/` บน doh-thai.com (HestiaCP VPS)
 
 ---
 
