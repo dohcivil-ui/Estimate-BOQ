@@ -19,6 +19,7 @@
 
 export type AIEngine =
   | 'claude'
+  | 'anthropic-opus'
   | 'gpt54'
   | 'gpt41mini'
   | 'gemini-pro'
@@ -207,12 +208,34 @@ export function getEngineConfig(engine: AIEngine): AIEngineConfig {
         timeoutMs: 120_000,
         supportsSystemRole: true,
       };
+    case 'anthropic-opus':
+      // Opus Direct — endpoint/proxy/key เดียวกับ Sonnet Direct เปลี่ยนแค่ model
+      return {
+        id: 'anthropic-opus',
+        label: 'Claude Opus 4.6 (Direct)',
+        shortLabel: 'Opus',
+        icon: '🟣',
+        endpoint: '/anthropic-api/v1/messages',
+        model: 'claude-opus-4-20250514',
+        apiKey: import.meta.env.VITE_ANTHROPIC_API_KEY || '',
+        isAnthropicDirect: true,
+        maxOutputTokens: 16_384,
+        retryMaxOutputTokens: 16_384,
+        maxImageDim: 3000,
+        maxImageDimHD: 4000,
+        imageQuality: 0.85,
+        refImageDim: 1500,
+        refImageQuality: 0.8,
+        timeoutMs: 180_000,
+        supportsSystemRole: true,
+      };
   }
 }
 
-/** ลำดับ default — claude > gpt54 > gpt41mini > gemini-pro > gemini-flash > qwen */
+/** ลำดับ default — claude > opus > gpt54 > gpt41mini > gemini-pro > gemini-flash > qwen */
 const ENGINE_PRIORITY: AIEngine[] = [
   'claude',
+  'anthropic-opus',
   'gpt54',
   'gpt41mini',
   'gemini-pro',
@@ -228,6 +251,9 @@ function hasKey(engine: AIEngine): boolean {
         Boolean(import.meta.env.VITE_ANTHROPIC_API_KEY) ||
         Boolean(import.meta.env.VITE_OPENROUTER_API_KEY)
       );
+    case 'anthropic-opus':
+      // opus: Anthropic Direct เท่านั้น
+      return Boolean(import.meta.env.VITE_ANTHROPIC_API_KEY);
     case 'gpt54':
     case 'gpt41mini':
       // ทั้ง 2 ใช้ OpenRouter — key เดียวกันเปิด 2 engine
@@ -260,6 +286,7 @@ export function getEngineShortLabel(engine: AIEngine): string {
 export function isAIEngine(value: unknown): value is AIEngine {
   return (
     value === 'claude' ||
+    value === 'anthropic-opus' ||
     value === 'gpt54' ||
     value === 'gpt41mini' ||
     value === 'gemini-pro' ||

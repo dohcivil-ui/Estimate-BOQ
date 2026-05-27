@@ -235,6 +235,7 @@ function getEngineShortLabel(engine: AIEngine): string {
  */
 const ENGINE_ACTIVE_CLASS: Record<AIEngine, string> = {
   claude: 'border-orange-400 bg-orange-400/15 text-orange-200',
+  'anthropic-opus': 'border-fuchsia-400 bg-fuchsia-400/15 text-fuchsia-200',
   gpt54: 'border-green-400 bg-green-400/15 text-green-200',
   gpt41mini: 'border-amber-400 bg-amber-400/15 text-amber-200',
   'gemini-pro': 'border-teal-400 bg-teal-400/15 text-teal-200',
