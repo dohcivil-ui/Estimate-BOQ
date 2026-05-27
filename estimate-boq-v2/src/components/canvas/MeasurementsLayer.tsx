@@ -11,17 +11,19 @@ import { Layer, Line, Circle, Text, Group } from 'react-konva';
 import type { Measurement } from '@/types/measurement';
 import type { ViewTransform } from '@/types/viewport';
 import { useMeasurementStore } from '@/stores/measurementStore';
+import { CANVAS_COLORS } from './canvasTheme';
 
 interface Props {
   measurements: Measurement[];
   transform: ViewTransform;
 }
 
-const COLOR_CONFIRMED = '#38bdf8'; // accent
-const COLOR_SCALE = '#eab308'; // warning
-const COLOR_SELECTED = '#f97316'; // orange
-const COLOR_COUNT = '#22c55e'; // success
-const FILL_AREA = 'rgba(56, 189, 248, 0.12)';
+const COLOR_LENGTH = CANVAS_COLORS.length; // ม่วง
+const COLOR_AREA = CANVAS_COLORS.area; // ฟ้า
+const COLOR_SCALE = CANVAS_COLORS.scale; // ทอง
+const COLOR_SELECTED = CANVAS_COLORS.selected; // ส้ม
+const COLOR_COUNT = CANVAS_COLORS.count; // เขียว
+const FILL_AREA = CANVAS_COLORS.areaFill;
 
 export function MeasurementsLayer({ measurements, transform }: Props) {
   const selectedId = useMeasurementStore((s) => s.selectedId);
@@ -132,11 +134,12 @@ function MeasurementShape({
 
   // ─── Length / Area ────────────────────────────────────────────────────
   const isArea = m.type === 'area';
+  const baseColor = isArea ? COLOR_AREA : COLOR_LENGTH;
   return (
     <Group onClick={onSelect} onTap={onSelect}>
       <Line
         points={screenPts}
-        stroke={selected ? COLOR_SELECTED : COLOR_CONFIRMED}
+        stroke={selected ? COLOR_SELECTED : baseColor}
         strokeWidth={2}
         closed={isArea}
         fill={isArea ? FILL_AREA : undefined}
@@ -148,7 +151,7 @@ function MeasurementShape({
           x={p.x * transform.zoom + transform.panX}
           y={p.y * transform.zoom + transform.panY}
           radius={3.5}
-          fill={selected ? COLOR_SELECTED : COLOR_CONFIRMED}
+          fill={selected ? COLOR_SELECTED : baseColor}
           stroke="#0b1220"
           strokeWidth={1}
         />

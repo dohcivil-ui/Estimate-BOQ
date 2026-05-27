@@ -95,9 +95,15 @@ export function CanvasArea() {
     const stage = stageRef.current;
     if (!stage) return;
     const c = stage.container();
-    if (activeTool === 'pan') c.style.cursor = 'grab';
-    else if (activeTool === 'select') c.style.cursor = 'default';
-    else c.style.cursor = 'crosshair';
+    const CURSORS: Record<string, string> = {
+      pan: 'grab',
+      select: 'default',
+      count: 'copy',
+      scale: 'crosshair',
+      length: 'crosshair',
+      area: 'crosshair',
+    };
+    c.style.cursor = CURSORS[activeTool] ?? 'default';
   }, [activeTool, page]);
 
   return (

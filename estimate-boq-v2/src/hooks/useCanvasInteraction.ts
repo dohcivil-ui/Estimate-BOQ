@@ -46,7 +46,11 @@ export interface CanvasInteractionResult {
   cancelDraftAction: () => void;
 }
 
-const WHEEL_ZOOM_STEP = 1.1;
+/** ความไวซูม — ยิ่งมากยิ่งไว (zoom ตามความเร็วล้อแบบลื่น) */
+const WHEEL_ZOOM_SENSITIVITY = 0.0015;
+/** จำกัด factor ต่อ event กันกระโดดบน trackpad ที่ส่ง deltaY ใหญ่ */
+const WHEEL_ZOOM_MIN = 0.8;
+const WHEEL_ZOOM_MAX = 1.25;
 
 export function useCanvasInteraction(
   page: DrawingPage | null,
@@ -343,7 +347,11 @@ export function useCanvasInteraction(
       if (!stage) return;
       const ptr = stage.getPointerPosition();
       if (!ptr) return;
-      const factor = e.evt.deltaY < 0 ? WHEEL_ZOOM_STEP : 1 / WHEEL_ZOOM_STEP;
+      // zoom แบบ proportional ตามความเร็วล้อ → ลื่นกว่า step คงที่
+      const factor = Math.min(
+        WHEEL_ZOOM_MAX,
+        Math.max(WHEEL_ZOOM_MIN, Math.exp(-e.evt.deltaY * WHEEL_ZOOM_SENSITIVITY)),
+      );
       useViewportStore.getState().zoomAt(page.id, factor, ptr.x, ptr.y);
     },
     [page, stageRef],

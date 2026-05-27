@@ -1,7 +1,9 @@
 /**
  * MeasurementsTable — รายการวัดของหน้า active + sync 2 ทางกับ canvas
- * - คลิกแถว → select + (TODO Step 2.3.5) zoom ไป bounding box
- * - ลบ / เปลี่ยนชื่อ
+ * - คลิกแถว → select + ซูมไปยัง bounding box ของรายการนั้น
+ * - ดับเบิลคลิก → ตั้งชื่อ
+ * - ลบรายการ
+ * - สรุปรวม: ความยาว / พื้นที่ / จำนวน
  */
 import { useState } from 'react';
 import { useActivePage } from '@/stores/drawingStore';
@@ -9,6 +11,10 @@ import {
   useMeasurementsForPage,
   useMeasurementStore,
 } from '@/stores/measurementStore';
+import { useViewportStore } from '@/stores/viewportStore';
+import { useCanvasSize } from '@/stores/canvasSizeStore';
+import { boundingBox } from '@/core/geometry';
+import { CANVAS_COLORS } from './canvas/canvasTheme';
 import type { Measurement } from '@/types/measurement';
 
 const TYPE_LABEL: Record<Measurement['type'], string> = {
@@ -16,6 +22,13 @@ const TYPE_LABEL: Record<Measurement['type'], string> = {
   area: '⬡ พื้นที่',
   count: '🔢 นับจำนวน',
   scale: '📐 สเกล',
+};
+
+const TYPE_COLOR: Record<Measurement['type'], string> = {
+  length: CANVAS_COLORS.length,
+  area: CANVAS_COLORS.area,
+  count: CANVAS_COLORS.count,
+  scale: CANVAS_COLORS.scale,
 };
 
 export function MeasurementsTable() {
@@ -30,10 +43,19 @@ export function MeasurementsTable() {
   const [editName, setEditName] = useState('');
 
   if (!page) {
-    return (
-      <p className="text-xs text-ink-muted">เปิดแบบก่อนเพื่อเริ่มวัด</p>
-    );
+    return <p className="text-xs text-ink-muted">เปิดแบบก่อนเพื่อเริ่มวัด</p>;
   }
+
+  const pageId = page.id;
+
+  /** คลิกแถว → select + ซูมไปยังรายการนั้น */
+  const handleSelect = (m: Measurement) => {
+    select(m.id);
+    const box = boundingBox(m.points);
+    if (!box) return;
+    const { width, height } = useCanvasSize.getState();
+    useViewportStore.getState().zoomToBox(pageId, box, width, height);
+  };
 
   if (measurements.length === 0) {
     return (
@@ -44,12 +66,17 @@ export function MeasurementsTable() {
   }
 
   const groups = groupByType(measurements);
+  const totals = computeTotals(measurements);
 
   return (
     <div className="space-y-3">
       {Object.entries(groups).map(([type, list]) => (
         <div key={type}>
-          <h4 className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-ink-muted">
+          <h4 className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-ink-muted">
+            <span
+              className="inline-block h-2 w-2 rounded-full"
+              style={{ background: TYPE_COLOR[type as Measurement['type']] }}
+            />
             {TYPE_LABEL[type as Measurement['type']]} ({list.length})
           </h4>
           <ul className="space-y-0.5">
@@ -84,13 +111,13 @@ export function MeasurementsTable() {
                     ) : (
                       <button
                         type="button"
-                        onClick={() => select(m.id)}
+                        onClick={() => handleSelect(m)}
                         onDoubleClick={() => {
                           setEditingId(m.id);
                           setEditName(m.name ?? '');
                         }}
                         className="flex-1 truncate text-left text-ink-primary"
-                        title="ดับเบิลคลิกเพื่อตั้งชื่อ"
+                        title="คลิกเพื่อซูมไป · ดับเบิลคลิกเพื่อตั้งชื่อ"
                       >
                         {m.name || m.label}
                       </button>
@@ -115,6 +142,34 @@ export function MeasurementsTable() {
           </ul>
         </div>
       ))}
+
+      {/* สรุปรวม */}
+      <div className="mt-2 space-y-1 rounded border border-bg-border bg-bg-raised p-2.5 text-xs">
+        <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-ink-muted">
+          📊 สรุปรวม
+        </p>
+        {totals.length > 0 && (
+          <SummaryRow color={CANVAS_COLORS.length} label="ความยาวรวม" value={`${totals.lengthM.toFixed(2)} ม.`} />
+        )}
+        {totals.areaCount > 0 && (
+          <SummaryRow color={CANVAS_COLORS.area} label="พื้นที่รวม" value={`${totals.areaM2.toFixed(2)} ตร.ม.`} />
+        )}
+        {totals.countTotal > 0 && (
+          <SummaryRow color={CANVAS_COLORS.count} label="จำนวนรวม" value={`${totals.countTotal} จุด`} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SummaryRow({ color, label, value }: { color: string; label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between">
+      <span className="flex items-center gap-1.5 text-ink-secondary">
+        <span className="inline-block h-2 w-2 rounded-full" style={{ background: color }} />
+        {label}
+      </span>
+      <span className="font-mono text-ink-primary">{value}</span>
     </div>
   );
 }
@@ -125,4 +180,30 @@ function groupByType(list: Measurement[]): Record<string, Measurement[]> {
     (out[m.type] ??= []).push(m);
   }
   return out;
+}
+
+function computeTotals(list: Measurement[]): {
+  lengthM: number;
+  length: number;
+  areaM2: number;
+  areaCount: number;
+  countTotal: number;
+} {
+  let lengthM = 0;
+  let length = 0;
+  let areaM2 = 0;
+  let areaCount = 0;
+  let countTotal = 0;
+  for (const m of list) {
+    if (m.type === 'length') {
+      lengthM += m.lengthM;
+      length++;
+    } else if (m.type === 'area') {
+      areaM2 += m.areaM2;
+      areaCount++;
+    } else if (m.type === 'count') {
+      countTotal += m.count;
+    }
+  }
+  return { lengthM, length, areaM2, areaCount, countTotal };
 }

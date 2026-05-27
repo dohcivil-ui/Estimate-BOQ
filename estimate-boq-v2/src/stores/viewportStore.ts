@@ -48,6 +48,15 @@ interface ViewportState {
 
   panBy: (pageId: string, dxScreen: number, dyScreen: number) => void;
 
+  /** ซูม+เลื่อนให้ bounding box (page-px) อยู่กลางจอ */
+  zoomToBox: (
+    pageId: string,
+    box: { x: number; y: number; w: number; h: number },
+    containerW: number,
+    containerH: number,
+    fill?: number,
+  ) => void;
+
   reset: (pageId: string) => void;
 }
 
@@ -116,6 +125,30 @@ export const useViewportStore = create<ViewportState>((set, get) => ({
           ...prev,
           panX: prev.panX + dxScreen,
           panY: prev.panY + dyScreen,
+        },
+      },
+    }));
+  },
+
+  zoomToBox: (pageId, box, containerW, containerH, fill = 0.6) => {
+    if (containerW <= 0 || containerH <= 0) return;
+    const w = Math.max(box.w, 1);
+    const h = Math.max(box.h, 1);
+    // ไม่ซูมเกิน 8x (กันจุดเดียว/box เล็กมากพุ่งสุด)
+    const rawZoom = Math.min(containerW / w, containerH / h) * fill;
+    const zoom = clampZoom(Math.min(rawZoom, 8));
+    const cx = box.x + box.w / 2;
+    const cy = box.y + box.h / 2;
+    const panX = containerW / 2 - cx * zoom;
+    const panY = containerH / 2 - cy * zoom;
+    set((s) => ({
+      byPageId: {
+        ...s.byPageId,
+        [pageId]: {
+          zoom,
+          panX,
+          panY,
+          rotationDeg: s.byPageId[pageId]?.rotationDeg ?? 0,
         },
       },
     }));

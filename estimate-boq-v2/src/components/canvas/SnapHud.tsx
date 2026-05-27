@@ -8,16 +8,7 @@
 import { Layer, Circle, Line, Label, Tag, Text, Group } from 'react-konva';
 import type { SnapPoint } from '@/core/snap';
 import type { ViewTransform } from '@/types/viewport';
-
-const COLORS: Record<SnapPoint['type'], string> = {
-  endpoint: '#22c55e',
-  midpoint: '#eab308',
-  intersection: '#ec4899',
-  perpendicular: '#06b6d4',
-  onEdge: '#f97316',
-  grid: '#94a3b8',
-  image: '#22d3ee',
-};
+import { SNAP_COLORS } from './canvasTheme';
 
 const LABELS: Record<SnapPoint['type'], string> = {
   endpoint: 'ปลายเส้น',
@@ -57,7 +48,7 @@ function SnapMarker({
 }) {
   const sx = snap.x * transform.zoom + transform.panX;
   const sy = snap.y * transform.zoom + transform.panY;
-  const color = COLORS[snap.type];
+  const color = SNAP_COLORS[snap.type] ?? '#94a3b8';
   const label = LABELS[snap.type];
 
   const RING = 8; // รัศมีวงกลม indicator (screen px)

@@ -8,7 +8,7 @@ export default {
         sans: ['Sarabun', 'system-ui', 'sans-serif'],
       },
       colors: {
-        // ธีมเข้มที่ออกแบบสำหรับงานวิศวกรรม - cool slate base + accent
+        // ธีมเข้มแนว doh-thai.com — navy primary + gold accent
         bg: {
           base: '#0b1220',
           panel: '#0f172a',
@@ -22,11 +22,21 @@ export default {
           muted: '#64748b',
           inverse: '#0f172a',
         },
-        accent: {
-          DEFAULT: '#38bdf8',
-          hover: '#0ea5e9',
-          subtle: '#0c4a6e',
+        // primary = navy หลัก (doh-thai)
+        primary: {
+          DEFAULT: '#1e3a5f',
+          hover: '#2a4d7a',
+          subtle: '#16293f',
         },
+        // accent = ทอง (doh-thai)
+        accent: {
+          DEFAULT: '#c9a227',
+          hover: '#b08d1f',
+          subtle: '#3d3415',
+        },
+        // สีเครื่องมือวัดบน canvas
+        measure: '#8b5cf6', // ม่วง — ความยาว
+        area: '#06b6d4', // ฟ้าน้ำเงิน — พื้นที่
         success: '#22c55e',
         warning: '#eab308',
         danger: '#ef4444',

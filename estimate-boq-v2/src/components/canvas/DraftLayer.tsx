@@ -7,9 +7,9 @@ import { Layer, Line, Circle, Arrow, Label, Tag, Text } from 'react-konva';
 import type { Point2D, ViewTransform } from '@/types/viewport';
 import type { Tool } from '@/types/tool';
 import { polylineLengthPx, polygonAreaPx2, distancePx } from '@/core/geometry';
+import { CANVAS_COLORS, draftColorFor } from './canvasTheme';
 
-const COLOR_DRAFT = '#facc15'; // yellow-400 (retune ใน commit style)
-const COLOR_CLOSE = '#22c55e'; // เขียว — ปิดรูปได้
+const COLOR_CLOSE = CANVAS_COLORS.close; // เขียว — ปิดรูปได้
 
 interface Props {
   tool: Tool;
@@ -28,6 +28,8 @@ export function DraftLayer({
   unitPerPixel,
 }: Props) {
   if (draftPoints.length === 0) return <Layer listening={false} />;
+
+  const COLOR_DRAFT = draftColorFor(tool);
 
   const toScreen = (p: Point2D): [number, number] => [
     p.x * transform.zoom + transform.panX,

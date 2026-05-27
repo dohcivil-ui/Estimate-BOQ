@@ -5,6 +5,7 @@
 import { useMemo } from 'react';
 import { Layer, Line } from 'react-konva';
 import type { ViewTransform } from '@/types/viewport';
+import { CANVAS_COLORS } from './canvasTheme';
 
 interface Props {
   width: number;
@@ -18,7 +19,13 @@ interface Props {
 const MIN_SCREEN_STEP = 10; // px — ถี่กว่านี้ไม่วาด
 const MAX_LINES = 400; // กันวาดเส้นเยอะเกิน
 
-export function GridLayer({ width, height, transform, spacingPage, color = '#94a3b8' }: Props) {
+export function GridLayer({
+  width,
+  height,
+  transform,
+  spacingPage,
+  color = CANVAS_COLORS.grid,
+}: Props) {
   const lines = useMemo(() => {
     if (!spacingPage || spacingPage <= 0 || width <= 0 || height <= 0) return null;
     const screenStep = spacingPage * transform.zoom;
