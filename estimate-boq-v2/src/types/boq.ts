@@ -31,6 +31,29 @@ export interface BOQItem {
   updatedAt: string;
 }
 
+/** หมวดงานหลักของแบบ (discipline) */
+export type Discipline =
+  | 'architectural'
+  | 'structural'
+  | 'electrical'
+  | 'sanitary'
+  | 'other';
+
+/**
+ * กลุ่ม BOQ แยกตาม discipline + หน้าแบบ (pageId)
+ * เป็น single source of truth ของ boqStore — AI วิเคราะห์ใหม่ = replace เฉพาะกลุ่มของหน้านั้น
+ */
+export interface DisciplineGroup {
+  discipline: Discipline;
+  /** pageId ของหน้าแบบ; 'manual' = เพิ่มเอง/preset/วัด, 'ungrouped' = ข้อมูลเก่าที่ไม่มี page */
+  pageId: string;
+  pageName: string;
+  items: BOQItem[];
+  /** วิเคราะห์/แก้ไขล่าสุดเมื่อไหร่ (ISO) */
+  analyzedAt: string;
+  status: 'draft' | 'confirmed';
+}
+
 export interface ProjectMeta {
   name: string;
   client: string;

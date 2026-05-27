@@ -9,6 +9,7 @@ export default tseslint.config(
     ignores: [
       'dist',
       'node_modules',
+      'docs/**', // เอกสาร/blueprint reference — ไม่ lint
       'supabase/migrations/**',
       'supabase/functions/**',
       '*.config.js',
