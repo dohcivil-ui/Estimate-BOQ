@@ -131,6 +131,7 @@ export function CanvasArea() {
             draftPoints={draftPoints}
             cursorPoint={cursorPagePoint}
             transform={transform}
+            unitPerPixel={scale?.unitPerPixel ?? null}
           />
           <SnapHud
             snap={interaction.currentSnap}

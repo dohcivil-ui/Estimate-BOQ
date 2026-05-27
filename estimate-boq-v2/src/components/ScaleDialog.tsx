@@ -8,6 +8,7 @@ import { calibrateScale, type LengthUnit } from '@/core/scale';
 import { useScaleStore } from '@/stores/scaleStore';
 import { useMeasurementStore } from '@/stores/measurementStore';
 import { useToolStore } from '@/stores/toolStore';
+import { recalcMeasurementsForPage } from '@/services/measurementOps';
 import type { Point2D } from '@/types/viewport';
 import type { ScaleMeasurement } from '@/types/measurement';
 
@@ -41,6 +42,8 @@ export function ScaleDialog({ pageId, p1, p2, onClose }: Props) {
     try {
       const profile = calibrateScale(p1, p2, num, unit);
       useScaleStore.getState().setScale(pageId, profile);
+      // คำนวณค่าวัดเดิมทั้งหน้าใหม่ตามสเกลใหม่
+      recalcMeasurementsForPage(pageId, profile);
 
       const sm: ScaleMeasurement = {
         id: crypto.randomUUID(),

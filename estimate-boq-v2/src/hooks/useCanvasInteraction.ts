@@ -259,12 +259,24 @@ export function useCanvasInteraction(
         return;
       }
 
-      // ─── length / area / count ─────────────────────────────────────
-      if (
-        activeTool === 'length' ||
-        activeTool === 'area' ||
-        activeTool === 'count'
-      ) {
+      // ─── area: คลิกใกล้จุดแรก = ปิด polygon แล้ว commit ──────────────
+      if (activeTool === 'area') {
+        if (draftPoints.length >= 3) {
+          const first = draftPoints[0]!;
+          const closeR = 12 / transformZoom;
+          if (Math.hypot(final.x - first.x, final.y - first.y) <= closeR) {
+            const profile =
+              useScaleStore.getState().byPageId[page.id] ?? null;
+            commitDraft('area', page.id, draftPoints, profile);
+            return;
+          }
+        }
+        useToolStore.getState().addDraftPoint(final);
+        return;
+      }
+
+      // ─── length / count ────────────────────────────────────────────
+      if (activeTool === 'length' || activeTool === 'count') {
         useToolStore.getState().addDraftPoint(final);
         return;
       }

@@ -27,6 +27,38 @@ const now = (): string => new Date().toISOString();
 const uid = (): string => crypto.randomUUID();
 
 /**
+ * คำนวณค่าวัดทั้งหน้าใหม่ตาม scale profile ใหม่ (เรียกหลังตั้ง/แก้สเกล)
+ * - length → lengthM + label
+ * - area   → areaM2 + perimeterM + label
+ * - count/scale → คงเดิม
+ * history push ครั้งเดียว (ผ่าน mutatePage)
+ */
+export function recalcMeasurementsForPage(
+  pageId: string,
+  profile: ScaleProfile,
+): void {
+  const upp = profile.unitPerPixel;
+  useMeasurementStore.getState().mutatePage(pageId, (m) => {
+    if (m.type === 'length') {
+      const lengthM = lineQuantity(m.points, upp);
+      return { ...m, lengthM, label: formatLength(lengthM), updatedAt: now() };
+    }
+    if (m.type === 'area') {
+      const areaM2 = polygonQuantity(m.points, upp);
+      const perimeterM = polygonPerimeter(m.points, upp);
+      return {
+        ...m,
+        areaM2,
+        perimeterM,
+        label: formatArea(areaM2),
+        updatedAt: now(),
+      };
+    }
+    return m;
+  });
+}
+
+/**
  * Commit draftPoints → confirmed measurement
  * คืน true ถ้า commit สำเร็จ (= มีจุดพอ)
  */

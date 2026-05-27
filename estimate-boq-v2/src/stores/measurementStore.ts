@@ -16,6 +16,8 @@ interface MeasurementState {
 
   add: (m: Measurement) => void;
   update: (id: string, patch: Partial<Measurement>) => void;
+  /** map ทุก measurement ของหน้า ผ่าน mutate (history push ครั้งเดียว) */
+  mutatePage: (pageId: string, mutate: (m: Measurement) => Measurement) => void;
   remove: (id: string) => void;
   select: (id: string | null) => void;
 
@@ -60,6 +62,24 @@ export const useMeasurementStore = create<MeasurementState>((set, get) => ({
         ...patch,
         updatedAt: new Date().toISOString(),
       } as Measurement;
+      return {
+        ...s,
+        past: pushHistory(s.past, s.measurements),
+        future: [],
+        measurements: next,
+      };
+    }),
+
+  mutatePage: (pageId, mutate) =>
+    set((s) => {
+      let changed = false;
+      const next = s.measurements.map((m) => {
+        if (m.pageId !== pageId) return m;
+        const nm = mutate(m);
+        if (nm !== m) changed = true;
+        return nm;
+      });
+      if (!changed) return s;
       return {
         ...s,
         past: pushHistory(s.past, s.measurements),
