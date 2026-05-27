@@ -140,6 +140,9 @@ export function AnalyzeButton() {
         },
         detected: out.detected,
       });
+      if (out.truncated) {
+        alert('⚠️ AI ตอบไม่ครบ — ลองเปิด HD หรือลดหน้าอ้างอิง');
+      }
     } catch (err) {
       const msg =
         err instanceof AutoDetectFailed

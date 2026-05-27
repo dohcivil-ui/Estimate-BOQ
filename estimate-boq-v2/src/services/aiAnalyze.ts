@@ -63,6 +63,8 @@ export interface AnalyzeResult {
   elapsedMs: number;
   tokens?: { prompt_tokens?: number; completion_tokens?: number };
   detected?: AIDetectResult;
+  /** true = คำตอบโดน max_tokens ตัด (finish_reason=length) — อาจถอดไม่ครบ */
+  truncated?: boolean;
 }
 
 export class AutoDetectFailed extends Error {
@@ -424,6 +426,12 @@ export async function analyzePage(opts: AnalyzeOptions): Promise<AnalyzeResult> 
   result.discipline = activeDiscipline;
   if (!Array.isArray(result.items)) result.items = [];
 
+  // truncation guard — คำตอบโดน max_tokens ตัด (Anthropic stop_reason='max_tokens' → finishReason='length')
+  const truncated = out.out.finishReason === 'length';
+  if (truncated) {
+    console.warn('[ai] ⚠️ Response ถูกตัด (max_tokens) — อาจถอดไม่ครบ');
+  }
+
   const elapsedMs = Date.now() - start;
   const costStr =
     out.out.costUsd != null ? ` | cost: $${out.out.costUsd.toFixed(4)}` : '';
@@ -440,6 +448,7 @@ export async function analyzePage(opts: AnalyzeOptions): Promise<AnalyzeResult> 
     elapsedMs,
     tokens: out.out.tokens,
     detected,
+    truncated,
   };
 }
 
@@ -834,7 +843,7 @@ async function callAnthropicDirect(
     const requestBody: Record<string, unknown> = {
       model: config.model,
       max_tokens: outputTokens,
-      temperature: 0.1,
+      temperature: 0, // deterministic — ผลซ้ำได้ไม่สุ่มแต่ละรอบ
       messages: anthropicMessages,
     };
     if (system) requestBody.system = system;
