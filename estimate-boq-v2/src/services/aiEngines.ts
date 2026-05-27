@@ -216,7 +216,7 @@ export function getEngineConfig(engine: AIEngine): AIEngineConfig {
         shortLabel: 'Opus',
         icon: '🟣',
         endpoint: '/anthropic-api/v1/messages',
-        model: 'claude-opus-4-20250514',
+        model: 'claude-opus-4-6',
         apiKey: import.meta.env.VITE_ANTHROPIC_API_KEY || '',
         isAnthropicDirect: true,
         maxOutputTokens: 16_384,
