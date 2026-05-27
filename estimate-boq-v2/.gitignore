@@ -23,5 +23,8 @@ pnpm-debug.log*
 # build artifacts
 *.tsbuildinfo
 
+# supabase CLI temp
+supabase/.temp/
+
 # cursor prompt instruction files
 CURSOR-PROMPT-*.md
