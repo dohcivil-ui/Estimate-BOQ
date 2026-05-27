@@ -17,5 +17,13 @@ export default defineConfig({
     port: 5173,
     strictPort: false,
     host: true,
+    proxy: {
+      // Anthropic API ไม่รองรับ CORS → proxy ผ่าน dev server (ใช้กับ engine "Claude" Direct)
+      '/anthropic-api': {
+        target: 'https://api.anthropic.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/anthropic-api/, ''),
+      },
+    },
   },
 });

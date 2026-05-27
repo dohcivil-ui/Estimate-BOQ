@@ -24,7 +24,11 @@ import {
   getSystemPromptForMode,
   getUserPromptForDiscipline,
 } from './aiPrompts';
-import { getEngineConfig, type AIEngine } from './aiEngines';
+import {
+  getEngineConfig,
+  type AIEngine,
+  type AIEngineConfig,
+} from './aiEngines';
 
 // ─── Progress stage messages (เวลาเป็น ms) ──────────────────────────────
 const PROGRESS_STAGES: Array<{ at: number; msg: string }> = [
@@ -655,6 +659,11 @@ async function callAIDirect(
     `[ai] ${config.label} | HD: ${hd} | prompt total chars: ${totalChars} | max_tokens: ${outputTokens}`,
   );
 
+  // ─── Anthropic Direct (Messages API) ────────────────────────────────
+  if (config.isAnthropicDirect) {
+    return callAnthropicDirect(messages, config, outputTokens);
+  }
+
   // OpenRouter รองรับ `usage: { include: true }` → คืน cost ใน body (usage.cost)
   // ตรวจจาก endpoint เพื่อเปิดเฉพาะ request ที่ผ่าน OpenRouter
   const isOpenRouter = config.endpoint.includes('openrouter.ai');
@@ -730,6 +739,146 @@ async function callAIDirect(
       finishReason,
       costUsd,
     };
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new Error(
+        `⏱️ AI ใช้เวลาเกิน 2 นาที — ลอง:\n• ปิด HD\n• ลดจำนวนหน้าอ้างอิง\n• เลือก mode เฉพาะแทน อัตโนมัติ`,
+      );
+    }
+    throw err;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Anthropic Direct (Messages API) — format ต่างจาก OpenAI:
+//   - system prompt อยู่ใน field "system" (ไม่ใช่ message role)
+//   - image: { type:'image', source:{ type:'base64', media_type, data } }
+//   - response: content[0].text (ไม่ใช่ choices[0].message.content)
+// ═══════════════════════════════════════════════════════════════════════
+
+type AnthropicContentPart =
+  | { type: 'text'; text: string }
+  | {
+      type: 'image';
+      source: { type: 'base64'; media_type: string; data: string };
+    };
+
+interface AnthropicMessage {
+  role: 'user' | 'assistant';
+  content: AnthropicContentPart[];
+}
+
+/** แยก media_type + base64 data ออกจาก data URL ("data:image/jpeg;base64,xxxx") */
+function parseDataUrl(url: string): { mediaType: string; data: string } {
+  const m = url.match(/^data:([^;]+);base64,(.*)$/s);
+  if (m) return { mediaType: m[1]!, data: m[2]! };
+  return { mediaType: 'image/jpeg', data: url };
+}
+
+/** แปลง messages (OpenAI-compat) → Anthropic Messages API format */
+function toAnthropicFormat(messages: ChatMessage[]): {
+  system: string;
+  messages: AnthropicMessage[];
+} {
+  let system = '';
+  const out: AnthropicMessage[] = [];
+  for (const m of messages) {
+    if (m.role === 'system') {
+      const txt = typeof m.content === 'string' ? m.content : '';
+      system += (system ? '\n\n' : '') + txt;
+      continue;
+    }
+    const content: AnthropicContentPart[] =
+      typeof m.content === 'string'
+        ? [{ type: 'text', text: m.content }]
+        : m.content.map((part): AnthropicContentPart => {
+            if (part.type === 'text') return { type: 'text', text: part.text };
+            const { mediaType, data } = parseDataUrl(part.image_url.url);
+            return {
+              type: 'image',
+              source: { type: 'base64', media_type: mediaType, data },
+            };
+          });
+    out.push({ role: m.role, content });
+  }
+  return { system, messages: out };
+}
+
+/** ดึง text จาก Anthropic response — content[] เป็น array ของ block (เอาเฉพาะ type:text) */
+function extractAnthropicText(payload: unknown): string {
+  if (!payload || typeof payload !== 'object') return '';
+  const content = (payload as Record<string, unknown>).content;
+  if (!Array.isArray(content)) return '';
+  return content
+    .map((p) => {
+      if (!p || typeof p !== 'object') return '';
+      const t = (p as Record<string, unknown>).text;
+      return typeof t === 'string' ? t : '';
+    })
+    .filter(Boolean)
+    .join('\n');
+}
+
+async function callAnthropicDirect(
+  messages: ChatMessage[],
+  config: AIEngineConfig,
+  outputTokens: number,
+): Promise<AICallResult> {
+  const { system, messages: anthropicMessages } = toAnthropicFormat(messages);
+
+  const ctrl = new AbortController();
+  const timeoutId = window.setTimeout(() => ctrl.abort(), config.timeoutMs);
+  try {
+    const requestBody: Record<string, unknown> = {
+      model: config.model,
+      max_tokens: outputTokens,
+      temperature: 0.1,
+      messages: anthropicMessages,
+    };
+    if (system) requestBody.system = system;
+
+    const res = await fetch(config.endpoint, {
+      method: 'POST',
+      signal: ctrl.signal,
+      headers: {
+        'x-api-key': config.apiKey,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify(requestBody),
+    });
+    if (!res.ok) {
+      const txt = await res.text();
+      throw new Error(
+        `${config.label} error ${res.status}: ${txt.slice(0, 500)}`,
+      );
+    }
+    const json = (await res.json()) as Record<string, unknown>;
+    const text = extractAnthropicText(json);
+    // Anthropic ใช้ stop_reason='max_tokens' → map เป็น 'length' ให้ตรงกับ logic truncation
+    const stopReason =
+      typeof json.stop_reason === 'string' ? json.stop_reason : undefined;
+    const finishReason = stopReason === 'max_tokens' ? 'length' : stopReason;
+    const usage = json.usage as
+      | { input_tokens?: number; output_tokens?: number }
+      | undefined;
+    const tokens = usage
+      ? {
+          prompt_tokens: usage.input_tokens,
+          completion_tokens: usage.output_tokens,
+        }
+      : undefined;
+
+    logUsage({
+      engine: config.id,
+      promptTokens: tokens?.prompt_tokens,
+      completionTokens: tokens?.completion_tokens,
+      finishReason,
+    });
+
+    return { text, model: config.model, tokens, finishReason };
   } catch (err) {
     if (err instanceof Error && err.name === 'AbortError') {
       throw new Error(

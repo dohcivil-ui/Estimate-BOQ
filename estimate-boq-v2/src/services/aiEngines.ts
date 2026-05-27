@@ -34,6 +34,8 @@ export interface AIEngineConfig {
   endpoint: string;
   model: string;
   apiKey: string;
+  /** true = เรียก Anthropic Messages API ตรง (ผ่าน Vite proxy) แทน OpenAI-compat */
+  isAnthropicDirect?: boolean;
   /** header เพิ่มเติม (เช่น OpenRouter ต้องการ HTTP-Referer / X-Title) */
   extraHeaders?: Record<string, string>;
   maxOutputTokens: number;
@@ -58,7 +60,30 @@ const GOOGLE_OPENAI_ENDPOINT =
 
 export function getEngineConfig(engine: AIEngine): AIEngineConfig {
   switch (engine) {
-    case 'claude':
+    case 'claude': {
+      // ถ้ามี Anthropic key → เรียก Direct API (ผ่าน Vite proxy); ไม่งั้น fallback OpenRouter
+      const anthropicKey = import.meta.env.VITE_ANTHROPIC_API_KEY || '';
+      if (anthropicKey) {
+        return {
+          id: 'claude',
+          label: 'Claude Sonnet 4 (Direct)',
+          shortLabel: 'Claude',
+          icon: '🟠',
+          endpoint: '/anthropic-api/v1/messages',
+          model: 'claude-sonnet-4-20250514',
+          apiKey: anthropicKey,
+          isAnthropicDirect: true,
+          maxOutputTokens: 8192,
+          retryMaxOutputTokens: 8192,
+          maxImageDim: 3000,
+          maxImageDimHD: 4000,
+          imageQuality: 0.85,
+          refImageDim: 1500,
+          refImageQuality: 0.8,
+          timeoutMs: 180_000,
+          supportsSystemRole: true,
+        };
+      }
       return {
         id: 'claude',
         label: 'Claude Sonnet 4.6',
@@ -78,6 +103,7 @@ export function getEngineConfig(engine: AIEngine): AIEngineConfig {
         timeoutMs: 180_000,
         supportsSystemRole: true,
       };
+    }
     case 'gpt54':
       return {
         id: 'gpt54',
@@ -197,9 +223,14 @@ const ENGINE_PRIORITY: AIEngine[] = [
 function hasKey(engine: AIEngine): boolean {
   switch (engine) {
     case 'claude':
+      // claude: ใช้ได้ทั้ง Anthropic Direct หรือ OpenRouter
+      return (
+        Boolean(import.meta.env.VITE_ANTHROPIC_API_KEY) ||
+        Boolean(import.meta.env.VITE_OPENROUTER_API_KEY)
+      );
     case 'gpt54':
     case 'gpt41mini':
-      // ทั้ง 3 ใช้ OpenRouter — key เดียวกันเปิด 3 engine
+      // ทั้ง 2 ใช้ OpenRouter — key เดียวกันเปิด 2 engine
       return Boolean(import.meta.env.VITE_OPENROUTER_API_KEY);
     case 'gemini-pro':
     case 'gemini-flash':
