@@ -7,7 +7,14 @@
  */
 import ExcelJS from 'exceljs';
 import type { BOQItem, ProjectMeta } from '@/types/boq';
-import { adjustedQuantity, marketPrice, rowAmount, totalsByKind } from '@/core/boqCalc';
+import {
+  adjustedQuantity,
+  directCostTotal,
+  effectiveFactorF,
+  marketPrice,
+  rowAmount,
+  totalsByKind,
+} from '@/core/boqCalc';
 
 const BORDER_THIN: Partial<ExcelJS.Borders> = {
   top: { style: 'thin', color: { argb: 'FF94A3B8' } },
@@ -47,6 +54,13 @@ interface ExportOptions {
 /** สร้างและ download ไฟล์ Excel */
 export async function exportBOQToExcel(opts: ExportOptions): Promise<void> {
   const { items, meta } = opts;
+  // Factor F: ใช้ตาราง CGD 2567 ตามค่างาน (หรือ override ถ้า meta.factorF > 0)
+  const factorF = effectiveFactorF(
+    directCostTotal(items),
+    meta.factorF,
+    meta.advancePct,
+    meta.retentionPct,
+  );
   const wb = new ExcelJS.Workbook();
   wb.creator = 'Estimate-BOQ v2';
   wb.created = new Date();
@@ -92,7 +106,7 @@ export async function exportBOQToExcel(opts: ExportOptions): Promise<void> {
 
   ws.mergeCells('A3:L3');
   const t3 = ws.getCell('A3');
-  t3.value = `วันที่: ${new Date().toLocaleDateString('th-TH')}   Factor F: ${meta.factorF.toFixed(4)}   VAT: ${meta.vatPct}%`;
+  t3.value = `วันที่: ${new Date().toLocaleDateString('th-TH')}   Factor F: ${factorF.toFixed(4)}   VAT: ${meta.vatPct}%`;
   t3.font = { name: 'Sarabun', size: 10, color: { argb: 'FF475569' } };
   t3.alignment = { horizontal: 'center' };
 
@@ -170,7 +184,7 @@ export async function exportBOQToExcel(opts: ExportOptions): Promise<void> {
 
   // ─── Totals ────────────────────────────────────────────────────────────
   const totals = totalsByKind(items);
-  const market = marketPrice(totals.total, meta.factorF);
+  const market = marketPrice(totals.total, factorF);
   const vat = market * (meta.vatPct / 100);
 
   ws.addRow([]);
@@ -196,7 +210,7 @@ export async function exportBOQToExcel(opts: ExportOptions): Promise<void> {
   addTotalRow('รวมค่าแรง', totals.labor, false, 'FFFEF3C7');
   addTotalRow('รวมค่าวัสดุ', totals.material, false, 'FFEFF6FF');
   addTotalRow('Direct Cost', totals.total, true, 'FFE2E8F0');
-  addTotalRow(`× Factor F (${meta.factorF.toFixed(4)})`, market, true, 'FFDCFCE7');
+  addTotalRow(`× Factor F (${factorF.toFixed(4)})`, market, true, 'FFDCFCE7');
   addTotalRow(`+ VAT ${meta.vatPct}%`, vat);
   addTotalRow('ราคารวมสุทธิ', market + vat, true, 'FFFEF08A');
 

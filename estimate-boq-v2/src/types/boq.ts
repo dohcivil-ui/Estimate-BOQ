@@ -40,6 +40,10 @@ export interface ProjectMeta {
   factorF: number;
   /** Vat % (default 7) — ใช้คำนวณราคา + vat */
   vatPct: number;
+  /** เงินล่วงหน้าจ่าย % (0/5/10/15) — เลือกตาราง Factor F CGD 2567 */
+  advancePct: number;
+  /** เงินประกันผลงานหัก % (0/5/10) — เลือกตาราง Factor F CGD 2567 */
+  retentionPct: number;
 }
 
 /** payload ที่ accept จาก AI import (ตาม HANDOFF v2) */

@@ -2,9 +2,19 @@
  * Compact form สำหรับ project metadata + Factor F
  */
 import { useProjectMeta } from '@/stores/projectMetaStore';
+import { useBOQStore } from '@/stores/boqStore';
+import { directCostTotal, effectiveFactorF } from '@/core/boqCalc';
 
 export function ProjectMetaForm() {
   const meta = useProjectMeta();
+  const items = useBOQStore((s) => s.items);
+  const direct = directCostTotal(items);
+  const factorF = effectiveFactorF(
+    direct,
+    meta.factorF,
+    meta.advancePct,
+    meta.retentionPct,
+  );
 
   return (
     <div className="space-y-2 rounded border border-bg-border bg-bg-raised p-3">
@@ -41,7 +51,7 @@ export function ProjectMetaForm() {
           label="Factor F"
           value={meta.factorF}
           step={0.0001}
-          hint="คูณกับ Direct Cost ได้ราคากลาง"
+          hint="0 = อัตโนมัติจากตาราง"
           onChange={(n) => meta.setField('factorF', n)}
         />
         <NumberField
@@ -51,7 +61,67 @@ export function ProjectMetaForm() {
           onChange={(n) => meta.setField('vatPct', n)}
         />
       </div>
+
+      {/* เลือกตาราง Factor F CGD 2567 — ใช้ตอน export ปร.5/ปร.6 */}
+      <div className="grid grid-cols-2 gap-2 border-t border-bg-border pt-2">
+        <SelectField
+          label="เงินล่วงหน้า %"
+          value={meta.advancePct}
+          options={[0, 5, 10, 15]}
+          hint="ตาราง Factor F (สงป.2567)"
+          onChange={(n) => meta.setField('advancePct', n)}
+        />
+        <SelectField
+          label="เงินประกัน %"
+          value={meta.retentionPct}
+          options={[0, 5, 10]}
+          hint="หักประกันผลงาน"
+          onChange={(n) => meta.setField('retentionPct', n)}
+        />
+      </div>
+
+      <p className="text-[11px] text-ink-muted">
+        Factor F ที่ใช้:{' '}
+        <span className="font-mono text-ink-primary">{factorF.toFixed(4)}</span>{' '}
+        {meta.factorF > 0
+          ? '(กรอกเอง)'
+          : `(ตาราง CGD 2567 · ค่างาน ${(direct / 1_000_000).toFixed(2)} ลบ.)`}
+      </p>
     </div>
+  );
+}
+
+function SelectField({
+  label,
+  value,
+  options,
+  hint,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  options: number[];
+  hint?: string;
+  onChange: (n: number) => void;
+}) {
+  return (
+    <label className="flex flex-col gap-0.5">
+      <span className="text-[10px] uppercase tracking-wider text-ink-muted">
+        {label}
+        {hint && <span className="ml-1 normal-case text-ink-muted">— {hint}</span>}
+      </span>
+      <select
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="rounded border border-bg-border bg-bg-base px-2 py-1 text-xs text-ink-primary outline-none focus:border-accent"
+      >
+        {options.map((o) => (
+          <option key={o} value={o}>
+            {o}%
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 

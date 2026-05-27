@@ -3,6 +3,34 @@
  * ห้าม import React/Konva
  */
 import type { BOQItem } from '@/types/boq';
+import { lookupFactorF } from '@/data/factorF-CGD-2567';
+
+// ค่าที่ตาราง CGD 2567 รองรับ (snap ค่าที่เลือกเข้าหาค่าที่ถูกต้อง)
+const VALID_ADVANCE = [0, 5, 10, 15];
+const VALID_RETENTION = [0, 5, 10];
+const snapTo = (valid: number[], v: number): number =>
+  valid.reduce((best, c) => (Math.abs(c - v) < Math.abs(best - v) ? c : best), valid[0]!);
+
+/**
+ * Factor F ที่ใช้จริง:
+ *   - override > 0 → ใช้ค่าที่กรอกเอง
+ *   - มิฉะนั้น → lookup จากตาราง CGD 2567 ตามค่างาน (บาท) + เงินล่วงหน้า/เงินประกัน
+ * คืนค่าเดียวกับ sheet "Factor F" ใน gov export เพื่อให้ตัวเลขในแอปตรงกับตาราง
+ */
+export function effectiveFactorF(
+  directCost: number,
+  override: number,
+  advancePct: number,
+  retentionPct: number,
+): number {
+  if (override > 0 && isFinite(override)) return override;
+  const f = lookupFactorF(
+    directCost / 1_000_000,
+    snapTo(VALID_ADVANCE, advancePct),
+    snapTo(VALID_RETENTION, retentionPct),
+  );
+  return f ?? 1;
+}
 
 /**
  * adjusted quantity (เผื่อเสีย):

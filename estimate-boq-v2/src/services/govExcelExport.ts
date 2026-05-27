@@ -1,23 +1,55 @@
 /**
  * Export BOQ → Excel ตามมาตรฐานกรมบัญชีกลาง (4 sheets)
  *
- *   Sheet 1  "Factor F"   ตารางคำนวณ Factor F (24 brackets + INDEX/MATCH)
+ *   Sheet 1  "Factor F"   ตาราง Factor F กรมบัญชีกลาง สงป.2567 (เลือกตามเงินล่วงหน้า
+ *                          × เงินประกัน, 24 ช่วง 8 คอลัมน์, interpolate ด้วย INDEX/MATCH)
  *   Sheet 2  "ปร.4(ก)"     รายการปริมาณงานและราคา (BOQ ละเอียด 12 cols)
  *   Sheet 3  "ปร.5"        สรุปราคาค่าก่อสร้าง (ต้นทุน × Factor F)
  *   Sheet 4  "ปร.6"        สรุปค่าก่อสร้าง (ราคาสุดท้าย + bahtText + ลายเซ็น)
  *
  * Cross-sheet formulas:
- *   'Factor F'!D42  = 'ปร.4(ก)'!K{grand}           ค่างานต้นทุน
- *   'ปร.5'!I8       = 'ปร.4(ก)'!K{grand}           ค่างานต้นทุน
- *   'ปร.5'!J8       = 'Factor F'!D53                Factor F ที่ใช้จริง
- *   'ปร.5'!K8       = I8*J8                         ค่าก่อสร้าง
- *   'ปร.6'!H9       = 'ปร.5'!K16                    รวมค่าก่อสร้าง
+ *   'Factor F' ค่างานต้นทุน = 'ปร.4(ก)'!{grand} ÷ 1,000,000 (ล้านบาท) → interpolate
+ *   'ปร.5'!I  = 'ปร.4(ก)'!{grand}                ค่างานต้นทุน
+ *   'ปร.5'!J  = 'Factor F'!{finalFactorCell}     Factor F ที่ใช้จริง
+ *   'ปร.5'!K  = I*J                              ค่าก่อสร้าง (= ต้นทุน × Factor F)
+ *   'ปร.6'!H9 = 'ปร.5'!{totalConstruction}       รวมค่าก่อสร้าง
  *
  * Library: exceljs (มีอยู่แล้วใน dependencies)
  */
 import ExcelJS from 'exceljs';
 import type { BOQItem, ProjectMeta } from '@/types/boq';
 import { adjustedQuantity } from '@/core/boqCalc';
+import {
+  FACTOR_F_TABLES,
+  lookupFactorF,
+  type FactorFTable,
+} from '@/data/factorF-CGD-2567';
+
+// ค่าที่ตาราง CGD 2567 รองรับ (snap ค่า advance/retention ที่ผู้ใช้เลือกเข้าหาค่าที่ใกล้สุด)
+const VALID_ADVANCE = [0, 5, 10, 15];
+const VALID_RETENTION = [0, 5, 10];
+
+const snapTo = (valid: number[], v: number): number =>
+  valid.reduce((best, c) => (Math.abs(c - v) < Math.abs(best - v) ? c : best), valid[0]!);
+
+/**
+ * เลือกตาราง Factor F + คำนวณค่าจริงจากค่างาน (บาท)
+ * advancePayment/retention ใน opts เก็บเป็นเศษส่วน (0.05 = 5%) → แปลงเป็น % แล้ว snap
+ */
+function resolveFactorF(
+  opts: GovExportOptions,
+  directCostBaht: number,
+): { table: FactorFTable; advancePct: number; retentionPct: number; factorF: number } {
+  const advancePct = snapTo(VALID_ADVANCE, Math.round((opts.advancePayment ?? 0) * 100));
+  const retentionPct = snapTo(VALID_RETENTION, Math.round((opts.retention ?? 0) * 100));
+  const table =
+    FACTOR_F_TABLES.find((t) => t.advance === advancePct && t.retention === retentionPct) ??
+    FACTOR_F_TABLES[0]!;
+  const factorF =
+    lookupFactorF(directCostBaht / 1_000_000, advancePct, retentionPct) ??
+    table.brackets[0]!.factorF;
+  return { table, advancePct, retentionPct, factorF };
+}
 
 // ═══════════════════════════════════════════════════════════════════════
 // Public API
@@ -68,8 +100,8 @@ export async function exportGovBOQ(opts: GovExportOptions): Promise<void> {
 
     // populate ตาม dependency: ปร.4 ก่อน (sheet อื่นอ้างยอดรวมจากนี่)
     const por4Refs = buildPor4(wsPor4, opts);
-    buildFactorF(wsFactor, opts, por4Refs);
-    const por5Refs = buildPor5(wsPor5, opts, por4Refs);
+    const factorRefs = buildFactorF(wsFactor, opts, por4Refs);
+    const por5Refs = buildPor5(wsPor5, opts, por4Refs, factorRefs);
     buildPor6(wsPor6, opts, por5Refs);
   } else {
     // por4 only — sheet เดียว
@@ -268,34 +300,6 @@ const NUMFMT_PCT = '0.00%';
 // Sheet 1: Factor F
 // ═══════════════════════════════════════════════════════════════════════
 
-const FACTOR_F_TABLE: Array<[number, number, number]> = [
-  // [lower, upper, factorF]
-  [0, 500_000, 1.3074],
-  [500_000, 1_000_000, 1.3074],
-  [1_000_000, 2_000_000, 1.305],
-  [2_000_000, 5_000_000, 1.3035],
-  [5_000_000, 10_000_000, 1.3003],
-  [10_000_000, 15_000_000, 1.2943],
-  [15_000_000, 20_000_000, 1.2594],
-  [20_000_000, 25_000_000, 1.2518],
-  [25_000_000, 30_000_000, 1.2248],
-  [30_000_000, 40_000_000, 1.2164],
-  [40_000_000, 50_000_000, 1.2161],
-  [50_000_000, 60_000_000, 1.2159],
-  [60_000_000, 70_000_000, 1.2061],
-  [70_000_000, 80_000_000, 1.205],
-  [80_000_000, 90_000_000, 1.205],
-  [90_000_000, 100_000_000, 1.2049],
-  [100_000_000, 150_000_000, 1.2049],
-  [150_000_000, 200_000_000, 1.2023],
-  [200_000_000, 250_000_000, 1.2023],
-  [250_000_000, 300_000_000, 1.2013],
-  [300_000_000, 350_000_000, 1.1951],
-  [350_000_000, 400_000_000, 1.1866],
-  [400_000_000, 500_000_000, 1.1858],
-  [500_000_000, 1_000_000_000, 1.1853],
-];
-
 interface FactorFRefs {
   /** cell ของ "Factor F ที่จะใช้จริง" — sheet อื่นอ้างมาจากนี่ */
   finalFactorCell: string;
@@ -306,12 +310,22 @@ interface FactorFRefs {
   vatCell: string;
 }
 
+const NUMFMT_PCT4 = '0.0000'; // % แบบ 4 ตำแหน่ง (เก็บเป็นเลขจริง เช่น 15.6856)
+
 function buildFactorF(
   ws: ExcelJS.Worksheet,
   opts: GovExportOptions,
   por4: Por4Refs,
 ): FactorFRefs {
   const { meta } = opts;
+
+  // ค่างานต้นทุน (บาท) + เลือกตาราง CGD 2567 ตาม advance × retention
+  const directCost = opts.items.reduce(
+    (sum, it) => sum + adjustedQuantity(it) * it.unitPrice,
+    0,
+  );
+  const { table, advancePct, retentionPct } = resolveFactorF(opts, directCost);
+  const N = table.brackets.length; // 24
 
   ws.pageSetup.paperSize = 9;
   ws.pageSetup.orientation = 'portrait';
@@ -321,164 +335,206 @@ function buildFactorF(
   ws.pageSetup.margins = standardMargins();
 
   ws.columns = [
-    { key: 'A', width: 40 },
-    { key: 'B', width: 18 },
-    { key: 'C', width: 14 },
-    { key: 'D', width: 18 },
-    { key: 'E', width: 18 },
+    { key: 'A', width: 16 }, // ค่างาน (ล้านบาท)
+    { key: 'B', width: 13 }, // ค่าอำนวยการ %
+    { key: 'C', width: 12 }, // ดอกเบี้ย %
+    { key: 'D', width: 10 }, // กำไร %
+    { key: 'E', width: 14 }, // รวมค่าใช้จ่าย %
+    { key: 'F', width: 13 }, // รวมในรูป Factor
+    { key: 'G', width: 10 }, // VAT
+    { key: 'H', width: 12 }, // Factor F
   ];
 
   // ─── หัวเอกสาร (rows 1-4) ──────────────────────────────────────────────
-  mergeAndSet(ws, 'A1:E1', 'ตารางแสดงการคำนวณหาค่า FACTOR F งานอาคาร', {
+  mergeAndSet(ws, 'A1:H1', 'ตารางแสดงการคำนวณหาค่า FACTOR F งานก่อสร้างอาคาร', {
     font: FONT_TITLE,
     alignment: { horizontal: 'center', vertical: 'middle' },
   });
-  mergeAndSet(ws, 'A2:E2', meta.name || '[ระบุชื่อโครงการ]', {
+  mergeAndSet(ws, 'A2:H2', meta.name || '[ระบุชื่อโครงการ]', {
     font: FONT_SUB,
     alignment: { horizontal: 'center' },
   });
-  mergeAndSet(ws, 'A3:E3', `สถานที่ก่อสร้าง ${meta.location || '[ระบุ]'}`, {
+  mergeAndSet(ws, 'A3:H3', `สถานที่ก่อสร้าง ${meta.location || '[ระบุ]'}`, {
     font: FONT_BODY,
   });
   mergeAndSet(
     ws,
-    'A4:E4',
+    'A4:H4',
     `หน่วยงาน ${opts.agency ?? meta.client ?? '[ระบุ]'}`,
     { font: FONT_BODY },
   );
 
-  // ─── เงื่อนไข (rows 6-10) ───────────────────────────────────────────────
-  setCell(ws, 'A6', 'เงื่อนไข', { font: FONT_BOLD });
+  // ─── เงื่อนไข (rows 6-10) — อ้างอิงตาราง CGD 2567 (ดอกเบี้ย/VAT ฝังในตาราง) ─
+  setCell(ws, 'A6', 'เงื่อนไข (ตามตารางกรมบัญชีกลาง สงป. 2567)', {
+    font: FONT_BOLD,
+  });
 
   const advanceRow = 7;
-  setCell(ws, `A${advanceRow}`, 'เงินล่วงหน้าจ่าย (ร้อยละ)', {
+  setCell(ws, `A${advanceRow}`, 'เงินล่วงหน้าจ่าย (ร้อยละ)', { font: FONT_BODY });
+  setCellNumber(ws, `D${advanceRow}`, advancePct / 100, NUMFMT_PCT, {
     font: FONT_BODY,
-  });
-  setCellNumber(ws, `D${advanceRow}`, opts.advancePayment ?? 0, NUMFMT_PCT, {
-    font: FONT_BODY,
-    fill: FILL_INPUT,
+    fill: FILL_HIGHLIGHT,
     border: BORDER_THIN,
     alignment: { horizontal: 'right' },
   });
 
   const retentionRow = 8;
-  setCell(ws, `A${retentionRow}`, 'ค่าประกันผลงาน หัก (ร้อยละ)', {
+  setCell(ws, `A${retentionRow}`, 'ค่าประกันผลงาน หัก (ร้อยละ)', { font: FONT_BODY });
+  setCellNumber(ws, `D${retentionRow}`, retentionPct / 100, NUMFMT_PCT, {
     font: FONT_BODY,
-  });
-  setCellNumber(ws, `D${retentionRow}`, opts.retention ?? 0, NUMFMT_PCT, {
-    font: FONT_BODY,
-    fill: FILL_INPUT,
+    fill: FILL_HIGHLIGHT,
     border: BORDER_THIN,
     alignment: { horizontal: 'right' },
   });
 
   const interestRow = 9;
-  setCell(ws, `A${interestRow}`, 'ดอกเบี้ยเงินกู้ (ร้อยละ)', { font: FONT_BODY });
-  setCellNumber(ws, `D${interestRow}`, opts.interestRate ?? 0.06, NUMFMT_PCT, {
+  setCell(ws, `A${interestRow}`, 'ดอกเบี้ยเงินกู้ (ร้อยละต่อปี)', { font: FONT_BODY });
+  setCellNumber(ws, `D${interestRow}`, table.loanRate / 100, NUMFMT_PCT, {
     font: FONT_BODY,
-    fill: FILL_INPUT,
     border: BORDER_THIN,
     alignment: { horizontal: 'right' },
   });
 
   const vatRow = 10;
-  setCell(ws, `A${vatRow}`, 'ค่าภาษีมูลค่าเพิ่ม VAT (ร้อยละ)', {
+  setCell(ws, `A${vatRow}`, 'ค่าภาษีมูลค่าเพิ่ม VAT (ร้อยละ)', { font: FONT_BODY });
+  setCellNumber(ws, `D${vatRow}`, table.vatRate / 100, NUMFMT_PCT, {
     font: FONT_BODY,
-  });
-  setCellNumber(ws, `D${vatRow}`, meta.vatPct / 100, NUMFMT_PCT, {
-    font: FONT_BODY,
-    fill: FILL_INPUT,
     border: BORDER_THIN,
     alignment: { horizontal: 'right' },
   });
 
-  // ─── ตาราง Factor F มาตรฐาน (rows 12-37) ──────────────────────────────
-  setCell(ws, 'A12', 'ตารางค่า Factor F มาตรฐาน (สำนักงบประมาณ)', {
-    font: FONT_BOLD,
-  });
+  mergeAndSet(
+    ws,
+    'A11:H11',
+    `ตารางที่ใช้: เงินล่วงหน้า ${advancePct}% × เงินประกัน ${retentionPct}% (ดอกเบี้ย ${table.loanRate}%/ปี, VAT ${table.vatRate}%)`,
+    { font: FONT_BOLD, alignment: { horizontal: 'left' } },
+  );
 
+  // ─── ตาราง Factor F (24 ช่วง × 8 คอลัมน์) ─────────────────────────────
   const TABLE_HEADER = 13;
   const TABLE_START = 14;
-  const TABLE_END = TABLE_START + FACTOR_F_TABLE.length - 1;
+  const TABLE_END = TABLE_START + N - 1;
 
-  setCell(ws, `A${TABLE_HEADER}`, 'ค่างานต้นทุน (บาท)', {
-    font: FONT_BOLD,
-    fill: FILL_HEADER,
-    border: BORDER_THIN,
-    alignment: { horizontal: 'center' },
-  });
-  setCell(ws, `B${TABLE_HEADER}`, 'ถึง (บาท)', {
-    font: FONT_BOLD,
-    fill: FILL_HEADER,
-    border: BORDER_THIN,
-    alignment: { horizontal: 'center' },
-  });
-  setCell(ws, `C${TABLE_HEADER}`, 'Factor F', {
-    font: FONT_BOLD,
-    fill: FILL_HEADER,
-    border: BORDER_THIN,
-    alignment: { horizontal: 'center' },
-  });
-
-  FACTOR_F_TABLE.forEach(([lo, hi, f], i) => {
-    const r = TABLE_START + i;
-    setCellNumber(ws, `A${r}`, lo, NUMFMT_MONEY, {
-      font: FONT_BODY,
-      border: BORDER_THIN,
-      alignment: { horizontal: 'right' },
-    });
-    setCellNumber(ws, `B${r}`, hi, NUMFMT_MONEY, {
-      font: FONT_BODY,
-      border: BORDER_THIN,
-      alignment: { horizontal: 'right' },
-    });
-    setCellNumber(ws, `C${r}`, f, NUMFMT_FACTOR, {
-      font: FONT_BODY,
-      border: BORDER_THIN,
-      alignment: { horizontal: 'center' },
-    });
-  });
-
-  // ─── ส่วนสูตรคำนวณ (rows 39+) ──────────────────────────────────────────
-  const TR = `A${TABLE_START}:A${TABLE_END}`;
-  const TRB = `B${TABLE_START}:B${TABLE_END}`;
-  const TRC = `C${TABLE_START}:C${TABLE_END}`;
-
-  setCell(
-    ws,
-    'A40',
-    'สูตรคำนวณหาค่า Factor F = D − [(D − E) × (A − B) ÷ (C − B)]',
-    { font: FONT_BOLD },
-  );
-
-  // A = ค่างานต้นทุน (อ้างจาก ปร.4(ก))
-  const aRow = 42;
-  setCell(ws, `A${aRow}`, 'A = ค่างานต้นทุน (อ้างจาก ปร.4(ก))', {
-    font: FONT_BODY,
-  });
-  setCellFormula(
-    ws,
-    `D${aRow}`,
-    `'ปร.4(ก)'!${por4.grandTotalCell}`,
-    NUMFMT_MONEY,
-    {
+  const headers: Array<[string, string]> = [
+    ['A', 'ค่างาน\n(ล้านบาท)'],
+    ['B', 'ค่าอำนวยการ\n(%)'],
+    ['C', 'ค่าดอกเบี้ย\n(%)'],
+    ['D', 'กำไร\n(%)'],
+    ['E', 'รวมค่าใช้จ่าย\n(%)'],
+    ['F', 'รวมในรูป\nFactor'],
+    ['G', 'VAT\n(×)'],
+    ['H', 'Factor F'],
+  ];
+  for (const [col, label] of headers) {
+    setCell(ws, `${col}${TABLE_HEADER}`, label, {
       font: FONT_BOLD,
-      fill: FILL_HIGHLIGHT,
+      fill: FILL_HEADER,
+      border: BORDER_THIN,
+      alignment: { horizontal: 'center', vertical: 'middle', wrapText: true },
+    });
+  }
+  ws.getRow(TABLE_HEADER).height = 32;
+
+  table.brackets.forEach((b, i) => {
+    const r = TABLE_START + i;
+    const costFmt =
+      i === 0 ? '"≤"0.0' : i === N - 1 ? '">500"' : '#,##0';
+    setCellNumber(ws, `A${r}`, b.cost, costFmt, {
+      font: FONT_BODY,
+      border: BORDER_THIN,
+      alignment: { horizontal: 'center' },
+    });
+    setCellNumber(ws, `B${r}`, b.admin, NUMFMT_PCT4, {
+      font: FONT_BODY,
       border: BORDER_THIN,
       alignment: { horizontal: 'right' },
-    },
-  );
+    });
+    setCellNumber(ws, `C${r}`, b.interest, NUMFMT_PCT4, {
+      font: FONT_BODY,
+      border: BORDER_THIN,
+      alignment: { horizontal: 'right' },
+    });
+    setCellNumber(ws, `D${r}`, b.profit, NUMFMT_PCT4, {
+      font: FONT_BODY,
+      border: BORDER_THIN,
+      alignment: { horizontal: 'right' },
+    });
+    setCellNumber(ws, `E${r}`, b.totalPct, NUMFMT_PCT4, {
+      font: FONT_BODY,
+      border: BORDER_THIN,
+      alignment: { horizontal: 'right' },
+    });
+    setCellNumber(ws, `F${r}`, b.factor, NUMFMT_FACTOR, {
+      font: FONT_BODY,
+      border: BORDER_THIN,
+      alignment: { horizontal: 'center' },
+    });
+    setCellNumber(ws, `G${r}`, b.vat, NUMFMT_FACTOR, {
+      font: FONT_BODY,
+      border: BORDER_THIN,
+      alignment: { horizontal: 'center' },
+    });
+    setCellNumber(ws, `H${r}`, b.factorF, NUMFMT_FACTOR, {
+      font: FONT_BOLD,
+      border: BORDER_THIN,
+      alignment: { horizontal: 'center' },
+    });
+  });
 
-  // B = ค่างานช่วงต่ำ
-  const bRow = 43;
-  setCell(ws, `A${bRow}`, 'B = ค่างานตัวต่ำกว่าต้นทุน (lower bracket)', {
+  // ─── ส่วนคำนวณ (VLOOKUP/INDEX-MATCH + interpolation) ───────────────────
+  const AR = `$A$${TABLE_START}:$A$${TABLE_END}`; // ค่างาน (ล้านบาท)
+  const HR = `$H$${TABLE_START}:$H$${TABLE_END}`; // Factor F
+
+  let r = TABLE_END + 2;
+  setCell(ws, `A${r}`, 'การคำนวณ Factor F (เทียบบัญญัติไตรยางศ์ระหว่างช่วง)', {
+    font: FONT_BOLD,
+  });
+
+  // ค่างานต้นทุน (บาท) อ้างจาก ปร.4(ก)
+  const costBahtRow = (r += 1);
+  setCell(ws, `A${costBahtRow}`, 'ค่างานต้นทุน (บาท) — อ้างจาก ปร.4(ก)', {
     font: FONT_BODY,
   });
+  setCellFormula(ws, `H${costBahtRow}`, `'ปร.4(ก)'!${por4.grandTotalCell}`, NUMFMT_MONEY, {
+    font: FONT_BOLD,
+    fill: FILL_HIGHLIGHT,
+    border: BORDER_THIN,
+    alignment: { horizontal: 'right' },
+  });
+
+  // ค่างานต้นทุน (ล้านบาท)
+  const costMRow = (r += 1);
+  setCell(ws, `A${costMRow}`, 'ค่างานต้นทุน (ล้านบาท)', { font: FONT_BODY });
+  setCellFormula(ws, `H${costMRow}`, `H${costBahtRow}/1000000`, NUMFMT_PCT4, {
+    font: FONT_BODY,
+    border: BORDER_THIN,
+    alignment: { horizontal: 'right' },
+  });
+
+  // index ช่วง (MATCH), ขอบช่วง, Factor ของแต่ละขอบ
+  const idxRow = (r += 1);
+  setCell(ws, `A${idxRow}`, 'ดัชนีช่วง (MATCH)', { font: FONT_BODY });
+  setCellFormula(ws, `H${idxRow}`, `IFERROR(MATCH(H${costMRow},${AR},1),1)`, undefined, {
+    font: FONT_BODY,
+    border: BORDER_THIN,
+    alignment: { horizontal: 'center' },
+  });
+
+  const loCostRow = (r += 1);
+  setCell(ws, `A${loCostRow}`, 'ค่างานขอบล่าง (ล้านบาท)', { font: FONT_BODY });
+  setCellFormula(ws, `H${loCostRow}`, `INDEX(${AR},H${idxRow})`, NUMFMT_PCT4, {
+    font: FONT_BODY,
+    border: BORDER_THIN,
+    alignment: { horizontal: 'right' },
+  });
+
+  const hiCostRow = (r += 1);
+  setCell(ws, `A${hiCostRow}`, 'ค่างานขอบบน (ล้านบาท)', { font: FONT_BODY });
   setCellFormula(
     ws,
-    `D${bRow}`,
-    `IFERROR(INDEX(${TR},MATCH(D${aRow},${TR},1)),0)`,
-    NUMFMT_MONEY,
+    `H${hiCostRow}`,
+    `IFERROR(INDEX(${AR},H${idxRow}+1),INDEX(${AR},H${idxRow}))`,
+    NUMFMT_PCT4,
     {
       font: FONT_BODY,
       border: BORDER_THIN,
@@ -486,30 +542,20 @@ function buildFactorF(
     },
   );
 
-  // C = ค่างานช่วงสูง
-  const cRow = 44;
-  setCell(ws, `A${cRow}`, 'C = ค่างานตัวสูงกว่าต้นทุน (upper bracket)', {
+  const loFRow = (r += 1);
+  setCell(ws, `A${loFRow}`, 'Factor F ขอบล่าง', { font: FONT_BODY });
+  setCellFormula(ws, `H${loFRow}`, `INDEX(${HR},H${idxRow})`, NUMFMT_FACTOR, {
     font: FONT_BODY,
+    border: BORDER_THIN,
+    alignment: { horizontal: 'center' },
   });
-  setCellFormula(
-    ws,
-    `D${cRow}`,
-    `IFERROR(INDEX(${TRB},MATCH(D${aRow},${TR},1)),1)`,
-    NUMFMT_MONEY,
-    {
-      font: FONT_BODY,
-      border: BORDER_THIN,
-      alignment: { horizontal: 'right' },
-    },
-  );
 
-  // D = Factor F ช่วงต่ำ
-  const dRow = 45;
-  setCell(ws, `A${dRow}`, 'D = Factor F ของช่วงต่ำ', { font: FONT_BODY });
+  const hiFRow = (r += 1);
+  setCell(ws, `A${hiFRow}`, 'Factor F ขอบบน', { font: FONT_BODY });
   setCellFormula(
     ws,
-    `D${dRow}`,
-    `IFERROR(INDEX(${TRC},MATCH(D${aRow},${TR},1)),C${TABLE_END})`,
+    `H${hiFRow}`,
+    `IFERROR(INDEX(${HR},H${idxRow}+1),INDEX(${HR},H${idxRow}))`,
     NUMFMT_FACTOR,
     {
       font: FONT_BODY,
@@ -518,28 +564,13 @@ function buildFactorF(
     },
   );
 
-  // E = Factor F ช่วงสูง (= แถวถัดไปของ D; ถ้าเกินใช้ตัวเดียวกัน)
-  const eRow = 46;
-  setCell(ws, `A${eRow}`, 'E = Factor F ของช่วงสูง', { font: FONT_BODY });
+  // Factor F (interpolate) — ≤0.5 ใช้แถวแรก, >500 ใช้แถวสุดท้าย, อื่น ๆ เทียบสัดส่วน
+  const interpRow = (r += 1);
+  setCell(ws, `A${interpRow}`, 'Factor F (คำนวณจากตาราง)', { font: FONT_BOLD });
   setCellFormula(
     ws,
-    `D${eRow}`,
-    `IFERROR(INDEX(${TRC},MATCH(D${aRow},${TR},1)+1),C${TABLE_END})`,
-    NUMFMT_FACTOR,
-    {
-      font: FONT_BODY,
-      border: BORDER_THIN,
-      alignment: { horizontal: 'center' },
-    },
-  );
-
-  // Factor F คำนวณ (สงป.)
-  const stdRow = 48;
-  setCell(ws, `A${stdRow}`, 'Factor F (มาตรฐาน สงป.)', { font: FONT_BOLD });
-  setCellFormula(
-    ws,
-    `D${stdRow}`,
-    `IFERROR(D${dRow}-((D${dRow}-D${eRow})*(D${aRow}-D${bRow})/(D${cRow}-D${bRow})),D${dRow})`,
+    `H${interpRow}`,
+    `IF(H${costMRow}>500,INDEX(${HR},${N}),IF(H${costMRow}<=0.5,INDEX(${HR},1),IFERROR(H${loFRow}+(H${costMRow}-H${loCostRow})/(H${hiCostRow}-H${loCostRow})*(H${hiFRow}-H${loFRow}),H${loFRow})))`,
     NUMFMT_FACTOR,
     {
       font: FONT_BOLD,
@@ -549,30 +580,31 @@ function buildFactorF(
     },
   );
 
-  // Custom Factor F (user input)
-  const customRow = 52;
+  // ปรับเอง (override) — ปล่อย 0 = ใช้ค่าจากตาราง
+  const customRow = (r += 1);
   setCell(
     ws,
     `A${customRow}`,
-    '🔧 Factor F ที่ปรับตามเงื่อนไขจริง (กรอกได้, ปล่อย 0 = ใช้มาตรฐาน)',
+    '🔧 ปรับ Factor F เอง (ใส่ >0 เพื่อ override, 0 = ใช้ค่าตาราง)',
     { font: FONT_BODY },
   );
-  setCellNumber(ws, `D${customRow}`, meta.factorF || 0, NUMFMT_FACTOR, {
+  // override จากแอป (meta.factorF > 0) — ให้ ปร.5/ปร.6 ตรงกับตัวเลขในแอป
+  setCellNumber(ws, `H${customRow}`, meta.factorF > 0 ? meta.factorF : 0, NUMFMT_FACTOR, {
     font: FONT_BODY,
     fill: FILL_INPUT,
     border: BORDER_THIN,
     alignment: { horizontal: 'center' },
   });
 
-  // Factor F ที่ใช้จริง (= IF custom > 0 → custom, else standard)
-  const finalRow = 53;
-  setCell(ws, `A${finalRow}`, 'Factor F ที่จะใช้จริง (เลือก)', {
+  // Factor F ที่ใช้จริง
+  const finalRow = (r += 1);
+  setCell(ws, `A${finalRow}`, 'Factor F ที่จะใช้จริง', {
     font: { ...FONT_BOLD, size: 16 },
   });
   setCellFormula(
     ws,
-    `D${finalRow}`,
-    `IF(D${customRow}>0,D${customRow},D${stdRow})`,
+    `H${finalRow}`,
+    `IF(H${customRow}>0,H${customRow},H${interpRow})`,
     NUMFMT_FACTOR,
     {
       font: { ...FONT_BOLD, size: 16 },
@@ -583,7 +615,7 @@ function buildFactorF(
   );
 
   return {
-    finalFactorCell: `D${finalRow}`,
+    finalFactorCell: `H${finalRow}`,
     advanceCell: `D${advanceRow}`,
     retentionCell: `D${retentionRow}`,
     interestCell: `D${interestRow}`,
@@ -963,6 +995,7 @@ function buildPor5(
   ws: ExcelJS.Worksheet,
   opts: GovExportOptions,
   por4: Por4Refs,
+  factorRefs: FactorFRefs,
 ): Por5Refs {
   const { meta } = opts;
 
@@ -1098,11 +1131,17 @@ function buildPor5(
       border: BORDER_THIN,
     },
   );
-  setCellFormula(ws, `J${mainRow}`, `'Factor F'!D53`, NUMFMT_FACTOR, {
-    font: FONT_BODY,
-    alignment: { horizontal: 'center', vertical: 'middle' },
-    border: BORDER_THIN,
-  });
+  setCellFormula(
+    ws,
+    `J${mainRow}`,
+    `'Factor F'!${factorRefs.finalFactorCell}`,
+    NUMFMT_FACTOR,
+    {
+      font: FONT_BODY,
+      alignment: { horizontal: 'center', vertical: 'middle' },
+      border: BORDER_THIN,
+    },
+  );
   setCellFormula(ws, `K${mainRow}`, `I${mainRow}*J${mainRow}`, NUMFMT_MONEY, {
     font: FONT_BODY,
     alignment: { horizontal: 'right', vertical: 'middle' },
@@ -1115,10 +1154,10 @@ function buildPor5(
 
   // Row 11-14: components
   const condRows: Array<[string, string]> = [
-    ['เงินล่วงหน้าจ่าย', `'Factor F'!D7`],
-    ['เงินประกันผลงานหัก', `'Factor F'!D8`],
-    ['ดอกเบี้ยเงินกู้', `'Factor F'!D9`],
-    ['ค่าภาษีมูลค่าเพิ่ม (VAT)', `'Factor F'!D10`],
+    ['เงินล่วงหน้าจ่าย', `'Factor F'!${factorRefs.advanceCell}`],
+    ['เงินประกันผลงานหัก', `'Factor F'!${factorRefs.retentionCell}`],
+    ['ดอกเบี้ยเงินกู้', `'Factor F'!${factorRefs.interestCell}`],
+    ['ค่าภาษีมูลค่าเพิ่ม (VAT)', `'Factor F'!${factorRefs.vatCell}`],
   ];
   condRows.forEach(([label, formula], i) => {
     const r = 11 + i;
@@ -1427,15 +1466,18 @@ function buildPor6(
   });
   ws.getRow(totalRow).height = 30;
 
-  // ─── Row 12: bahtText ──────────────────────────────────────────────────
-  const directCost =
-    opts.items.reduce(
-      (sum, it) => sum + adjustedQuantity(it) * it.unitPrice,
-      0,
-    ) * (meta.factorF || 1);
+  // ─── Row 12: bahtText (ใช้ Factor F จากตาราง CGD ให้ตรงกับ ปร.5/ปร.6) ───
+  const directCost = opts.items.reduce(
+    (sum, it) => sum + adjustedQuantity(it) * it.unitPrice,
+    0,
+  );
+  // ใช้ override (meta.factorF > 0) ถ้ามี มิฉะนั้นใช้ค่าตาราง — ให้ตรงกับ ปร.5/ปร.6 ใน Excel
+  const { factorF: tableF } = resolveFactorF(opts, directCost);
+  const factorF = meta.factorF > 0 ? meta.factorF : tableF;
+  const grandConstruction = directCost * factorF;
   const bahtRow = 12;
   ws.mergeCells(`A${bahtRow}:J${bahtRow}`);
-  setCell(ws, `A${bahtRow}`, `(${bahtText(directCost)})`, {
+  setCell(ws, `A${bahtRow}`, `(${bahtText(grandConstruction)})`, {
     font: { ...FONT_ITALIC, size: 14 },
     alignment: { horizontal: 'center', vertical: 'middle' },
     border: BORDER_THIN,

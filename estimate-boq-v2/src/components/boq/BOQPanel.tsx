@@ -11,6 +11,7 @@ import { useProjectMeta } from '@/stores/projectMetaStore';
 import { useMeasurementStore } from '@/stores/measurementStore';
 import {
   directCostTotal,
+  effectiveFactorF,
   formatCurrency,
   marketPrice,
   totalsByKind,
@@ -46,7 +47,14 @@ export function BOQPanel() {
 
   const totals = totalsByKind(items);
   const direct = directCostTotal(items);
-  const market = marketPrice(direct, meta.factorF);
+  // Factor F: ใช้ตาราง CGD 2567 ตามค่างาน (หรือ override ถ้า meta.factorF > 0)
+  const factorF = effectiveFactorF(
+    direct,
+    meta.factorF,
+    meta.advancePct,
+    meta.retentionPct,
+  );
+  const market = marketPrice(direct, factorF);
   const vat = market * (meta.vatPct / 100);
   const grand = market + vat;
 
@@ -74,7 +82,14 @@ export function BOQPanel() {
       if (variant === 'classic') {
         await exportBOQToExcel({ items, meta });
       } else {
-        await exportGovBOQ({ items, meta, mode: variant });
+        await exportGovBOQ({
+          items,
+          meta,
+          mode: variant,
+          // เลือกตาราง Factor F CGD 2567 (เก็บเป็นเศษส่วนตามที่ export ต้องการ)
+          advancePayment: (meta.advancePct ?? 0) / 100,
+          retention: (meta.retentionPct ?? 0) / 100,
+        });
       }
     } catch (err) {
       alert(`Export ไม่สำเร็จ: ${err instanceof Error ? err.message : String(err)}`);
@@ -203,7 +218,7 @@ export function BOQPanel() {
             <TotalsRow label="Direct Cost" value={direct} bold />
           </div>
           <TotalsRow
-            label={`× Factor F (${meta.factorF.toFixed(4)})`}
+            label={`× Factor F (${factorF.toFixed(4)}${meta.factorF > 0 ? ' กรอกเอง' : ' ตาราง'})`}
             value={market}
             bold
             color="text-success"

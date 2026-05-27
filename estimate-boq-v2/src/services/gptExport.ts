@@ -16,7 +16,13 @@ export function buildGPTPrompt(
   if (meta.client) lines.push(`- เจ้าของ: ${meta.client}`);
   if (meta.location) lines.push(`- ที่ตั้ง: ${meta.location}`);
   if (meta.province) lines.push(`- จังหวัด: ${meta.province}`);
-  lines.push(`- Factor F: ${meta.factorF.toFixed(4)}`);
+  lines.push(
+    `- Factor F: ${
+      meta.factorF > 0
+        ? `${meta.factorF.toFixed(4)} (กำหนดเอง)`
+        : 'ตามตาราง Factor F กรมบัญชีกลาง สงป.2567 (คำนวณจากค่างาน)'
+    }`,
+  );
   lines.push('');
 
   if (measurements.length === 0) {

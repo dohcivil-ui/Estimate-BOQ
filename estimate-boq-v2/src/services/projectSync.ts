@@ -428,13 +428,18 @@ export async function loadProject(
   resetAllStores();
 
   // ─── 3. populate project meta ────────────────────────────────────────
+  // legacy: โปรเจกต์เก่าบันทึก factor_f = 1.2768 (default เดิม) → ใช้ตารางอัตโนมัติแทน (0)
+  const savedFactorF = project.factor_f ?? 0;
+  const factorF = Math.abs(savedFactorF - 1.2768) < 1e-9 ? 0 : savedFactorF;
   useProjectMeta.getState().setAll({
     name: project.name,
     client: project.client ?? '',
     location: project.location ?? '',
     province: project.province ?? '',
-    factorF: project.factor_f ?? 1,
+    factorF, // 0 = อัตโนมัติจากตาราง CGD 2567 (>0 = override กรอกเอง)
     vatPct: 7,
+    advancePct: 0,
+    retentionPct: 0,
   });
 
   // ─── 4. download files + re-render ───────────────────────────────────

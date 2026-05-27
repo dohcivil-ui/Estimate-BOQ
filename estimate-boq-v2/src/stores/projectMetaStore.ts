@@ -15,8 +15,10 @@ const DEFAULT_META: ProjectMeta = {
   client: '',
   location: '',
   province: '',
-  factorF: 1.2768, // ค่าทั่วไปของอาคารทั่วไป (ตัวอย่างจาก HANDOFF)
+  factorF: 0, // 0 = อัตโนมัติจากตาราง CGD 2567 (>0 = override กรอกเอง)
   vatPct: 7,
+  advancePct: 0, // เงินล่วงหน้าจ่าย — เลือกตาราง Factor F CGD 2567
+  retentionPct: 0, // เงินประกันผลงานหัก
 };
 
 export const useProjectMeta = create<ProjectMetaState>((set) => ({

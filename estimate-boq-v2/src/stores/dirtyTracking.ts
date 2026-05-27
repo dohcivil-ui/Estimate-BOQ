@@ -44,7 +44,9 @@ export function initDirtyTracking(): void {
       s.location !== prev.location ||
       s.province !== prev.province ||
       s.factorF !== prev.factorF ||
-      s.vatPct !== prev.vatPct
+      s.vatPct !== prev.vatPct ||
+      s.advancePct !== prev.advancePct ||
+      s.retentionPct !== prev.retentionPct
     ) {
       mark();
     }
