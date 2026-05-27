@@ -28,7 +28,7 @@ import { useViewportStore } from '@/stores/viewportStore';
 import { useAIStore } from '@/stores/aiStore';
 import { loadDrawingFile } from './loadDrawing';
 import type { Measurement } from '@/types/measurement';
-import type { BOQItem } from '@/types/boq';
+import type { BOQItem, Discipline, DisciplineGroup } from '@/types/boq';
 import type { ScaleProfile } from '@/core/scale';
 import type {
   DrawingFile,
@@ -101,6 +101,10 @@ interface BOQItemRow {
   source: string;
   source_ref: string | null;
   notes: string | null;
+  /** v2: หน้าแบบ ('manual'/'ungrouped' หรือ pageId จริง) — null ในแถวเก่า */
+  page_id: string | null;
+  /** v2: discipline ของกลุ่ม — null ในแถวเก่า */
+  discipline: string | null;
 }
 
 export interface ProjectListItem {
@@ -360,7 +364,10 @@ export async function saveProject(): Promise<string> {
       .eq('project_id', projectId);
     if (delErr) throw wrapDbError(delErr, 'boq_items', 'ลบ');
 
-    const boqRows = boq.items.map((it) => boqToRow(it, projectId));
+    // ★ บันทึกจาก disciplineGroups เพื่อให้แต่ละแถวมี page_id + discipline ครบ
+    const boqRows = boq.disciplineGroups.flatMap((g) =>
+      g.items.map((it) => boqToRow(it, projectId, g.pageId, g.discipline)),
+    );
     if (boqRows.length > 0) {
       const { error } = await client.from('boq_items').insert(boqRows);
       if (error) throw wrapDbError(error, 'boq_items', 'บันทึก');
@@ -514,10 +521,10 @@ export async function loadProject(
     if (m) useMeasurementStore.getState().add(m);
   }
 
-  // ─── 7. populate BOQ ─────────────────────────────────────────────────
-  const boqItems = boqRows.map(rowToBOQItem);
-  if (boqItems.length > 0) {
-    useBOQStore.getState().addMany(boqItems);
+  // ─── 7. populate BOQ → group เป็น disciplineGroups[] ตาม (discipline, page_id) ──
+  const groups = rowsToGroups(boqRows);
+  if (groups.length > 0) {
+    useBOQStore.getState().setGroups(groups);
   }
 
   // ─── 8. update current project + mark saved ──────────────────────────
@@ -645,7 +652,12 @@ function rowToMeasurement(row: ShapeRow): Measurement | null {
   return j as unknown as Measurement;
 }
 
-function boqToRow(it: BOQItem, projectId: string): Omit<BOQItemRow, 'project_id'> & { project_id: string } {
+function boqToRow(
+  it: BOQItem,
+  projectId: string,
+  pageId: string,
+  discipline: Discipline,
+): BOQItemRow {
   return {
     id: it.id,
     project_id: projectId,
@@ -660,6 +672,8 @@ function boqToRow(it: BOQItem, projectId: string): Omit<BOQItemRow, 'project_id'
     source: it.source,
     source_ref: it.sourceRef ?? null,
     notes: it.notes ?? null,
+    page_id: pageId,
+    discipline,
   };
 }
 
@@ -681,6 +695,60 @@ function rowToBOQItem(row: BOQItemRow): BOQItem {
     createdAt: now,
     updatedAt: now,
   };
+}
+
+const VALID_DISCIPLINES: Discipline[] = [
+  'architectural',
+  'structural',
+  'electrical',
+  'sanitary',
+  'other',
+];
+
+/** backfill discipline จาก category เดิม (สำหรับแถวเก่าที่ discipline = null) */
+function backfillDiscipline(category: string | null | undefined): Discipline {
+  const c = category ?? '';
+  if (c.includes('โครงสร้าง')) return 'structural';
+  if (c.includes('ไฟฟ้า')) return 'electrical';
+  if (c.includes('สุขาภิบาล')) return 'sanitary';
+  if (c.includes('สถาปัตย') || c.includes('พื้น')) return 'architectural';
+  return 'other';
+}
+
+/**
+ * group BOQ rows → disciplineGroups[] ตาม (discipline, page_id)
+ * - แถวเก่า page_id=null → 'ungrouped', discipline=null → backfill จาก category
+ * - ไม่ drop รายการใด ๆ (รักษางานเดิมครบ — สะสมข้ามรอบ)
+ */
+function rowsToGroups(rows: BOQItemRow[]): DisciplineGroup[] {
+  const map = new Map<string, DisciplineGroup>();
+  for (const row of rows) {
+    const pageId = row.page_id ?? 'ungrouped';
+    const discipline: Discipline =
+      row.discipline && VALID_DISCIPLINES.includes(row.discipline as Discipline)
+        ? (row.discipline as Discipline)
+        : backfillDiscipline(row.category);
+    const key = `${discipline}|${pageId}`;
+    let g = map.get(key);
+    if (!g) {
+      g = {
+        discipline,
+        pageId,
+        pageName:
+          pageId === 'ungrouped'
+            ? 'ข้อมูลเดิม (ไม่ระบุหน้า)'
+            : pageId === 'manual'
+              ? 'รายการเพิ่มเอง'
+              : `หน้า ${pageId}`,
+        items: [],
+        analyzedAt: new Date().toISOString(),
+        status: 'confirmed',
+      };
+      map.set(key, g);
+    }
+    g.items.push(rowToBOQItem(row));
+  }
+  return Array.from(map.values());
 }
 
 // ─── DrawingPage typed re-export (เผื่อใช้ในอนาคต) ────────────────────
