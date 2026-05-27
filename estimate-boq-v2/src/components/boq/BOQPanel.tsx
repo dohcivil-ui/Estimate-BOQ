@@ -79,16 +79,19 @@ export function BOQPanel() {
     setExportMenuOpen(false);
     setExporting(true);
     try {
+      // ★ ดึงจาก store ปัจจุบันเสมอ (ไม่ใช้ items/meta ที่ค้างจาก render scope)
+      const freshItems = useBOQStore.getState().getAllItems();
+      const freshMeta = useProjectMeta.getState();
       if (variant === 'classic') {
-        await exportBOQToExcel({ items, meta });
+        await exportBOQToExcel({ items: freshItems, meta: freshMeta });
       } else {
         await exportGovBOQ({
-          items,
-          meta,
+          items: freshItems,
+          meta: freshMeta,
           mode: variant,
           // เลือกตาราง Factor F CGD 2567 (เก็บเป็นเศษส่วนตามที่ export ต้องการ)
-          advancePayment: (meta.advancePct ?? 0) / 100,
-          retention: (meta.retentionPct ?? 0) / 100,
+          advancePayment: (freshMeta.advancePct ?? 0) / 100,
+          retention: (freshMeta.retentionPct ?? 0) / 100,
         });
       }
     } catch (err) {
