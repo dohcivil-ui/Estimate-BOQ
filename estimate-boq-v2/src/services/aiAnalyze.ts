@@ -751,7 +751,7 @@ async function callAIDirect(
   } catch (err) {
     if (err instanceof Error && err.name === 'AbortError') {
       throw new Error(
-        `⏱️ AI ใช้เวลาเกิน 2 นาที — ลอง:\n• ปิด HD\n• ลดจำนวนหน้าอ้างอิง\n• เลือก mode เฉพาะแทน อัตโนมัติ`,
+        `⏱️ AI ใช้เวลาเกิน ${Math.round(config.timeoutMs / 60_000)} นาที — ลอง:\n• ปิด HD\n• ลดจำนวนหน้าอ้างอิง\n• เลือก mode เฉพาะแทน อัตโนมัติ`,
       );
     }
     throw err;
@@ -892,7 +892,7 @@ async function callAnthropicDirect(
   } catch (err) {
     if (err instanceof Error && err.name === 'AbortError') {
       throw new Error(
-        `⏱️ AI ใช้เวลาเกิน 2 นาที — ลอง:\n• ปิด HD\n• ลดจำนวนหน้าอ้างอิง\n• เลือก mode เฉพาะแทน อัตโนมัติ`,
+        `⏱️ AI ใช้เวลาเกิน ${Math.round(config.timeoutMs / 60_000)} นาที — ลอง:\n• ปิด HD\n• ลดจำนวนหน้าอ้างอิง\n• เลือก mode เฉพาะแทน อัตโนมัติ`,
       );
     }
     throw err;

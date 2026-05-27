@@ -226,7 +226,7 @@ export function getEngineConfig(engine: AIEngine): AIEngineConfig {
         imageQuality: 0.85,
         refImageDim: 1500,
         refImageQuality: 0.8,
-        timeoutMs: 180_000,
+        timeoutMs: 300_000, // Opus + structural + ref pages ช้ากว่า Sonnet (5 นาที)
         supportsSystemRole: true,
       };
   }
