@@ -3,8 +3,10 @@
  */
 import { useMemo, useState } from 'react';
 import type { AIItem, AIMaterial, AISuggestion, AIConfidence } from '@/types/ai';
+import type { BOQItem, Discipline } from '@/types/boq';
 import { useAIStore } from '@/stores/aiStore';
 import { useBOQStore } from '@/stores/boqStore';
+import { useActivePage } from '@/stores/drawingStore';
 import { itemToBOQItems } from '@/services/aiToBoq';
 
 interface Props {
@@ -41,8 +43,29 @@ export function AIElementsTable({ suggestions }: Props) {
   const setStatus = useAIStore((s) => s.setSuggestionStatus);
   const setEdited = useAIStore((s) => s.setSuggestionEdited);
   const setCreatedBoq = useAIStore((s) => s.setSuggestionCreatedBoq);
-  const addManyBoq = useBOQStore((s) => s.addMany);
+  const replacePageItems = useBOQStore((s) => s.replacePageItems);
+  const addItemsToPage = useBOQStore((s) => s.addItemsToPage);
+  const page = useActivePage();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  // suggestions ทั้งหมดมาจาก analysis ล่าสุดของหน้าเดียว → ใช้ pageId/discipline ร่วมกัน
+  const pageId = suggestions[0]?.pageId ?? page?.id ?? '';
+  const discipline: Discipline = suggestions[0]?.discipline ?? 'other';
+  const pageName = page ? `หน้า ${page.pageNumber}` : `หน้า ${pageId}`;
+
+  /**
+   * ใส่ rows เข้า BOQ ของหน้านี้:
+   *   - accept ครั้งแรกของรอบ (ยังไม่มี suggestion ไหน accepted) → REPLACE (เคลียร์ของ analysis เก่า)
+   *   - ครั้งถัดไป → append เข้า group เดิม (ไม่ทับ/ไม่ regenerate ของที่ accept แล้ว)
+   */
+  const pushRowsForPage = (rows: BOQItem[]) => {
+    const isFirstAccept = !suggestions.some((x) => x.status === 'accepted');
+    if (isFirstAccept) {
+      replacePageItems(pageId, discipline, pageName, rows);
+    } else {
+      addItemsToPage(pageId, discipline, pageName, rows);
+    }
+  };
 
   const grouped = useMemo(() => {
     const map = new Map<string, AISuggestion[]>();
@@ -71,7 +94,7 @@ export function AIElementsTable({ suggestions }: Props) {
       alert('รายการนี้ไม่มีข้อมูลพอที่จะสร้าง BOQ');
       return;
     }
-    addManyBoq(rows);
+    pushRowsForPage(rows);
     setCreatedBoq(
       sg.id,
       rows.map((r) => r.id),
@@ -87,7 +110,7 @@ export function AIElementsTable({ suggestions }: Props) {
     if (!confirm(`Accept ทั้งหมด ${pending.length} รายการ?`)) return;
 
     const refs: { sgId: string; ids: string[] }[] = [];
-    const flat: ReturnType<typeof itemToBOQItems> = [];
+    const flat: BOQItem[] = [];
     for (const sg of pending) {
       const item = mergedItem(sg);
       const rows = itemToBOQItems(item, sg.id);
@@ -100,7 +123,7 @@ export function AIElementsTable({ suggestions }: Props) {
       alert('ไม่มีรายการใดมีข้อมูลพอจะสร้าง BOQ');
       return;
     }
-    addManyBoq(flat);
+    pushRowsForPage(flat);
     for (const r of refs) {
       setCreatedBoq(r.sgId, r.ids);
       setStatus(r.sgId, 'accepted');

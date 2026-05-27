@@ -32,6 +32,13 @@ interface BOQState {
     pageName: string,
     newItems: BOQItem[],
   ) => void;
+  /** append items เข้า group ของหน้านั้น (สร้างถ้ายังไม่มี) — ใช้ accept ทีละรายการในรอบ analysis เดียวกัน */
+  addItemsToPage: (
+    pageId: string,
+    discipline: Discipline,
+    pageName: string,
+    items: BOQItem[],
+  ) => void;
   getAllItems: () => BOQItem[];
   getItemsByDiscipline: (d: Discipline) => BOQItem[];
   /** แทนที่ groups ทั้งหมด (ใช้ตอน load จาก DB) — reset history */
@@ -127,6 +134,32 @@ export const useBOQStore = create<BOQState>((set, get) => ({
       const next = s.disciplineGroups.slice();
       if (idx >= 0) next[idx] = group; // ★ REPLACE
       else next.push(group); // ★ ADD หน้าใหม่
+      return commit(s, next);
+    }),
+
+  addItemsToPage: (pageId, discipline, pageName, items) =>
+    set((s) => {
+      if (items.length === 0) return s;
+      const idx = s.disciplineGroups.findIndex((g) => g.pageId === pageId);
+      if (idx < 0) {
+        return commit(s, [
+          ...s.disciplineGroups,
+          {
+            discipline,
+            pageId,
+            pageName,
+            items,
+            analyzedAt: now(),
+            status: 'draft',
+          },
+        ]);
+      }
+      const next = s.disciplineGroups.slice();
+      next[idx] = {
+        ...next[idx]!,
+        items: [...next[idx]!.items, ...items],
+        analyzedAt: now(),
+      };
       return commit(s, next);
     }),
 
