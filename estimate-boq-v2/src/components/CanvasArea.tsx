@@ -14,12 +14,15 @@ import { useCanvasSize } from '@/stores/canvasSizeStore';
 import { useRotationFor } from '@/stores/rotationStore';
 import { useToolStore } from '@/stores/toolStore';
 import { useMeasurementsForPage } from '@/stores/measurementStore';
+import { useSnapStore } from '@/stores/snapStore';
+import { useScaleFor } from '@/stores/scaleStore';
 import { useResizeObserver } from '@/hooks/useResizeObserver';
 import { useDocumentDrop } from '@/hooks/useDocumentDrop';
 import { useCanvasInteraction } from '@/hooks/useCanvasInteraction';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { importFilesIntoStore } from '@/services/importFiles';
 import { RasterLayer } from './canvas/RasterLayer';
+import { GridLayer } from './canvas/GridLayer';
 import { MeasurementsLayer } from './canvas/MeasurementsLayer';
 import { DraftLayer } from './canvas/DraftLayer';
 import { SnapHud } from './canvas/SnapHud';
@@ -52,6 +55,20 @@ export function CanvasArea() {
   const draftPoints = useToolStore((s) => s.draftPoints);
   const cursorPagePoint = useToolStore((s) => s.cursorPagePoint);
   const measurements = useMeasurementsForPage(page?.id ?? null);
+
+  // snap/grid state สำหรับ overlay
+  const snapEnabled = useSnapStore((s) => s.enabled);
+  const gridOn = useSnapStore((s) => s.toggles.grid);
+  const gridSpacingM = useSnapStore((s) => s.gridSpacingM);
+  const snapScreenRadius = useSnapStore((s) => s.screenRadius);
+  const scale = useScaleFor(page?.id ?? null);
+
+  const gridSpacingPage =
+    snapEnabled && gridOn
+      ? scale
+        ? gridSpacingM / scale.unitPerPixel
+        : 50
+      : undefined;
 
   const interaction = useCanvasInteraction(page, stageRef);
   useKeyboardShortcuts({
@@ -102,6 +119,12 @@ export function CanvasArea() {
           onDblClick={interaction.handleDoubleClick}
         >
           <RasterLayer page={page} transform={transform} rotationDeg={rotationDeg} />
+          <GridLayer
+            width={width}
+            height={height}
+            transform={transform}
+            spacingPage={gridSpacingPage}
+          />
           <MeasurementsLayer measurements={measurements} transform={transform} />
           <DraftLayer
             tool={activeTool}
@@ -109,7 +132,11 @@ export function CanvasArea() {
             cursorPoint={cursorPagePoint}
             transform={transform}
           />
-          <SnapHud snap={interaction.currentSnap} transform={transform} />
+          <SnapHud
+            snap={interaction.currentSnap}
+            transform={transform}
+            catchRadius={snapScreenRadius}
+          />
         </Stage>
       ) : (
         <EmptyCanvasState importing={importing} />

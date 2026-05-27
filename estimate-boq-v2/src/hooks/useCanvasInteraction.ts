@@ -58,8 +58,12 @@ export function useCanvasInteraction(
   const snapEnabled = useSnapStore((s) => s.enabled);
   const snapToggles = useSnapStore((s) => s.toggles);
   const snapScreenRadius = useSnapStore((s) => s.screenRadius);
+  const gridSpacingM = useSnapStore((s) => s.gridSpacingM);
   const imageSnap = useSnapStore((s) => s.imageSnap);
   const imageSensitivity = useSnapStore((s) => s.imageSensitivity);
+  const scaleUnitPerPixel = useScaleStore((s) =>
+    page ? (s.byPageId[page.id]?.unitPerPixel ?? null) : null,
+  );
 
   const { segments, nodes } = useSnapCandidates(page?.id ?? null);
 
@@ -100,6 +104,13 @@ export function useCanvasInteraction(
       const radiusPage = snapScreenRadius / transformZoom;
       let snap: SnapPoint | null = null;
 
+      // ระยะ grid (page-px): ถ้าตั้งสเกลแล้วใช้เมตรจริง, ถ้ายัง fallback 50px
+      const gridSpacing = snapToggles.grid
+        ? scaleUnitPerPixel
+          ? gridSpacingM / scaleUnitPerPixel
+          : 50
+        : undefined;
+
       if (snapEnabled) {
         snap = findSnap({
           cursor: raw,
@@ -111,6 +122,7 @@ export function useCanvasInteraction(
               ? draftPoints[draftPoints.length - 1]
               : null,
           toggles: snapToggles,
+          gridSpacing,
         });
 
         // ลอง image snap ถ้าเปิดและไม่เจอ vertex snap (ให้ priority ต่ำกว่า)
@@ -152,6 +164,8 @@ export function useCanvasInteraction(
       page,
       snapEnabled,
       snapScreenRadius,
+      gridSpacingM,
+      scaleUnitPerPixel,
       transformZoom,
       segments,
       nodes,

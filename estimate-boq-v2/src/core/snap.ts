@@ -15,6 +15,7 @@ export type SnapType =
   | 'intersection'
   | 'perpendicular'
   | 'onEdge'
+  | 'grid'
   | 'image';
 
 export interface SnapPoint {
@@ -29,6 +30,7 @@ export interface SnapToggles {
   intersection: boolean;
   perpendicular: boolean;
   onEdge: boolean;
+  grid: boolean;
 }
 
 /** segment ของ measurement (ไม่รวม count/scale) — closed=true สำหรับ polygon */
@@ -50,6 +52,10 @@ export interface SnapInput {
   lastDraftPoint?: Pt | null;
   /** toggles แต่ละโหมด */
   toggles: SnapToggles;
+  /** ระยะห่าง grid (page-px) — undefined/0 = ปิด grid snap */
+  gridSpacing?: number;
+  /** จุดอ้างอิงของ grid (page-px) — default (0,0) */
+  gridOrigin?: Pt;
 }
 
 /** หา snap candidate ที่ใกล้สุด — null ถ้าไม่มี */
@@ -116,6 +122,17 @@ export function findSnap(input: SnapInput): SnapPoint | null {
         proj.distance,
       );
     }
+  }
+
+  // grid — priority ต่ำสุด: ใช้ก็ต่อเมื่อไม่เจอ vertex/edge snap อื่นเลย
+  if (!best && toggles.grid && input.gridSpacing && input.gridSpacing > 0) {
+    const s = input.gridSpacing;
+    const ox = input.gridOrigin?.x ?? 0;
+    const oy = input.gridOrigin?.y ?? 0;
+    const gx = ox + Math.round((cursor.x - ox) / s) * s;
+    const gy = oy + Math.round((cursor.y - oy) / s) * s;
+    const gp = { x: gx, y: gy };
+    tryUpdate({ x: gx, y: gy, type: 'grid' }, distancePx(cursor, gp));
   }
 
   return best ? (best as { sp: SnapPoint }).sp : null;

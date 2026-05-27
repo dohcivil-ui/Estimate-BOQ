@@ -10,10 +10,12 @@ import { useActivePage } from '@/stores/drawingStore';
 export function SnapControls() {
   const enabled = useSnapStore((s) => s.enabled);
   const toggles = useSnapStore((s) => s.toggles);
+  const gridSpacingM = useSnapStore((s) => s.gridSpacingM);
   const imageSnap = useSnapStore((s) => s.imageSnap);
   const sensitivity = useSnapStore((s) => s.imageSensitivity);
   const setEnabled = useSnapStore((s) => s.setEnabled);
   const setToggle = useSnapStore((s) => s.setToggle);
+  const setGridSpacingM = useSnapStore((s) => s.setGridSpacingM);
   const setImageSnap = useSnapStore((s) => s.setImageSnap);
   const setSensitivity = useSnapStore((s) => s.setImageSensitivity);
   const page = useActivePage();
@@ -62,6 +64,27 @@ export function SnapControls() {
             checked={toggles.onEdge}
             onChange={(v) => setToggle('onEdge', v)}
           />
+          <SnapCheck
+            label="▦ กริด"
+            color="text-slate-300"
+            checked={toggles.grid}
+            onChange={(v) => setToggle('grid', v)}
+          />
+          {toggles.grid && (
+            <div className="mt-0.5 flex items-center gap-1 pl-5 text-[11px] text-ink-muted">
+              <span>ระยะ:</span>
+              <input
+                type="number"
+                step="0.1"
+                min="0.05"
+                value={gridSpacingM}
+                onChange={(e) => setGridSpacingM(Number(e.target.value))}
+                className="w-16 rounded border border-bg-border bg-bg-base px-1 py-0.5 text-[11px] text-ink-primary outline-none focus:border-accent"
+              />
+              <span>ม.</span>
+              {!page && <span className="text-ink-muted">(ตั้งสเกลก่อน)</span>}
+            </div>
+          )}
         </div>
       )}
 
