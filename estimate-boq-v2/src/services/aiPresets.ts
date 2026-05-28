@@ -39,13 +39,21 @@ export const PROMPT_PRESETS: PromptPreset[] = [
     defaultEngine: 'anthropic-opus',
     prompt: `ถอดปริมาณงานโครงสร้าง หน้า ${PLACEHOLDER_MAIN} อ้างอิง ${PLACEHOLDER_REF}
 
-เน้นตามกฎ:
-- นับฐานราก/เสา แบบ GRID-FIRST: นับจุดตัด grid ก่อน → จำแนกชนิดฐาน → นับฐานพิเศษนอกจุดตัดแยก → รวมไม่หักลบ (กฎ 11)
-- คานรายงานเป็นจำนวนตัว × ขนาด × ความยาวต่อตัว (กฎ 13)
-- สร้าง implied items: ทรายรอง, lean concrete, ขุดดิน, ดินถมกลับ, ตอม่อ (กฎ 14)
-- cross-check grid geometry ก่อนสรุป (กฎ 15)
-- ระบุ grid position ทุก item + confidence + source
-- ส่งตาราง + JSON สำหรับ import`,
+วิธีตอบ (กัน timeout — สำคัญ):
+- คิด/ตรวจในใจ ไม่ต้องร่ายขั้นตอน grid-first ทีละสเต็ป
+- cross-check grid เขียนสั้น 1-2 บรรทัด (เช่น "6×2=12 ✓ · 5×4.00=20 ✓")
+- หมายเหตุเฉพาะที่ต้องยืนยันจริง อย่างละ 1 บรรทัด
+- ส่งแค่: ตารางสรุปสั้น + JSON import
+
+นับฐาน:
+- จุดตัด grid = ฐานหลัก (กฎ 11)
+- ฐานนอกจุดตัด: นับเฉพาะที่เห็น "กล่องฐาน + label ฐาน" ชัดทั้งคู่
+  เส้น dimension (เช่น 1.30) หรือ label ที่ดูซ้ำ = ไม่ใช่ฐานใหม่ ห้ามเพิ่ม
+- ไม่แน่ใจ → ใส่ ❓ ใน warnings ห้ามเดาเพิ่มจำนวน
+
+คาน = จำนวนตัว × ขนาด × ยาว/ตัว (กฎ 13)
+implied: ทรายรอง/lean/ขุดดิน/ถมกลับ/ตอม่อ (กฎ 14)
+ทุก item: grid position + confidence + source`,
   },
   {
     id: 'architectural',
