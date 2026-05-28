@@ -43,6 +43,47 @@ function cleanUnit(unit: string | undefined | null): string {
   return unit.split('/')[0]!.trim() || 'หน่วย';
 }
 
+/**
+ * แก้ bug ราคาเหล็กบาน 1000 เท่า — เกิดเมื่อ AI ส่ง unit="กก." แต่ unit_price
+ * เป็นค่าจากตาราง "บาท/ตัน" (เช่น 21,050) แทนที่จะเป็น "บาท/กก." (21.05).
+ *
+ * Heuristic (ต้องเข้าทั้ง 3 เงื่อนไข):
+ *  1. unit normalize เป็น "กก." / "kg" / "kilogram"
+ *  2. unitPrice > 200 (ราคาเหล็กจริง ~20-25 บ./กก. — ถ้า > 200 น่าจะเป็น บ./ตัน)
+ *  3. name หรือ category match รูปแบบเหล็กเสริม (SR/SD/RB/DB/เหล็ก)
+ *
+ * idempotent: เรียกซ้ำกับค่าเดิม (เช่น 21.05) → return ค่าเดิม (ไม่หารอีก)
+ *
+ * ตัวอย่าง:
+ *   fixRebarUnitPrice("SR.24 RB9", "เหล็กเสริม", "กก.", 21050) → 21.05
+ *   fixRebarUnitPrice("เหล็ก DB12", "ฐานราก",    "กก.", 21150) → 21.15
+ *   fixRebarUnitPrice("ลวดผูกเหล็ก",  "ฐานราก",  "กก.", 58)    → 58 (ไม่แตะ < 200)
+ *   fixRebarUnitPrice("คอนกรีต 240",  "ฐานราก",  "ลบ.ม.", 2470) → 2470 (unit ≠ กก.)
+ *   fixRebarUnitPrice("SR.24 RB9",   "เหล็กเสริม", "กก.", 21.05) → 21.05 (idempotent)
+ */
+export function fixRebarUnitPrice(
+  name: string,
+  category: string,
+  unit: string,
+  unitPrice: number,
+): number {
+  if (!Number.isFinite(unitPrice) || unitPrice <= 200) return unitPrice;
+  const normUnit = unit.toLowerCase().replace(/[.\s]/g, '');
+  if (normUnit !== 'กก' && normUnit !== 'kg' && normUnit !== 'kilogram') {
+    return unitPrice;
+  }
+  const haystack = `${name} ${category}`;
+  // SR24 / SD40 / SD50 / RB6-25 / DB10-32 หรือคำว่า "เหล็ก" (เหล็กเสริม/เหล็กข้ออ้อย ฯลฯ)
+  const steelPattern =
+    /(SR\.?\s?24|SD\.?\s?(?:40|50)|\bRB\s?\d+|\bDB\s?\d+|เหล็กเสริม|เหล็กข้ออ้อย|เหล็กกลม)/i;
+  if (!steelPattern.test(haystack)) return unitPrice;
+  const fixed = unitPrice / 1000;
+  console.warn(
+    `[ai-to-boq] 🔧 ราคาเหล็ก "${name}" ${unitPrice} บ./ตัน → ${fixed} บ./กก. (หน่วย ${unit})`,
+  );
+  return fixed;
+}
+
 function subMaterialToItem(
   sub: AIMaterial,
   parent: AIItem,
@@ -50,16 +91,20 @@ function subMaterialToItem(
 ): BOQItem {
   const total = materialTotalQty(sub, parent.quantity);
   const isMaterial = sub.kind !== 'labor';
+  const name = typeof sub.name === 'string' && sub.name ? sub.name : '(ไม่มีชื่อ)';
+  const unit = cleanUnit(sub.unit);
+  const rawPrice =
+    typeof sub.unit_price === 'number' && Number.isFinite(sub.unit_price)
+      ? sub.unit_price
+      : 0;
+  const unitPrice = fixRebarUnitPrice(name, parent.category || '', unit, rawPrice);
   return {
     id: uid(),
     category: parent.category || 'อื่นๆ',
-    name: typeof sub.name === 'string' && sub.name ? sub.name : '(ไม่มีชื่อ)',
-    unit: cleanUnit(sub.unit),
+    name,
+    unit,
     quantity: total,
-    unitPrice:
-      typeof sub.unit_price === 'number' && Number.isFinite(sub.unit_price)
-        ? sub.unit_price
-        : 0,
+    unitPrice,
     isMaterial,
     wastePct: 0, // sub ที่ AI ส่ง มักจะรวมเผื่อแล้ว
     thickness: undefined,
@@ -194,13 +239,21 @@ export function itemToBOQItems(item: AIItem, sourceRef: string): BOQItem[] {
 
   // ─── Path 4: generic — electrical/sanitary มี unit_price ที่ item level ──
   if (out.length === 0 && isFiniteNumber(item.quantity) && item.quantity > 0) {
+    const unit = item.unit || 'ชุด';
+    const rawPrice = item.unit_price ?? 0;
+    const unitPrice = fixRebarUnitPrice(
+      item.name,
+      item.category || '',
+      unit,
+      rawPrice,
+    );
     out.push({
       id: uid(),
       category: item.category || 'อื่นๆ',
       name: item.name,
-      unit: item.unit || 'ชุด',
+      unit,
       quantity: item.quantity,
-      unitPrice: item.unit_price ?? 0,
+      unitPrice,
       isMaterial: true,
       wastePct: 0,
       thickness: undefined,
@@ -244,3 +297,24 @@ function isFiniteNumber(v: unknown): v is number {
 
 /** alias เก่า สำหรับ component ที่ import ตามชื่อเดิม */
 export const elementToBOQItems = itemToBOQItems;
+
+/**
+ * Migration: scan BOQ rows ที่ import ไปแล้วก่อน fix นี้ + แก้ราคาเหล็กที่บาน 1000 เท่า
+ *
+ *  - heuristic ตัวเดียวกับ fixRebarUnitPrice (idempotent)
+ *  - คืน list ใหม่ + จำนวน row ที่แก้
+ *  - ไม่แตะ row ที่ราคาถูกแล้ว
+ */
+export function repairRebarPricingInItems(items: BOQItem[]): {
+  items: BOQItem[];
+  fixed: number;
+} {
+  let fixed = 0;
+  const next = items.map((it) => {
+    const corrected = fixRebarUnitPrice(it.name, it.category, it.unit, it.unitPrice);
+    if (corrected === it.unitPrice) return it;
+    fixed += 1;
+    return { ...it, unitPrice: corrected, updatedAt: now() };
+  });
+  return { items: next, fixed };
+}

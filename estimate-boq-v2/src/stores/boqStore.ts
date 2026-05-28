@@ -9,6 +9,7 @@
  */
 import { create } from 'zustand';
 import type { BOQItem, Discipline, DisciplineGroup } from '@/types/boq';
+import { repairRebarPricingInItems } from '@/services/aiToBoq';
 
 const HISTORY_LIMIT = 50;
 
@@ -43,6 +44,9 @@ interface BOQState {
   getItemsByDiscipline: (d: Discipline) => BOQItem[];
   /** แทนที่ groups ทั้งหมด (ใช้ตอน load จาก DB) — reset history */
   setGroups: (groups: DisciplineGroup[]) => void;
+  /** สแกน + แก้ราคาเหล็กที่บาน 1000 เท่า (idempotent — เรียกซ้ำปลอดภัย)
+   *  คืนจำนวน row ที่แก้ */
+  repairRebarPricing: () => number;
 
   // ─── API เดิม (route ผ่าน groups + sync mirror) ───
   add: (item: BOQItem) => void;
@@ -170,14 +174,41 @@ export const useBOQStore = create<BOQState>((set, get) => ({
       .disciplineGroups.filter((g) => g.discipline === d)
       .flatMap((g) => g.items),
 
-  setGroups: (groups) =>
+  setGroups: (groups) => {
+    // Auto-fix ราคาเหล็กที่บาน 1000 เท่า ตอน load จาก DB (idempotent)
+    let totalFixed = 0;
+    const sanitized = groups.map((g) => {
+      const { items, fixed } = repairRebarPricingInItems(g.items);
+      totalFixed += fixed;
+      return fixed > 0 ? { ...g, items } : g;
+    });
+    if (totalFixed > 0) {
+      console.info(
+        `[boq] 🔧 setGroups: แก้ราคาเหล็ก ${totalFixed} แถว (บาน 1000 เท่า) อัตโนมัติ`,
+      );
+    }
     set({
-      disciplineGroups: groups,
-      items: flatten(groups),
+      disciplineGroups: sanitized,
+      items: flatten(sanitized),
       past: [],
       future: [],
       selectedId: null,
-    }),
+    });
+  },
+
+  repairRebarPricing: () => {
+    let totalFixed = 0;
+    const s = get();
+    const next = s.disciplineGroups.map((g) => {
+      const { items, fixed } = repairRebarPricingInItems(g.items);
+      totalFixed += fixed;
+      return fixed > 0 ? { ...g, items } : g;
+    });
+    if (totalFixed === 0) return 0;
+    set(commit(s, next));
+    console.info(`[boq] 🔧 repairRebarPricing: แก้ ${totalFixed} แถว`);
+    return totalFixed;
+  },
 
   add: (item) => set((s) => commit(s, appendToManual(s.disciplineGroups, [item]))),
 
