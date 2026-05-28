@@ -27,6 +27,7 @@ import {
   type AnalyzePdfPage,
   type ChatContentPart,
   type ChatMessage,
+  type ProgressCallback,
 } from './aiAnalyze';
 import { getEngineConfig, type AIEngine } from './aiEngines';
 import { getPdfPageSource } from './aiPdfDoc';
@@ -47,6 +48,8 @@ export interface SendChatOptions {
   userMessage: string;
   engine: AIEngine;
   hd?: boolean;
+  /** progress callback ใช้ระหว่าง stream (Anthropic Direct เท่านั้น) */
+  onProgress?: ProgressCallback;
 }
 
 export interface SendChatResult {
@@ -154,7 +157,9 @@ export async function sendChatMessage(opts: SendChatOptions): Promise<SendChatRe
     `[ai-chat] sending — turns: ${history.length}, refs: ${refs.length}`,
   );
   const start = Date.now();
-  const out = await callAI(messages, opts.engine, opts.hd ?? false);
+  const out = await callAI(messages, opts.engine, opts.hd ?? false, {
+    onProgress: opts.onProgress,
+  });
   console.info(
     `[ai-chat] reply — ${((Date.now() - start) / 1000).toFixed(1)}s, tokens ${out.tokens?.prompt_tokens ?? '?'}/${out.tokens?.completion_tokens ?? '?'}`,
   );

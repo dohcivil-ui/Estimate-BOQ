@@ -342,6 +342,7 @@ async function callAIExpectingJSONObject(opts: {
 
   let out = await callAI(opts.messages, opts.engine, opts.hd, {
     outputTokens: config.maxOutputTokens,
+    onProgress: opts.onProgress,
   });
   let parsed = tryParseJSON(out.text);
   if (parsed && typeof parsed === 'object') {
@@ -362,6 +363,7 @@ async function callAIExpectingJSONObject(opts: {
   ];
   out = await callAI(retryMessages, opts.engine, opts.hd, {
     outputTokens: config.retryMaxOutputTokens,
+    onProgress: opts.onProgress,
   });
   parsed = tryParseJSON(out.text);
   if (parsed && typeof parsed === 'object') {
@@ -483,17 +485,21 @@ export async function analyzePage(opts: AnalyzeOptions): Promise<AnalyzeResult> 
     targetDocument,
     opts.customUserPrompt,
   );
-  const out = await runWithProgress(
-    () =>
-      callAIExpectingJSONObject({
-        messages,
-        engine: opts.engine,
-        hd: opts.hd ?? false,
-        onProgress: opts.onProgress,
-        phaseLabel: 'analyze',
-      }),
-    opts.onProgress,
-  );
+  // Anthropic Direct → streaming คอย emit progress จริงตามที่ AI ตอบ
+  //   → bypass runWithProgress (ไม่งั้น timer 1s จะ overwrite progress ของ stream)
+  // engine อื่น (Gemini/GPT/Qwen) → ใช้ timer เดิม (ไม่ stream)
+  const useStreaming = Boolean(config.isAnthropicDirect);
+  const analyzeCall = () =>
+    callAIExpectingJSONObject({
+      messages,
+      engine: opts.engine,
+      hd: opts.hd ?? false,
+      onProgress: opts.onProgress,
+      phaseLabel: 'analyze',
+    });
+  const out = useStreaming
+    ? await analyzeCall()
+    : await runWithProgress(analyzeCall, opts.onProgress);
 
   const result = out.parsed as unknown as AIAnalysisResponse;
   result.discipline = activeDiscipline;
@@ -609,6 +615,8 @@ interface AICallResult {
 
 interface CallAIOptions {
   outputTokens?: number;
+  /** progress callback ใช้เฉพาะ engine ที่ stream ได้ (Anthropic Direct) — non-stream engine ignore */
+  onProgress?: ProgressCallback;
 }
 
 export async function callAI(
@@ -762,7 +770,7 @@ async function callAIDirect(
 
   // ─── Anthropic Direct (Messages API) ────────────────────────────────
   if (config.isAnthropicDirect) {
-    return callAnthropicDirect(messages, config, outputTokens);
+    return callAnthropicDirect(messages, config, outputTokens, options.onProgress);
   }
 
   // OpenRouter รองรับ `usage: { include: true }` → คืน cost ใน body (usage.cost)
@@ -962,11 +970,67 @@ function extractAnthropicText(payload: unknown): string {
     .join('\n');
 }
 
+/**
+ * เรียก Anthropic Direct (Messages API) — streaming-first
+ *
+ *  - ลอง stream ก่อน (UX ดี + กัน timeout output ยาว)
+ *  - ถ้า stream fail "ก่อน" ได้ text ใด ๆ → fallback non-stream 1 ครั้ง
+ *  - ถ้า fail "หลัง" รับ text บางส่วน → return partial + throw error (UI handle)
+ */
 async function callAnthropicDirect(
   messages: ChatMessage[],
   config: AIEngineConfig,
   outputTokens: number,
+  onProgress?: ProgressCallback,
 ): Promise<AICallResult> {
+  try {
+    return await callAnthropicDirectStreaming(
+      messages,
+      config,
+      outputTokens,
+      onProgress,
+    );
+  } catch (err) {
+    // ถ้า error เป็น partial-stream (มี text แล้ว) — โยนต่อให้ caller
+    if (err instanceof StreamPartialError) {
+      throw err.inner;
+    }
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(
+      `[ai] ⚠️ stream ล้มเหลวก่อนรับ text — fallback non-stream: ${msg}`,
+    );
+    onProgress?.('⚠️ stream fail → ลอง non-stream...');
+    return callAnthropicDirectNonStream(messages, config, outputTokens);
+  }
+}
+
+/** error wrapper เพื่อบอก caller ว่า stream fail "หลัง" ได้ text บางส่วนแล้ว — ไม่ควร fallback */
+class StreamPartialError extends Error {
+  inner: Error;
+  constructor(inner: Error) {
+    super(inner.message);
+    this.name = 'StreamPartialError';
+    this.inner = inner;
+  }
+}
+
+interface AnthropicUsage {
+  input_tokens?: number;
+  output_tokens?: number;
+  cache_creation_input_tokens?: number;
+  cache_read_input_tokens?: number;
+}
+
+/** สร้าง headers + request body สำหรับ Anthropic Messages API */
+function buildAnthropicRequest(
+  messages: ChatMessage[],
+  config: AIEngineConfig,
+  outputTokens: number,
+  stream: boolean,
+): {
+  headers: Record<string, string>;
+  body: string;
+} {
   const {
     system,
     messages: anthropicMessages,
@@ -974,36 +1038,249 @@ async function callAnthropicDirect(
     hasFileId,
   } = toAnthropicFormat(messages);
 
-  // anthropic-beta: ต้องส่งเมื่อใช้ document (pdfs-2024-09-25) หรือ file_id (files-api-2025-04-14)
   const betaParts: string[] = [];
   if (hasDocument) betaParts.push('pdfs-2024-09-25');
   if (hasFileId) betaParts.push('files-api-2025-04-14');
   const betaHeader = betaParts.join(',');
 
+  const requestBody: Record<string, unknown> = {
+    model: config.model,
+    max_tokens: outputTokens,
+    temperature: 0,
+    messages: anthropicMessages,
+    ...(stream ? { stream: true } : {}),
+  };
+  if (system) requestBody.system = system;
+
+  const headers: Record<string, string> = {
+    'x-api-key': config.apiKey,
+    'anthropic-version': '2023-06-01',
+    'anthropic-dangerous-direct-browser-access': 'true',
+    'content-type': 'application/json',
+  };
+  if (betaHeader) headers['anthropic-beta'] = betaHeader;
+  if (stream) headers['accept'] = 'text/event-stream';
+
+  return { headers, body: JSON.stringify(requestBody) };
+}
+
+function logAnthropicCache(usage: AnthropicUsage | undefined): void {
+  if (!usage) return;
+  if (usage.cache_read_input_tokens || usage.cache_creation_input_tokens) {
+    console.info(
+      `[ai] 💾 cache — read: ${fmtTokens(usage.cache_read_input_tokens)} tokens, created: ${fmtTokens(usage.cache_creation_input_tokens)} tokens`,
+    );
+  }
+}
+
+/** Streaming variant — SSE parser */
+async function callAnthropicDirectStreaming(
+  messages: ChatMessage[],
+  config: AIEngineConfig,
+  outputTokens: number,
+  onProgress?: ProgressCallback,
+): Promise<AICallResult> {
+  const { headers, body } = buildAnthropicRequest(
+    messages,
+    config,
+    outputTokens,
+    true,
+  );
+
   const ctrl = new AbortController();
   const timeoutId = window.setTimeout(() => ctrl.abort(), config.timeoutMs);
+
+  let accumulated = '';
+  let inputTokens: number | undefined;
+  let cacheReadTokens: number | undefined;
+  let cacheCreateTokens: number | undefined;
+  let outputTokensFinal: number | undefined;
+  let stopReason: string | undefined;
+  let model = config.model;
+  let lastProgressAt = Date.now();
+
+  onProgress?.('📤 ส่ง prompt → AI...');
+
   try {
-    const requestBody: Record<string, unknown> = {
-      model: config.model,
-      max_tokens: outputTokens,
-      temperature: 0, // deterministic — ผลซ้ำได้ไม่สุ่มแต่ละรอบ
-      messages: anthropicMessages,
-    };
-    if (system) requestBody.system = system;
-
-    const headers: Record<string, string> = {
-      'x-api-key': config.apiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
-      'content-type': 'application/json',
-    };
-    if (betaHeader) headers['anthropic-beta'] = betaHeader;
-
     const res = await fetch(config.endpoint, {
       method: 'POST',
       signal: ctrl.signal,
       headers,
-      body: JSON.stringify(requestBody),
+      body,
+    });
+    if (!res.ok) {
+      const txt = await res.text();
+      throw new Error(
+        `${config.label} error ${res.status}: ${txt.slice(0, 500)}`,
+      );
+    }
+    if (!res.body) {
+      throw new Error('ไม่มี response body — streaming ใช้ไม่ได้');
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      // SSE: events แยกด้วย \n\n
+      const splitIdx = buffer.lastIndexOf('\n\n');
+      if (splitIdx === -1) continue;
+      const ready = buffer.slice(0, splitIdx);
+      buffer = buffer.slice(splitIdx + 2);
+
+      for (const evt of ready.split('\n\n')) {
+        if (!evt.trim()) continue;
+        let eventType = '';
+        const dataLines: string[] = [];
+        for (const line of evt.split('\n')) {
+          if (line.startsWith('event: ')) eventType = line.slice(7).trim();
+          else if (line.startsWith('event:')) eventType = line.slice(6).trim();
+          else if (line.startsWith('data: ')) dataLines.push(line.slice(6));
+          else if (line.startsWith('data:')) dataLines.push(line.slice(5));
+        }
+        if (dataLines.length === 0) continue;
+        const dataStr = dataLines.join('\n');
+
+        let data: Record<string, unknown>;
+        try {
+          data = JSON.parse(dataStr);
+        } catch {
+          console.warn('[ai-stream] parse fail:', dataStr.slice(0, 120));
+          continue;
+        }
+
+        switch (eventType) {
+          case 'message_start': {
+            const msgObj = data.message as
+              | { usage?: AnthropicUsage; model?: string }
+              | undefined;
+            const u = msgObj?.usage;
+            if (u) {
+              inputTokens = u.input_tokens;
+              cacheReadTokens = u.cache_read_input_tokens;
+              cacheCreateTokens = u.cache_creation_input_tokens;
+            }
+            if (msgObj?.model) model = msgObj.model;
+            onProgress?.(
+              `⏳ AI เริ่มตอบ... (input ${fmtTokens(inputTokens)} tokens, cache read ${fmtTokens(cacheReadTokens)})`,
+            );
+            break;
+          }
+          case 'content_block_delta': {
+            const delta = data.delta as
+              | { type?: string; text?: string }
+              | undefined;
+            if (delta?.type === 'text_delta' && typeof delta.text === 'string') {
+              accumulated += delta.text;
+              const now = Date.now();
+              if (now - lastProgressAt > 500) {
+                lastProgressAt = now;
+                onProgress?.(
+                  `⏳ AI กำลังตอบ... ${accumulated.length.toLocaleString()} chars`,
+                );
+              }
+            }
+            break;
+          }
+          case 'message_delta': {
+            const usage = data.usage as AnthropicUsage | undefined;
+            if (usage?.output_tokens != null) {
+              outputTokensFinal = usage.output_tokens;
+            }
+            const sr = (data.delta as { stop_reason?: string } | undefined)
+              ?.stop_reason;
+            if (typeof sr === 'string') stopReason = sr;
+            break;
+          }
+          case 'message_stop':
+            break;
+          case 'error': {
+            const errObj = data.error as
+              | { type?: string; message?: string }
+              | undefined;
+            throw new Error(
+              `Anthropic stream error: ${errObj?.message ?? JSON.stringify(errObj ?? data)}`,
+            );
+          }
+          // ping / content_block_start / content_block_stop — skip
+        }
+      }
+    }
+
+    const finishReason = stopReason === 'max_tokens' ? 'length' : stopReason;
+    const tokens =
+      inputTokens != null || outputTokensFinal != null
+        ? {
+            prompt_tokens: inputTokens,
+            completion_tokens: outputTokensFinal,
+          }
+        : undefined;
+
+    logAnthropicCache({
+      input_tokens: inputTokens,
+      output_tokens: outputTokensFinal,
+      cache_read_input_tokens: cacheReadTokens,
+      cache_creation_input_tokens: cacheCreateTokens,
+    });
+    logUsage({
+      engine: config.id,
+      promptTokens: tokens?.prompt_tokens,
+      completionTokens: tokens?.completion_tokens,
+      finishReason,
+    });
+
+    onProgress?.(`✅ AI ตอบครบ (${accumulated.length.toLocaleString()} chars)`);
+    return { text: accumulated, model, tokens, finishReason };
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      const e = new Error(
+        `⏱️ AI ใช้เวลาเกิน ${Math.round(config.timeoutMs / 60_000)} นาที — ลอง:\n• ปิด HD\n• ลดจำนวนหน้าอ้างอิง`,
+      );
+      // ถ้ามี text แล้ว → wrap เป็น partial เพื่อ caller ไม่ retry
+      if (accumulated.length > 0) throw new StreamPartialError(e);
+      throw e;
+    }
+    // ถ้ามี accumulated แล้ว → ห้าม fallback non-stream (จะ retry ซ้ำราคาแพง)
+    if (accumulated.length > 0) {
+      const wrapped =
+        err instanceof Error ? err : new Error(String(err));
+      console.warn(
+        `[ai-stream] error หลังรับ ${accumulated.length} chars — return partial`,
+      );
+      throw new StreamPartialError(wrapped);
+    }
+    throw err;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
+
+/** Non-stream variant — fallback เดิม (ทำตัวเหมือนก่อน refactor) */
+async function callAnthropicDirectNonStream(
+  messages: ChatMessage[],
+  config: AIEngineConfig,
+  outputTokens: number,
+): Promise<AICallResult> {
+  const { headers, body } = buildAnthropicRequest(
+    messages,
+    config,
+    outputTokens,
+    false,
+  );
+
+  const ctrl = new AbortController();
+  const timeoutId = window.setTimeout(() => ctrl.abort(), config.timeoutMs);
+  try {
+    const res = await fetch(config.endpoint, {
+      method: 'POST',
+      signal: ctrl.signal,
+      headers,
+      body,
     });
     if (!res.ok) {
       const txt = await res.text();
@@ -1013,18 +1290,10 @@ async function callAnthropicDirect(
     }
     const json = (await res.json()) as Record<string, unknown>;
     const text = extractAnthropicText(json);
-    // Anthropic ใช้ stop_reason='max_tokens' → map เป็น 'length' ให้ตรงกับ logic truncation
     const stopReason =
       typeof json.stop_reason === 'string' ? json.stop_reason : undefined;
     const finishReason = stopReason === 'max_tokens' ? 'length' : stopReason;
-    const usage = json.usage as
-      | {
-          input_tokens?: number;
-          output_tokens?: number;
-          cache_creation_input_tokens?: number;
-          cache_read_input_tokens?: number;
-        }
-      | undefined;
+    const usage = json.usage as AnthropicUsage | undefined;
     const tokens = usage
       ? {
           prompt_tokens: usage.input_tokens,
@@ -1032,13 +1301,7 @@ async function callAnthropicDirect(
         }
       : undefined;
 
-    // log cache utilization — ช่วยยืนยันว่า ephemeral cache ใช้งานจริง
-    if (usage?.cache_read_input_tokens || usage?.cache_creation_input_tokens) {
-      console.info(
-        `[ai] 💾 cache — read: ${fmtTokens(usage.cache_read_input_tokens)} tokens, created: ${fmtTokens(usage.cache_creation_input_tokens)} tokens`,
-      );
-    }
-
+    logAnthropicCache(usage);
     logUsage({
       engine: config.id,
       promptTokens: tokens?.prompt_tokens,

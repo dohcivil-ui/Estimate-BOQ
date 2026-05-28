@@ -773,6 +773,7 @@ function ChatInputBlock({ latest }: { latest: AIAnalysis | null }) {
     promptDirty.current = false;
     setChatBusy(latest.id);
     setError(null);
+    setProgress('');
     try {
       const conv = { analysisId: latest.id, pageId: latest.pageId, messages: [userMsg] };
       const res = await sendChatMessage({
@@ -784,6 +785,7 @@ function ChatInputBlock({ latest }: { latest: AIAnalysis | null }) {
         userMessage: text,
         engine,
         hd,
+        onProgress: setProgress,
       });
       appendChatMessage(latest.id, res.assistantMessage);
     } catch (err) {
@@ -797,6 +799,7 @@ function ChatInputBlock({ latest }: { latest: AIAnalysis | null }) {
       });
     } finally {
       setChatBusy(null);
+      setProgress('');
     }
   };
 
@@ -808,7 +811,7 @@ function ChatInputBlock({ latest }: { latest: AIAnalysis | null }) {
   const sending = busy || chatBusy;
   const sendLabel = followUp
     ? sending
-      ? '⌛ ส่ง…'
+      ? progress || '⌛ ส่ง…'
       : '📤 ส่ง'
     : sending
       ? progress || '⌛ AI กำลังวิเคราะห์…'

@@ -19,9 +19,12 @@ export default defineConfig({
     host: true,
     proxy: {
       // Anthropic API ไม่รองรับ CORS → proxy ผ่าน dev server (ใช้กับ engine "Claude" Direct)
+      // timeout: 0 / proxyTimeout: 0 → ไม่ตัด connection ของ SSE stream (Opus อาจตอบ > 3 นาที)
       '/anthropic-api': {
         target: 'https://api.anthropic.com',
         changeOrigin: true,
+        timeout: 0,
+        proxyTimeout: 0,
         rewrite: (path) => path.replace(/^\/anthropic-api/, ''),
       },
     },
