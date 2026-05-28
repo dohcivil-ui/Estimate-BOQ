@@ -24,10 +24,12 @@ import {
   cleanJsonResponse,
   downsampleCanvasToDataUrl,
   tryParseAIResponse,
+  type AnalyzePdfPage,
   type ChatContentPart,
   type ChatMessage,
 } from './aiAnalyze';
 import { getEngineConfig, type AIEngine } from './aiEngines';
+import { getPdfPageSource } from './aiPdfDoc';
 
 const HISTORY_TURN_LIMIT = 10; // เก็บ user+assistant รวม 10 ข้อความล่าสุด
 const FOLLOWUP_SUFFIX = `\n\nคำแนะนำ:
@@ -39,6 +41,8 @@ export interface SendChatOptions {
   analysis: AIAnalysis;
   conversation: AIConversation;
   targetBitmap: HTMLCanvasElement | null;
+  /** ถ้ามี + engine = Anthropic Direct → ใช้ PDF document แทน bitmap (cache reuse) */
+  pdfPage?: AnalyzePdfPage;
   referenceImages?: AIReferenceImage[];
   userMessage: string;
   engine: AIEngine;
@@ -59,9 +63,6 @@ export async function sendChatMessage(opts: SendChatOptions): Promise<SendChatRe
   const config = getEngineConfig(opts.engine);
   const refs = opts.referenceImages ?? [];
 
-  if (!targetBitmap) {
-    throw new Error('ไม่มี bitmap ของหน้าที่กำลังวิเคราะห์ — เปิดหน้าใหม่อีกครั้ง');
-  }
   if (!userMessage.trim()) {
     throw new Error('โปรดพิมพ์ข้อความก่อน');
   }
@@ -69,18 +70,46 @@ export async function sendChatMessage(opts: SendChatOptions): Promise<SendChatRe
     throw new Error('ยังไม่มีผลวิเคราะห์เริ่มต้น — กดวิเคราะห์ก่อน');
   }
 
-  const targetImageDataUrl = downsampleCanvasToDataUrl(
-    targetBitmap,
-    opts.hd ? config.maxImageDimHD : config.maxImageDim,
-    config.imageQuality,
-  );
+  // ─── เลือก target: PDF document (Anthropic Direct + PDF) หรือ image ────
+  // A3 fallback: ถ้า PDF path ล้มเหลว → fallback ใช้ image
+  const useDocument =
+    Boolean(config.isAnthropicDirect) && Boolean(opts.pdfPage);
+  let turn1Target: ChatContentPart | null = null;
+  if (useDocument && opts.pdfPage) {
+    try {
+      const source = await getPdfPageSource({
+        blob: opts.pdfPage.blob,
+        fileId: opts.pdfPage.fileId,
+        pageNum: opts.pdfPage.pageNum,
+        apiKey: config.apiKey,
+        fileName: opts.pdfPage.fileName,
+      });
+      turn1Target = { type: 'document', source, cacheEphemeral: true };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(
+        `[ai-chat] ⚠️ PDF path ล้มเหลว — fallback ไปใช้ image: ${msg}`,
+      );
+    }
+  }
+  if (!turn1Target) {
+    if (!targetBitmap) {
+      throw new Error('ไม่มี bitmap ของหน้าที่กำลังวิเคราะห์ — เปิดหน้าใหม่อีกครั้ง');
+    }
+    const targetImageDataUrl = downsampleCanvasToDataUrl(
+      targetBitmap,
+      opts.hd ? config.maxImageDimHD : config.maxImageDim,
+      config.imageQuality,
+    );
+    turn1Target = { type: 'image_url', image_url: { url: targetImageDataUrl } };
+  }
 
   // ─── Build messages array ─────────────────────────────────────────────
   const messages: ChatMessage[] = [
     { role: 'system', content: getSystemPromptForMode(analysis.discipline) },
   ];
 
-  // Turn 1: ส่งรูปทั้งหมด + summary ของ initial analysis
+  // Turn 1: refs + target + summary ของ initial analysis
   const turn1User: ChatContentPart[] = [];
   if (refs.length > 0) {
     turn1User.push({
@@ -96,10 +125,7 @@ export async function sendChatMessage(opts: SendChatOptions): Promise<SendChatRe
     }
     turn1User.push({ type: 'text', text: '📐 หน้าที่กำลังวิเคราะห์:' });
   }
-  turn1User.push({
-    type: 'image_url',
-    image_url: { url: targetImageDataUrl },
-  });
+  turn1User.push(turn1Target);
   turn1User.push({
     type: 'text',
     text: 'นี่คือแบบที่กำลังวิเคราะห์ + ผลวิเคราะห์ปัจจุบัน (JSON):',

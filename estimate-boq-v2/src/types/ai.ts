@@ -169,6 +169,9 @@ export interface AIAnalysis {
   elapsedMs?: number;
   error?: string;
   tokens?: { in?: number; out?: number };
+  /** ถ้า user "Import to BOQ" จากผลวิเคราะห์เริ่มต้นแล้ว → boq row ids ที่สร้าง (append-only) */
+  importedBoqIds?: string[];
+  importedAt?: string;
   createdAt: string;
 }
 
@@ -212,8 +215,10 @@ export interface AIChatMessage {
   content: string;
   /** ถ้า AI ตอบกลับเป็น JSON ที่ parse ได้ → ผลลัพธ์ที่ update */
   parsedResult?: AIAnalysisResponse;
-  /** ถ้า user "Apply" ผลใหม่นี้แล้ว */
+  /** ถ้า user "Apply" ผลใหม่นี้แล้ว (เก่า — รักษาไว้เผื่อ backward compat) */
   applied?: boolean;
+  /** ถ้า user "Import to BOQ" จาก reply นี้แล้ว → bookkeeping ของ boq row ที่สร้าง */
+  imported?: { boqIds: string[]; at: string };
   createdAt: string;
 }
 

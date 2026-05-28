@@ -232,10 +232,11 @@ export function getEngineConfig(engine: AIEngine): AIEngineConfig {
   }
 }
 
-/** ลำดับ default — claude > opus > gpt54 > gpt41mini > gemini-pro > gemini-flash > qwen */
+/** ลำดับ default — opus > claude > gpt54 > gpt41mini > gemini-pro > gemini-flash > qwen
+ *  Opus 4.6 default ตามแผน option-2-3 (แม่นสุดสำหรับการอ่านแบบก่อสร้าง) */
 const ENGINE_PRIORITY: AIEngine[] = [
-  'claude',
   'anthropic-opus',
+  'claude',
   'gpt54',
   'gpt41mini',
   'gemini-pro',

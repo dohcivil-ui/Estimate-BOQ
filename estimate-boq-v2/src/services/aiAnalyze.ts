@@ -29,6 +29,7 @@ import {
   type AIEngine,
   type AIEngineConfig,
 } from './aiEngines';
+import { getPdfPageSource, type PdfDocSource } from './aiPdfDoc';
 
 // ─── Progress stage messages (เวลาเป็น ms) ──────────────────────────────
 const PROGRESS_STAGES: Array<{ at: number; msg: string }> = [
@@ -41,14 +42,38 @@ const PROGRESS_STAGES: Array<{ at: number; msg: string }> = [
 
 export type ProgressCallback = (msg: string) => void;
 
+/**
+ * PDF page source สำหรับ Anthropic Direct (document content block)
+ *  - fileId + pageNum ใช้ทำ cache key (ดู aiPdfDoc.ts)
+ *  - ถ้า engine ไม่ใช่ Anthropic Direct → ignore field นี้ ใช้ bitmap แทน
+ */
+export interface AnalyzePdfPage {
+  blob: Blob;
+  fileId: string;
+  /** เลขหน้าใน file (1-indexed) */
+  pageNum: number;
+  /** ชื่อไฟล์ — debug only */
+  fileName?: string;
+}
+
 export interface AnalyzeOptions {
   pageId: string;
   bitmap: HTMLCanvasElement;
   engine: AIEngine;
   mode: AIMode;
   hd?: boolean;
+  /**
+   * ถ้าหน้าต้นทางมาจาก PDF + engine = Anthropic Direct → ส่ง PDF page ตรง
+   * (document type + cache_control ephemeral) แทน image
+   */
+  pdfPage?: AnalyzePdfPage;
   /** ภาพอ้างอิง (รายการวัสดุ/สัญลักษณ์/รายละเอียดทั่วไป) — สูงสุด 4 หน้า */
   referenceImages?: AIReferenceImage[];
+  /**
+   * Override prompt ที่ส่งใน user message — ถ้า user แก้ prompt textarea
+   * (default: getUserPromptForDiscipline(discipline))
+   */
+  customUserPrompt?: string;
   /** callback อัปเดต UI ระหว่างรอ */
   onProgress?: ProgressCallback;
   projectId?: string;
@@ -286,7 +311,20 @@ function runWithProgress<T>(
 
 export type ChatContentPart =
   | { type: 'text'; text: string }
-  | { type: 'image_url'; image_url: { url: string } };
+  | { type: 'image_url'; image_url: { url: string } }
+  /**
+   * Anthropic-only content block: PDF document (extracted single page).
+   *  - inline base64 (≤ 20MB) หรือ file_id (Files API > 20MB)
+   *  - cacheEphemeral = true → ใส่ cache_control:{type:'ephemeral'} ตอนส่ง
+   *    (re-use cache 5 นาที — ลด token cost ของ chat follow-up)
+   * ห้ามส่ง part ชนิดนี้ไป engine อื่นที่ไม่ใช่ Anthropic Direct
+   */
+  | {
+      type: 'document';
+      source: PdfDocSource;
+      /** ใส่ cache_control:ephemeral ไหม (default true สำหรับ PDF page) */
+      cacheEphemeral?: boolean;
+    };
 
 export type ChatMessage =
   | { role: 'system'; content: string }
@@ -349,11 +387,41 @@ async function callAIExpectingJSONObject(opts: {
 export async function analyzePage(opts: AnalyzeOptions): Promise<AnalyzeResult> {
   const config = getEngineConfig(opts.engine);
   const maxDim = opts.hd ? config.maxImageDimHD : config.maxImageDim;
-  const targetImageDataUrl = downsampleCanvasToDataUrl(
-    opts.bitmap,
-    maxDim,
-    config.imageQuality,
-  );
+
+  // ─── target: PDF document (Anthropic Direct + PDF) หรือ image (ทุกกรณีอื่น) ──
+  // A3 fallback: ถ้า PDF path ล้มเหลว (extract/upload error) → fallback ใช้ image
+  const useDocument =
+    Boolean(config.isAnthropicDirect) && Boolean(opts.pdfPage);
+  let targetImageDataUrl = '';
+  let targetDocument: PdfDocSource | null = null;
+  if (useDocument && opts.pdfPage) {
+    try {
+      targetDocument = await getPdfPageSource({
+        blob: opts.pdfPage.blob,
+        fileId: opts.pdfPage.fileId,
+        pageNum: opts.pdfPage.pageNum,
+        apiKey: config.apiKey,
+        fileName: opts.pdfPage.fileName,
+      });
+      console.info(
+        `[ai] 📄 PDF page ${opts.pdfPage.pageNum} → ${targetDocument.kind} (${(targetDocument.bytes / 1024).toFixed(0)}KB)`,
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(
+        `[ai] ⚠️ PDF path ล้มเหลว — fallback ไปใช้ image: ${msg}`,
+      );
+      targetDocument = null;
+      opts.onProgress?.(`⚠️ PDF ส่งไม่ได้ — fallback image: ${msg.slice(0, 80)}`);
+    }
+  }
+  if (!targetDocument) {
+    targetImageDataUrl = downsampleCanvasToDataUrl(
+      opts.bitmap,
+      maxDim,
+      config.imageQuality,
+    );
+  }
   const refs = opts.referenceImages?.slice(0, 4) ?? [];
 
   let activeDiscipline: AIDiscipline;
@@ -366,12 +434,15 @@ export async function analyzePage(opts: AnalyzeOptions): Promise<AnalyzeResult> 
     );
     console.info('[ai] mode=auto — กำลังตรวจจับประเภทแบบ…');
     const detectStart = Date.now();
+    const detectTarget: ChatContentPart = targetDocument
+      ? { type: 'document', source: targetDocument, cacheEphemeral: true }
+      : { type: 'image_url', image_url: { url: targetImageDataUrl } };
     const detectMessages: ChatMessage[] = [
       { role: 'system', content: getSystemPromptForMode('auto') },
       {
         role: 'user',
         content: [
-          { type: 'image_url', image_url: { url: targetImageDataUrl } },
+          detectTarget,
           { type: 'text', text: getAutoDetectUserPrompt() },
         ],
       },
@@ -409,6 +480,8 @@ export async function analyzePage(opts: AnalyzeOptions): Promise<AnalyzeResult> 
     activeDiscipline,
     targetImageDataUrl,
     refs,
+    targetDocument,
+    opts.customUserPrompt,
   );
   const out = await runWithProgress(
     () =>
@@ -452,14 +525,25 @@ export async function analyzePage(opts: AnalyzeOptions): Promise<AnalyzeResult> 
   };
 }
 
-/** สร้าง messages array สำหรับ analyze ครั้งแรก (รวม references) */
+/** สร้าง messages array สำหรับ analyze ครั้งแรก (รวม references)
+ *
+ *  targetDocument ≠ null → ใช้ PDF document แทน image (Anthropic Direct เท่านั้น)
+ *  ภาพ reference ยังเป็น image เสมอ (ไม่ใช่ document) — references มาจากหลายไฟล์
+ *  รวมไป crop เป็น JPEG เพื่อความ portable
+ */
 export function buildAnalyzeMessages(
   discipline: AIDiscipline,
   targetImageDataUrl: string,
   references: AIReferenceImage[],
+  targetDocument?: PdfDocSource | null,
+  customUserPrompt?: string,
 ): ChatMessage[] {
   const system = getSystemPromptForMode(discipline);
-  const baseUserText = getUserPromptForDiscipline(discipline);
+  const trimmed = customUserPrompt?.trim();
+  const baseUserText =
+    trimmed && trimmed.length > 0
+      ? trimmed
+      : getUserPromptForDiscipline(discipline);
 
   const userContent: ChatContentPart[] = [];
 
@@ -484,10 +568,18 @@ export function buildAnalyzeMessages(
     });
   }
 
-  userContent.push({
-    type: 'image_url',
-    image_url: { url: targetImageDataUrl },
-  });
+  if (targetDocument) {
+    userContent.push({
+      type: 'document',
+      source: targetDocument,
+      cacheEphemeral: true,
+    });
+  } else {
+    userContent.push({
+      type: 'image_url',
+      image_url: { url: targetImageDataUrl },
+    });
+  }
 
   const finalText =
     baseUserText +
@@ -767,11 +859,21 @@ async function callAIDirect(
 //   - response: content[0].text (ไม่ใช่ choices[0].message.content)
 // ═══════════════════════════════════════════════════════════════════════
 
+type AnthropicCacheControl = { type: 'ephemeral' };
+
 type AnthropicContentPart =
-  | { type: 'text'; text: string }
+  | { type: 'text'; text: string; cache_control?: AnthropicCacheControl }
   | {
       type: 'image';
       source: { type: 'base64'; media_type: string; data: string };
+      cache_control?: AnthropicCacheControl;
+    }
+  | {
+      type: 'document';
+      source:
+        | { type: 'base64'; media_type: 'application/pdf'; data: string }
+        | { type: 'file'; file_id: string };
+      cache_control?: AnthropicCacheControl;
     };
 
 interface AnthropicMessage {
@@ -786,12 +888,20 @@ function parseDataUrl(url: string): { mediaType: string; data: string } {
   return { mediaType: 'image/jpeg', data: url };
 }
 
-/** แปลง messages (OpenAI-compat) → Anthropic Messages API format */
+/** แปลง messages (OpenAI-compat) → Anthropic Messages API format
+ *
+ *  คืน hasDocument = true ถ้ามี document block (≥1 อันใน user content)
+ *  caller ใช้ flag นี้ตัดสินใจส่ง anthropic-beta header
+ */
 function toAnthropicFormat(messages: ChatMessage[]): {
   system: string;
   messages: AnthropicMessage[];
+  hasDocument: boolean;
+  hasFileId: boolean;
 } {
   let system = '';
+  let hasDocument = false;
+  let hasFileId = false;
   const out: AnthropicMessage[] = [];
   for (const m of messages) {
     if (m.role === 'system') {
@@ -804,6 +914,28 @@ function toAnthropicFormat(messages: ChatMessage[]): {
         ? [{ type: 'text', text: m.content }]
         : m.content.map((part): AnthropicContentPart => {
             if (part.type === 'text') return { type: 'text', text: part.text };
+            if (part.type === 'document') {
+              hasDocument = true;
+              const cacheControl: AnthropicCacheControl | undefined =
+                part.cacheEphemeral === false ? undefined : { type: 'ephemeral' };
+              if (part.source.kind === 'file_id') {
+                hasFileId = true;
+                return {
+                  type: 'document',
+                  source: { type: 'file', file_id: part.source.fileId },
+                  ...(cacheControl ? { cache_control: cacheControl } : {}),
+                };
+              }
+              return {
+                type: 'document',
+                source: {
+                  type: 'base64',
+                  media_type: 'application/pdf',
+                  data: part.source.data,
+                },
+                ...(cacheControl ? { cache_control: cacheControl } : {}),
+              };
+            }
             const { mediaType, data } = parseDataUrl(part.image_url.url);
             return {
               type: 'image',
@@ -812,7 +944,7 @@ function toAnthropicFormat(messages: ChatMessage[]): {
           });
     out.push({ role: m.role, content });
   }
-  return { system, messages: out };
+  return { system, messages: out, hasDocument, hasFileId };
 }
 
 /** ดึง text จาก Anthropic response — content[] เป็น array ของ block (เอาเฉพาะ type:text) */
@@ -835,7 +967,18 @@ async function callAnthropicDirect(
   config: AIEngineConfig,
   outputTokens: number,
 ): Promise<AICallResult> {
-  const { system, messages: anthropicMessages } = toAnthropicFormat(messages);
+  const {
+    system,
+    messages: anthropicMessages,
+    hasDocument,
+    hasFileId,
+  } = toAnthropicFormat(messages);
+
+  // anthropic-beta: ต้องส่งเมื่อใช้ document (pdfs-2024-09-25) หรือ file_id (files-api-2025-04-14)
+  const betaParts: string[] = [];
+  if (hasDocument) betaParts.push('pdfs-2024-09-25');
+  if (hasFileId) betaParts.push('files-api-2025-04-14');
+  const betaHeader = betaParts.join(',');
 
   const ctrl = new AbortController();
   const timeoutId = window.setTimeout(() => ctrl.abort(), config.timeoutMs);
@@ -848,15 +991,18 @@ async function callAnthropicDirect(
     };
     if (system) requestBody.system = system;
 
+    const headers: Record<string, string> = {
+      'x-api-key': config.apiKey,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
+      'content-type': 'application/json',
+    };
+    if (betaHeader) headers['anthropic-beta'] = betaHeader;
+
     const res = await fetch(config.endpoint, {
       method: 'POST',
       signal: ctrl.signal,
-      headers: {
-        'x-api-key': config.apiKey,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true',
-        'content-type': 'application/json',
-      },
+      headers,
       body: JSON.stringify(requestBody),
     });
     if (!res.ok) {
@@ -872,7 +1018,12 @@ async function callAnthropicDirect(
       typeof json.stop_reason === 'string' ? json.stop_reason : undefined;
     const finishReason = stopReason === 'max_tokens' ? 'length' : stopReason;
     const usage = json.usage as
-      | { input_tokens?: number; output_tokens?: number }
+      | {
+          input_tokens?: number;
+          output_tokens?: number;
+          cache_creation_input_tokens?: number;
+          cache_read_input_tokens?: number;
+        }
       | undefined;
     const tokens = usage
       ? {
@@ -880,6 +1031,13 @@ async function callAnthropicDirect(
           completion_tokens: usage.output_tokens,
         }
       : undefined;
+
+    // log cache utilization — ช่วยยืนยันว่า ephemeral cache ใช้งานจริง
+    if (usage?.cache_read_input_tokens || usage?.cache_creation_input_tokens) {
+      console.info(
+        `[ai] 💾 cache — read: ${fmtTokens(usage.cache_read_input_tokens)} tokens, created: ${fmtTokens(usage.cache_creation_input_tokens)} tokens`,
+      );
+    }
 
     logUsage({
       engine: config.id,
@@ -908,14 +1066,19 @@ function estimatePromptChars(messages: ChatMessage[]): number {
     else {
       for (const c of m.content) {
         if (c.type === 'text') n += c.text.length;
-        else n += 1000; // ประมาณ overhead ของรูป (ไม่นับ base64)
+        else if (c.type === 'document') n += 2000; // overhead ของ PDF (ไม่นับ base64)
+        else n += 1000; // overhead ของรูป (ไม่นับ base64)
       }
     }
   }
   return n;
 }
 
-/** flatten messages → legacy Edge fn payload (1 image + 1 prompt) */
+/** flatten messages → legacy Edge fn payload (1 image + 1 prompt)
+ *
+ *  หมายเหตุ: ถ้ามี document part — flatten ไม่รองรับ (Edge fn เก่าไม่รู้จัก PDF)
+ *  caller ต้องการันตีว่า document part ใช้กับ Anthropic Direct เท่านั้น
+ */
 function flattenForLegacyEdge(messages: ChatMessage[]): {
   prompt: string;
   imageDataUrl: string;
@@ -935,6 +1098,10 @@ function flattenForLegacyEdge(messages: ChatMessage[]): {
           if (c.type === 'text') userParts.push(c.text);
           else if (c.type === 'image_url' && !firstImage) {
             firstImage = c.image_url.url;
+          } else if (c.type === 'document') {
+            throw new Error(
+              'Legacy Edge Function ไม่รองรับ PDF document — ใช้ Anthropic Direct เท่านั้น',
+            );
           }
         }
       }

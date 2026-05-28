@@ -89,6 +89,14 @@ interface AIState {
   setChatMessageApplied: (analysisId: string, messageId: string) => void;
   /** Apply ผลใหม่จาก chat → แทนที่ result + rebuild suggestions */
   applyChatResult: (analysisId: string, result: AIAnalysisResponse) => void;
+  /** Mark message ว่าถูก import เข้า BOQ แล้ว — append-only (เก็บ boq ids ที่สร้าง) */
+  setChatMessageImported: (
+    analysisId: string,
+    messageId: string,
+    boqIds: string[],
+  ) => void;
+  /** Mark ผลวิเคราะห์เริ่มต้นว่าถูก import เข้า BOQ แล้ว (append boq ids) */
+  setAnalysisImported: (analysisId: string, boqIds: string[]) => void;
 
   removeAnalysesForPage: (pageId: string) => void;
   clearAll: () => void;
@@ -260,6 +268,41 @@ export const useAIStore = create<AIState>((set) => ({
         ),
       };
       return { conversations: newList };
+    }),
+
+  setChatMessageImported: (analysisId, messageId, boqIds) =>
+    set((s) => {
+      const idx = s.conversations.findIndex((c) => c.analysisId === analysisId);
+      if (idx === -1) return s;
+      const at = new Date().toISOString();
+      const newList = s.conversations.slice();
+      newList[idx] = {
+        ...newList[idx]!,
+        messages: newList[idx]!.messages.map((m) => {
+          if (m.id !== messageId) return m;
+          // append boqIds (กรณี import ซ้ำหลายรอบ — รวมรายการ)
+          const existing = m.imported?.boqIds ?? [];
+          return {
+            ...m,
+            imported: { boqIds: [...existing, ...boqIds], at },
+          };
+        }),
+      };
+      return { conversations: newList };
+    }),
+
+  setAnalysisImported: (analysisId, boqIds) =>
+    set((s) => {
+      const idx = s.analyses.findIndex((a) => a.id === analysisId);
+      if (idx === -1) return s;
+      const a = s.analyses[idx]!;
+      const newList = s.analyses.slice();
+      newList[idx] = {
+        ...a,
+        importedBoqIds: [...(a.importedBoqIds ?? []), ...boqIds],
+        importedAt: new Date().toISOString(),
+      };
+      return { analyses: newList };
     }),
 
   applyChatResult: (analysisId, result) =>
