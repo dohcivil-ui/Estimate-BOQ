@@ -1,6 +1,6 @@
 // @ts-nocheck — Deno runtime, ไม่ใช้ TS project ของ frontend
 // ───────────────────────────────────────────────────────────────────────
-// Edge Function: analyze-drawing
+// Edge Function: analyze
 // ───────────────────────────────────────────────────────────────────────
 // รับภาพแบบ + prompt จาก frontend → ส่งไป Qwen (DashScope OpenAI-compat)
 //   → parse JSON → log ลง ai_analyses → return ให้ frontend

@@ -641,7 +641,7 @@ export async function callAI(
   // Edge fn เดิมรับ {prompt, imageDataUrl} — ใช้ fallback: flatten messages →
   // เอา system + ข้อความ user รวมเป็น prompt + ส่งภาพแรกที่เจอ
   const fallback = flattenForLegacyEdge(messages);
-  const { data, error } = await client.functions.invoke('analyze-drawing', {
+  const { data, error } = await client.functions.invoke('analyze', {
     body: {
       pageId: '__inline__',
       imageDataUrl: fallback.imageDataUrl,

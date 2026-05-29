@@ -201,7 +201,7 @@ select id, email, role from public.profiles;
 
 ---
 
-## 10. Deploy Edge Function `analyze-drawing` (Step 2.5)
+## 10. Deploy Edge Function `analyze` (Step 2.5)
 
 ### 10.1 ติดตั้ง Supabase CLI
 
@@ -233,13 +233,13 @@ supabase secrets set QWEN_MODEL_HD=qwen-vl-max
 # supabase secrets set QWEN_ENDPOINT=https://dashscope-intl.aliyuncs.com/compatible-mode/v1
 ```
 
-> หาก API key หมดอายุหรือผิด — `analyze-drawing` จะ return 500 พร้อมข้อความบอก
+> หาก API key หมดอายุหรือผิด — `analyze` จะ return 500 พร้อมข้อความบอก
 
 ### 10.4 Deploy function
 
 ```bash
 cd estimate-boq-v2
-supabase functions deploy analyze-drawing --no-verify-jwt
+supabase functions deploy analyze --no-verify-jwt
 ```
 
 > `--no-verify-jwt` ถูกใส่เพราะ function ตรวจ JWT เอง (เรียก `auth.getUser(token)`)
@@ -247,7 +247,7 @@ supabase functions deploy analyze-drawing --no-verify-jwt
 ตรวจสอบ:
 ```bash
 supabase functions list
-# ต้องเห็น: analyze-drawing | LATEST
+# ต้องเห็น: analyze | LATEST
 ```
 
 ### 10.5 รัน function local (ก่อน deploy ได้)
@@ -257,7 +257,7 @@ cd estimate-boq-v2
 cp supabase/functions/.env.example supabase/functions/.env
 # แก้ .env เติม QWEN_API_KEY จริง
 
-supabase functions serve analyze-drawing --env-file supabase/functions/.env
+supabase functions serve analyze --env-file supabase/functions/.env
 ```
 
 Frontend ของคุณจะเรียก local function อัตโนมัติถ้าตั้ง `VITE_SUPABASE_URL` เป็น
@@ -284,7 +284,7 @@ VITE_QWEN_API_KEY_DEV=sk-xxx     # ⚠️ key หลุดมา browser
 5. กด ✓ → BOQ tab เห็นรายการที่สร้างจาก element นั้นๆ
 
 ตรวจ log:
-- Supabase → Edge Functions → `analyze-drawing` → Logs
+- Supabase → Edge Functions → `analyze` → Logs
 - Database → ai_analyses → จะมี row ใหม่ (ถ้า project_id ถูกส่ง)
 
 ---
