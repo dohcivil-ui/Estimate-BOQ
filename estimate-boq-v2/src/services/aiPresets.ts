@@ -37,23 +37,7 @@ export const PROMPT_PRESETS: PromptPreset[] = [
     icon: '🏗️',
     mode: 'structural',
     defaultEngine: 'anthropic-opus',
-    prompt: `ถอดปริมาณงานโครงสร้าง หน้า ${PLACEHOLDER_MAIN} อ้างอิง ${PLACEHOLDER_REF}
-
-วิธีตอบ (กัน timeout — สำคัญ):
-- คิด/ตรวจในใจ ไม่ต้องร่ายขั้นตอน grid-first ทีละสเต็ป
-- cross-check grid เขียนสั้น 1-2 บรรทัด (เช่น "6×2=12 ✓ · 5×4.00=20 ✓")
-- หมายเหตุเฉพาะที่ต้องยืนยันจริง อย่างละ 1 บรรทัด
-- ส่งแค่: ตารางสรุปสั้น + JSON import
-
-นับฐาน:
-- จุดตัด grid = ฐานหลัก (กฎ 11)
-- ฐานนอกจุดตัด: นับเฉพาะที่เห็น "กล่องฐาน + label ฐาน" ชัดทั้งคู่
-  เส้น dimension (เช่น 1.30) หรือ label ที่ดูซ้ำ = ไม่ใช่ฐานใหม่ ห้ามเพิ่ม
-- ไม่แน่ใจ → ใส่ ❓ ใน warnings ห้ามเดาเพิ่มจำนวน
-
-คาน = จำนวนตัว × ขนาด × ยาว/ตัว (กฎ 13)
-implied: ทรายรอง/lean/ขุดดิน/ถมกลับ/ตอม่อ (กฎ 14)
-ทุก item: grid position + confidence + source`,
+    prompt: `ถอดปริมาณงานโครงสร้าง หน้า ${PLACEHOLDER_MAIN} อ้างอิง ${PLACEHOLDER_REF}`,
   },
   {
     id: 'architectural',
@@ -61,16 +45,7 @@ implied: ทรายรอง/lean/ขุดดิน/ถมกลับ/ตอ
     icon: '🏛️',
     mode: 'architectural',
     defaultEngine: 'anthropic-opus',
-    prompt: `ถอดปริมาณงานสถาปัตยกรรม หน้า ${PLACEHOLDER_MAIN} อ้างอิง ${PLACEHOLDER_REF}
-
-เน้นตามกฎ:
-- ผนัง: คิดเป็น ตร.ม. หักช่องเปิด (ประตู/หน้าต่าง)
-- พื้นปู/ฝ้าเพดาน: คิดเป็น ตร.ม. จากพื้นที่จริง
-- ประตู/หน้าต่าง: นับเป็นชุด แยกตามชนิด/ขนาด (ดูตารางวงกบ)
-- งานทาสี: แยกผิวภายใน/ภายนอก
-- งานหลังคา: ถ้าเห็น Metal Sheet ระบุชนิด+ความหนา + พื้นที่ลาดเอียง
-- ระบุ confidence + source ทุก item
-- ส่งตาราง + JSON สำหรับ import`,
+    prompt: `ถอดปริมาณงานสถาปัตยกรรม หน้า ${PLACEHOLDER_MAIN} อ้างอิง ${PLACEHOLDER_REF}`,
   },
   {
     id: 'electrical',
@@ -78,15 +53,7 @@ implied: ทรายรอง/lean/ขุดดิน/ถมกลับ/ตอ
     icon: '⚡',
     mode: 'electrical',
     defaultEngine: 'anthropic-opus',
-    prompt: `ถอดปริมาณงานไฟฟ้า หน้า ${PLACEHOLDER_MAIN} อ้างอิง ${PLACEHOLDER_REF}
-
-เน้นตามกฎ:
-- ดวงโคม: นับเป็นชุด แยกตามชนิด (ดูสัญลักษณ์ + ตารางประกอบแบบ)
-- สวิตช์/เต้ารับ: นับเป็นจุด แยกชนิด (1 ทาง/2 ทาง/กันน้ำ)
-- สายไฟ + ท่อร้อยสาย: ประมาณความยาวจาก layout (ระบุว่าเป็นการประมาณ)
-- ตู้โหลด/CONSUMER UNIT: นับเป็นชุด ระบุจำนวนช่อง
-- ระบุ confidence + source ทุก item (ส่วนใหญ่เป็น "ประมาณ" สำหรับสาย/ท่อ)
-- ส่งตาราง + JSON สำหรับ import`,
+    prompt: `ถอดปริมาณงานไฟฟ้า หน้า ${PLACEHOLDER_MAIN} อ้างอิง ${PLACEHOLDER_REF}`,
   },
   {
     id: 'sanitary',
@@ -94,15 +61,7 @@ implied: ทรายรอง/lean/ขุดดิน/ถมกลับ/ตอ
     icon: '🚰',
     mode: 'sanitary',
     defaultEngine: 'anthropic-opus',
-    prompt: `ถอดปริมาณงานสุขาภิบาล หน้า ${PLACEHOLDER_MAIN} อ้างอิง ${PLACEHOLDER_REF}
-
-เน้นตามกฎ:
-- สุขภัณฑ์: นับเป็นชุด แยกชนิด (โถส้วม/อ่างล้างหน้า/ที่ปัสสาวะ)
-- ท่อประปา/ท่อระบาย: ประมาณความยาว + ขนาดท่อ แยกชนิด (PVC/เหล็ก)
-- บ่อพัก/บ่อดักไขมัน: นับเป็นจุด ระบุขนาด
-- อุปกรณ์: ปั๊มน้ำ, ถังเก็บน้ำ — นับเป็นชุด
-- ระบุ confidence + source ทุก item
-- ส่งตาราง + JSON สำหรับ import`,
+    prompt: `ถอดปริมาณงานสุขาภิบาล หน้า ${PLACEHOLDER_MAIN} อ้างอิง ${PLACEHOLDER_REF}`,
   },
   {
     id: 'custom',
