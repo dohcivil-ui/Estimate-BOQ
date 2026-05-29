@@ -85,8 +85,11 @@ export function BOQPanel() {
       if (variant === 'classic') {
         await exportBOQToExcel({ items: freshItems, meta: freshMeta });
       } else {
+        // ปร.4 แยกหมวดตาม discipline → ต้อง stamp discipline ลงแต่ละ item
+        const itemsWithDiscipline =
+          useBOQStore.getState().getAllItemsWithDiscipline();
         await exportGovBOQ({
-          items: freshItems,
+          items: itemsWithDiscipline,
           meta: freshMeta,
           mode: variant,
           // เลือกตาราง Factor F CGD 2567 (เก็บเป็นเศษส่วนตามที่ export ต้องการ)

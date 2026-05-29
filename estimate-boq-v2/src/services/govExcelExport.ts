@@ -17,7 +17,7 @@
  * Library: exceljs (มีอยู่แล้วใน dependencies)
  */
 import ExcelJS from 'exceljs';
-import type { BOQItem, ProjectMeta } from '@/types/boq';
+import type { BOQItem, Discipline, ProjectMeta } from '@/types/boq';
 import { adjustedQuantity } from '@/core/boqCalc';
 import {
   FACTOR_F_TABLES,
@@ -124,28 +124,64 @@ export async function exportGovBOQ(opts: GovExportOptions): Promise<void> {
 
 interface Section {
   letter: string; // A, B, C, ...
-  category: string;
+  /** ชื่อหมวด (ฟอร์มทางการ) เช่น "งานโครงสร้าง" */
+  label: string;
+  /** items เรียงตาม category ให้ของชนิดเดียวกันอยู่ติดกัน */
   items: BOQItem[];
 }
 
-function groupSections(items: BOQItem[]): Section[] {
-  const order: string[] = [];
-  const buckets: Record<string, BOQItem[]> = {};
+/** ลำดับหมวดคงที่ของ ปร.4(ก) — ไม่ใช่ first-seen */
+const DISCIPLINE_ORDER: Discipline[] = [
+  'structural',
+  'architectural',
+  'electrical',
+  'sanitary',
+  'other',
+];
 
+/** discipline → ชื่อหมวดไทย (ฟอร์มทางการ ปร.4 — ไม่มี emoji, มี 'other') */
+const DISCIPLINE_SECTION_LABEL: Record<Discipline, string> = {
+  structural: 'งานโครงสร้าง',
+  architectural: 'งานสถาปัตยกรรม',
+  electrical: 'งานระบบไฟฟ้า',
+  sanitary: 'งานระบบสุขาภิบาล',
+  other: 'งานอื่นๆ',
+};
+
+/**
+ * จัดกลุ่มเป็น section ตาม discipline (หัวหมวด) — ลำดับคงที่ตาม DISCIPLINE_ORDER
+ * ภายในหมวด: เรียง item ตาม category (stable) ให้ของชนิดเดียวกันอยู่ติดกัน
+ * item ที่ไม่มี discipline → ตกหมวด 'other' (งานอื่นๆ) ท้ายสุด
+ */
+function groupSections(items: BOQItem[]): Section[] {
+  const buckets = new Map<Discipline, BOQItem[]>();
   for (const it of items) {
-    const cat = (it.category || 'รายการงาน').trim() || 'รายการงาน';
-    if (!(cat in buckets)) {
-      buckets[cat] = [];
-      order.push(cat);
-    }
-    buckets[cat]!.push(it);
+    const d: Discipline = it.discipline ?? 'other';
+    if (!buckets.has(d)) buckets.set(d, []);
+    buckets.get(d)!.push(it);
   }
 
-  return order.map((cat, idx) => ({
-    letter: String.fromCharCode(65 + idx), // A=65
-    category: cat,
-    items: buckets[cat]!,
-  }));
+  const sections: Section[] = [];
+  let idx = 0;
+  for (const d of DISCIPLINE_ORDER) {
+    const bucket = buckets.get(d);
+    if (!bucket || bucket.length === 0) continue;
+    // เรียงตาม category (stable) — รักษาลำดับเดิมเมื่อ category เท่ากัน
+    const sorted = bucket
+      .map((it, i) => ({ it, i }))
+      .sort((a, b) => {
+        const c = (a.it.category || '').localeCompare(b.it.category || '', 'th');
+        return c !== 0 ? c : a.i - b.i;
+      })
+      .map((x) => x.it);
+    sections.push({
+      letter: String.fromCharCode(65 + idx), // A=65
+      label: DISCIPLINE_SECTION_LABEL[d],
+      items: sorted,
+    });
+    idx += 1;
+  }
+  return sections;
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -280,6 +316,11 @@ const FILL_GRAND: ExcelJS.FillPattern = {
   type: 'pattern',
   pattern: 'solid',
   fgColor: { argb: 'FFE2EFDA' }, // light green
+};
+const FILL_SUBTOTAL: ExcelJS.FillPattern = {
+  type: 'pattern',
+  pattern: 'solid',
+  fgColor: { argb: 'FFF2F2F2' }, // light gray — subtotal ต่อหมวด
 };
 const FILL_INPUT: ExcelJS.FillPattern = {
   type: 'pattern',
@@ -804,7 +845,8 @@ function buildPor4(
 
   // ─── Data rows ─────────────────────────────────────────────────────────
   let cur = HDR2 + 1;
-  const firstDataRow = cur;
+  // เก็บ row ของ subtotal แต่ละหมวด → grand total sum เฉพาะ subtotal (กันยอดเบิ้ล)
+  const subtotalRows: number[] = [];
 
   if (sections.length === 0) {
     // empty BOQ — แสดง placeholder
@@ -823,9 +865,9 @@ function buildPor4(
   }
 
   for (const sec of sections) {
-    // section header row
+    // ── หัวหมวด (discipline) ชั้นบน เช่น "A. หมวดงานโครงสร้าง" ──
     ws.mergeCells(`B${cur}:D${cur}`);
-    setCell(ws, `B${cur}`, `${sec.letter}. ${sec.category}`, {
+    setCell(ws, `B${cur}`, `${sec.letter}. หมวด${sec.label}`, {
       font: FONT_BOLD,
       fill: FILL_SECTION,
       alignment: { horizontal: 'left', vertical: 'middle' },
@@ -838,6 +880,8 @@ function buildPor4(
       c.border = BORDER_THIN;
     });
     cur += 1;
+
+    const secFirstRow = cur;
 
     // items
     sec.items.forEach((it, idx) => {
@@ -913,11 +957,61 @@ function buildPor4(
 
       cur += 1;
     });
+
+    const secLastRow = cur - 1;
+
+    // ── subtotal ต่อหมวด เช่น "รวมหมวดงานโครงสร้าง" ──
+    ws.mergeCells(`A${cur}:F${cur}`);
+    setCell(ws, `A${cur}`, `รวมหมวด${sec.label}`, {
+      font: FONT_BOLD,
+      fill: FILL_SUBTOTAL,
+      alignment: { horizontal: 'right', vertical: 'middle' },
+      border: BORDER_THIN,
+    });
+    setCell(ws, `G${cur}`, '', { fill: FILL_SUBTOTAL, border: BORDER_THIN });
+    setCellFormula(
+      ws,
+      `H${cur}`,
+      `SUM(H${secFirstRow}:H${secLastRow})`,
+      NUMFMT_MONEY,
+      {
+        font: FONT_BOLD,
+        fill: FILL_SUBTOTAL,
+        alignment: { horizontal: 'right', vertical: 'middle' },
+        border: BORDER_THIN,
+      },
+    );
+    setCell(ws, `I${cur}`, '', { fill: FILL_SUBTOTAL, border: BORDER_THIN });
+    setCellFormula(
+      ws,
+      `J${cur}`,
+      `SUM(J${secFirstRow}:J${secLastRow})`,
+      NUMFMT_MONEY,
+      {
+        font: FONT_BOLD,
+        fill: FILL_SUBTOTAL,
+        alignment: { horizontal: 'right', vertical: 'middle' },
+        border: BORDER_THIN,
+      },
+    );
+    setCellFormula(ws, `K${cur}`, `H${cur}+J${cur}`, NUMFMT_MONEY, {
+      font: FONT_BOLD,
+      fill: FILL_SUBTOTAL,
+      alignment: { horizontal: 'right', vertical: 'middle' },
+      border: BORDER_THIN,
+    });
+    setCell(ws, `L${cur}`, '', { fill: FILL_SUBTOTAL, border: BORDER_THIN });
+    subtotalRows.push(cur);
+    cur += 1;
   }
 
-  // grand total row (เว้น 1 บรรทัด)
+  // grand total row (เว้น 1 บรรทัด) — SUM เฉพาะ subtotal ต่อหมวด (กันยอดเบิ้ล)
   cur += 1;
-  const lastDataRow = cur - 2;
+  // sum ของ subtotal H/J cells เท่านั้น เช่น "H10+H18+H25"
+  const sumOf = (col: string): string =>
+    subtotalRows.length > 0
+      ? subtotalRows.map((r) => `${col}${r}`).join('+')
+      : '0';
   ws.mergeCells(`A${cur}:F${cur}`);
   setCell(ws, `A${cur}`, 'รวมค่าวัสดุและค่าแรงงานทั้งหมด', {
     font: FONT_BOLD,
@@ -930,37 +1024,25 @@ function buildPor4(
     fill: FILL_GRAND,
     border: BORDER_DOUBLE_TOP,
   });
-  // H = SUM ค่าวัสดุทั้งหมด
-  setCellFormula(
-    ws,
-    `H${cur}`,
-    items.length > 0 ? `SUM(H${firstDataRow}:H${lastDataRow})` : '0',
-    NUMFMT_MONEY,
-    {
-      font: FONT_BOLD,
-      fill: FILL_GRAND,
-      alignment: { horizontal: 'right', vertical: 'middle' },
-      border: BORDER_DOUBLE_TOP,
-    },
-  );
+  // H = ผลรวมค่าวัสดุของทุกหมวด (sum เฉพาะ subtotal)
+  setCellFormula(ws, `H${cur}`, sumOf('H'), NUMFMT_MONEY, {
+    font: FONT_BOLD,
+    fill: FILL_GRAND,
+    alignment: { horizontal: 'right', vertical: 'middle' },
+    border: BORDER_DOUBLE_TOP,
+  });
   // I: blank
   setCell(ws, `I${cur}`, '', {
     fill: FILL_GRAND,
     border: BORDER_DOUBLE_TOP,
   });
-  // J = SUM ค่าแรง
-  setCellFormula(
-    ws,
-    `J${cur}`,
-    items.length > 0 ? `SUM(J${firstDataRow}:J${lastDataRow})` : '0',
-    NUMFMT_MONEY,
-    {
-      font: FONT_BOLD,
-      fill: FILL_GRAND,
-      alignment: { horizontal: 'right', vertical: 'middle' },
-      border: BORDER_DOUBLE_TOP,
-    },
-  );
+  // J = ผลรวมค่าแรงของทุกหมวด (sum เฉพาะ subtotal)
+  setCellFormula(ws, `J${cur}`, sumOf('J'), NUMFMT_MONEY, {
+    font: FONT_BOLD,
+    fill: FILL_GRAND,
+    alignment: { horizontal: 'right', vertical: 'middle' },
+    border: BORDER_DOUBLE_TOP,
+  });
   // K = H + J
   setCellFormula(ws, `K${cur}`, `H${cur}+J${cur}`, NUMFMT_MONEY, {
     font: FONT_BOLD,

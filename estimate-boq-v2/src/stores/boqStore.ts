@@ -41,6 +41,8 @@ interface BOQState {
     items: BOQItem[],
   ) => void;
   getAllItems: () => BOQItem[];
+  /** flatten + stamp discipline ของแต่ละ group ลง item (ใช้ตอน export ปร.4 แยกหมวด) */
+  getAllItemsWithDiscipline: () => BOQItem[];
   getItemsByDiscipline: (d: Discipline) => BOQItem[];
   /** แทนที่ groups ทั้งหมด (ใช้ตอน load จาก DB) — reset history */
   setGroups: (groups: DisciplineGroup[]) => void;
@@ -168,6 +170,11 @@ export const useBOQStore = create<BOQState>((set, get) => ({
     }),
 
   getAllItems: () => flatten(get().disciplineGroups),
+
+  getAllItemsWithDiscipline: () =>
+    get().disciplineGroups.flatMap((g) =>
+      g.items.map((it) => ({ ...it, discipline: g.discipline })),
+    ),
 
   getItemsByDiscipline: (d) =>
     get()
