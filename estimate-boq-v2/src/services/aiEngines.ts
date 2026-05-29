@@ -7,7 +7,7 @@
  * แต่ละ engine map → { provider, model } ส่งเข้า edge ทุกครั้ง
  *   (env บน edge เป็นแค่ fallback ถ้า body ไม่ส่ง model)
  *
- *   Claude         → anthropic  / claude-opus-4-8
+ *   Claude         → anthropic  / claude-opus-4-7
  *   GPT-5.4        → openrouter / openai/gpt-5.4
  *   Gemini 2.5 Pro → openrouter / google/gemini-2.5-pro
  *   GPT-4.1 Mini   → openrouter / openai/gpt-4.1-mini   (ตัวถูก/เร็ว)
@@ -51,11 +51,11 @@ const COMMON_IMAGE = {
 const ENGINE_CONFIGS: Record<AIEngine, AIEngineConfig> = {
   claude: {
     id: 'claude',
-    label: 'Claude Opus 4.8',
+    label: 'Claude Opus 4.7',
     shortLabel: 'Claude',
     icon: '🟠',
     provider: 'anthropic',
-    model: 'claude-opus-4-8',
+    model: 'claude-opus-4-7',
     ...COMMON_IMAGE,
   },
   gpt54: {
