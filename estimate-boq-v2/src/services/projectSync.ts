@@ -435,9 +435,14 @@ export async function loadProject(
   resetAllStores();
 
   // ─── 3. populate project meta ────────────────────────────────────────
-  // legacy: โปรเจกต์เก่าบันทึก factor_f = 1.2768 (default เดิม) → ใช้ตารางอัตโนมัติแทน (0)
+  // legacy: โปรเจกต์เก่าบันทึก factor_f เป็น default/ค่าเดาเก่า → ใช้ตารางอัตโนมัติแทน (0)
+  // 1.2768 = default เดิม, 1.3027 = ค่าเดาจาก AI import เก่า (รั่วผ่าน override)
+  const STALE_FACTOR_DEFAULTS = [1.2768, 1.3027];
   const savedFactorF = project.factor_f ?? 0;
-  const factorF = Math.abs(savedFactorF - 1.2768) < 1e-9 ? 0 : savedFactorF;
+  const isStale = STALE_FACTOR_DEFAULTS.some(
+    (f) => Math.abs(savedFactorF - f) < 1e-9,
+  );
+  const factorF = isStale ? 0 : savedFactorF;
   useProjectMeta.getState().setAll({
     name: project.name,
     client: project.client ?? '',

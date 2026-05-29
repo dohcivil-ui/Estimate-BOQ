@@ -4,7 +4,6 @@
  * Format ที่รับ (ดู PROMPT-Claude-Code-Phase2.md):
  * {
  *   "project": "...",
- *   "factorF": 1.3,
  *   "boq": [
  *     {
  *       "name": "...",

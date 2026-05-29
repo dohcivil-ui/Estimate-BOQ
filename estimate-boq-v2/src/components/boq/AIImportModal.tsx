@@ -32,11 +32,10 @@ export function AIImportModal({ onClose }: Props) {
       const items = payloadToBOQItems(payload);
       useBOQStore.getState().addMany(items);
 
-      // apply factorF/project ถ้ามี (ไม่ทับชื่อปัจจุบันถ้า user ตั้งไว้แล้ว)
+      // ❌ ไม่ apply factorF จาก JSON — Factor F ต้อง auto-lookup ตาราง CGD เสมอ
+      // (GPT ตอนถอดแบบยังไม่รู้ยอดค่างาน ค่าที่ส่งมาเป็นการเดา จะกลบ auto)
+      // apply project name ถ้ามี (ไม่ทับชื่อปัจจุบันถ้า user ตั้งไว้แล้ว)
       const meta = useProjectMeta.getState();
-      if (typeof payload.factorF === 'number' && isFinite(payload.factorF) && payload.factorF > 0) {
-        useProjectMeta.getState().setField('factorF', payload.factorF);
-      }
       if (payload.project && !meta.name) {
         useProjectMeta.getState().setField('name', payload.project);
       }

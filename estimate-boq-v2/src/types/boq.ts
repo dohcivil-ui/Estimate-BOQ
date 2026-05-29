@@ -8,6 +8,8 @@ export interface BOQItem {
   id: string;
   /** หมวด: 'งานโครงสร้าง', 'งานสถาปัตย์', ฯลฯ */
   category: string;
+  /** discipline ของ group ที่ item สังกัด — stamp ตอน export (ปร.4 ใช้เป็นหัวหมวด) */
+  discipline?: Discipline;
   /** ชื่อรายการ */
   name: string;
   /** หน่วย: 'ลบ.ม.', 'ตร.ม.', 'ตัน', 'จุด', ฯลฯ */
@@ -72,7 +74,7 @@ export interface ProjectMeta {
 /** payload ที่ accept จาก AI import (ตาม HANDOFF v2) */
 export interface AIImportPayload {
   project?: string;
-  factorF?: number;
+  // ❌ ไม่รับ factorF จาก import — Factor F ต้อง auto-lookup ตาราง CGD เสมอ
   boq: Array<{
     name: string;
     unit: string;
