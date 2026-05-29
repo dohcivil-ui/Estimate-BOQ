@@ -17,13 +17,11 @@ import {
   useLatestAnalysisForPage,
 } from '@/stores/aiStore';
 import { useAIReferenceStore } from '@/stores/aiReferenceStore';
-import { useRawFileStore } from '@/stores/rawFileStore';
 import {
   analyzePage,
   AutoDetectFailed,
   buildReferenceImage,
   cleanJsonResponse,
-  type AnalyzePdfPage,
 } from '@/services/aiAnalyze';
 import { buildUserMessage, sendChatMessage } from '@/services/aiChat';
 import { importItemsToBoq } from '@/services/aiImportToBoq';
@@ -144,12 +142,10 @@ export function AIPanel() {
 // ═══════════════════════════════════════════════════════════════════════
 const ENGINE_ACTIVE_CLASS: Record<AIEngine, string> = {
   claude: 'border-orange-400 bg-orange-400/15 text-orange-200',
-  'anthropic-opus': 'border-fuchsia-400 bg-fuchsia-400/15 text-fuchsia-200',
   gpt54: 'border-green-400 bg-green-400/15 text-green-200',
   gpt41mini: 'border-amber-400 bg-amber-400/15 text-amber-200',
   'gemini-pro': 'border-teal-400 bg-teal-400/15 text-teal-200',
   'gemini-flash': 'border-sky-400 bg-sky-400/15 text-sky-200',
-  qwen: 'border-purple-400 bg-purple-400/15 text-purple-200',
 };
 
 function EnginePills({
@@ -696,23 +692,6 @@ function ChatInputBlock({ latest }: { latest: AIAnalysis | null }) {
     return out;
   }, [refIds, allPages, files, page, engine]);
 
-  // ─── build pdfPage ถ้า Anthropic Direct + แหล่งเป็น PDF ────────────
-  const buildPdfPage = (): AnalyzePdfPage | undefined => {
-    if (!page) return undefined;
-    const config = getEngineConfig(engine);
-    if (!config.isAnthropicDirect) return undefined;
-    const file = files.find((f) => f.id === page.fileId);
-    if (file?.sourceType !== 'pdf') return undefined;
-    const blob = useRawFileStore.getState().getBlob(page.fileId);
-    if (!blob) return undefined;
-    return {
-      blob,
-      fileId: page.fileId,
-      pageNum: page.pageNumber,
-      fileName: file.name,
-    };
-  };
-
   // ─── analyze: ใช้ preset + (ถ้า dirty) custom prompt ─────────────────
   const handleAnalyze = async () => {
     if (!page || !page.bitmap) return;
@@ -728,7 +707,6 @@ function ChatInputBlock({ latest }: { latest: AIAnalysis | null }) {
         engine,
         mode,
         hd,
-        pdfPage: buildPdfPage(),
         referenceImages,
         customUserPrompt: promptDirty.current ? prompt : undefined,
         onProgress: setProgress,
@@ -780,7 +758,6 @@ function ChatInputBlock({ latest }: { latest: AIAnalysis | null }) {
         analysis: latest,
         conversation: conv,
         targetBitmap: page.bitmap,
-        pdfPage: buildPdfPage(),
         referenceImages,
         userMessage: text,
         engine,

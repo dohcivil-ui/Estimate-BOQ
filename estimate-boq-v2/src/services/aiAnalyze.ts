@@ -1,15 +1,13 @@
 /**
- * AI วิเคราะห์แบบ — Gemini/Qwen via Edge Function หรือ DEV-DIRECT
+ * AI วิเคราะห์แบบ — ยิงผ่าน Supabase Edge Function `analyze` เท่านั้น
  *
  * รองรับ:
  *   - 5 mode (architectural/structural/electrical/sanitary/auto)
  *   - หลายภาพอ้างอิง (referenceImages) ก่อนภาพ target
- *   - progress callback (อัปเดต UI ระหว่างรอ)
- *   - timeout 120s (HD + multi-page ใช้เวลานาน)
- *   - messages array แบบ OpenAI-compat (system + user image+text + ...)
+ *   - progress callback (spinner ระหว่างรอ — edge ตอบทีเดียว ไม่ stream)
  *
- * Resize:
- *   - target/reference ใช้ค่าจาก aiEngines.ts ตาม engine ที่เลือก
+ * ❗ ไม่มี browser-direct provider call แล้ว — system prompt (กฎ 1–15) ส่งเป็น
+ *   body.system แยก เพื่อให้ฝั่ง edge (Anthropic) cache ได้
  */
 import { getSupabase } from '@/lib/supabase';
 import type {
@@ -24,37 +22,18 @@ import {
   getSystemPromptForMode,
   getUserPromptForDiscipline,
 } from './aiPrompts';
-import {
-  getEngineConfig,
-  type AIEngine,
-  type AIEngineConfig,
-} from './aiEngines';
-import { getPdfPageSource, type PdfDocSource } from './aiPdfDoc';
+import { getEngineConfig, type AIEngine } from './aiEngines';
 
 // ─── Progress stage messages (เวลาเป็น ms) ──────────────────────────────
 const PROGRESS_STAGES: Array<{ at: number; msg: string }> = [
   { at: 0, msg: '🤖 กำลังส่งภาพไป AI...' },
-  { at: 10_000, msg: '⏳ AI กำลังอ่านแบบ...' },
+  { at: 10_000, msg: '⏳ AI กำลังอ่านแบบ... (~30–60 วิ)' },
   { at: 30_000, msg: '⏳ AI กำลังถอดปริมาณ... (ใจเย็นๆ)' },
   { at: 60_000, msg: '⏳ ภาพ HD ใช้เวลานานกว่าปกติ...' },
-  { at: 90_000, msg: '⚠️ เกือบ timeout — อาจต้องลอง HD off' },
+  { at: 90_000, msg: '⚠️ ใช้เวลานาน — อาจต้องลอง HD off' },
 ];
 
 export type ProgressCallback = (msg: string) => void;
-
-/**
- * PDF page source สำหรับ Anthropic Direct (document content block)
- *  - fileId + pageNum ใช้ทำ cache key (ดู aiPdfDoc.ts)
- *  - ถ้า engine ไม่ใช่ Anthropic Direct → ignore field นี้ ใช้ bitmap แทน
- */
-export interface AnalyzePdfPage {
-  blob: Blob;
-  fileId: string;
-  /** เลขหน้าใน file (1-indexed) */
-  pageNum: number;
-  /** ชื่อไฟล์ — debug only */
-  fileName?: string;
-}
 
 export interface AnalyzeOptions {
   pageId: string;
@@ -62,11 +41,6 @@ export interface AnalyzeOptions {
   engine: AIEngine;
   mode: AIMode;
   hd?: boolean;
-  /**
-   * ถ้าหน้าต้นทางมาจาก PDF + engine = Anthropic Direct → ส่ง PDF page ตรง
-   * (document type + cache_control ephemeral) แทน image
-   */
-  pdfPage?: AnalyzePdfPage;
   /** ภาพอ้างอิง (รายการวัสดุ/สัญลักษณ์/รายละเอียดทั่วไป) — สูงสุด 4 หน้า */
   referenceImages?: AIReferenceImage[];
   /**
@@ -306,25 +280,12 @@ function runWithProgress<T>(
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// OpenAI-compat message types
+// OpenAI-compat message types (ใช้ภายใน frontend ก่อน flatten ส่ง edge)
 // ═══════════════════════════════════════════════════════════════════════
 
 export type ChatContentPart =
   | { type: 'text'; text: string }
-  | { type: 'image_url'; image_url: { url: string } }
-  /**
-   * Anthropic-only content block: PDF document (extracted single page).
-   *  - inline base64 (≤ 20MB) หรือ file_id (Files API > 20MB)
-   *  - cacheEphemeral = true → ใส่ cache_control:{type:'ephemeral'} ตอนส่ง
-   *    (re-use cache 5 นาที — ลด token cost ของ chat follow-up)
-   * ห้ามส่ง part ชนิดนี้ไป engine อื่นที่ไม่ใช่ Anthropic Direct
-   */
-  | {
-      type: 'document';
-      source: PdfDocSource;
-      /** ใส่ cache_control:ephemeral ไหม (default true สำหรับ PDF page) */
-      cacheEphemeral?: boolean;
-    };
+  | { type: 'image_url'; image_url: { url: string } };
 
 export type ChatMessage =
   | { role: 'system'; content: string }
@@ -338,10 +299,7 @@ async function callAIExpectingJSONObject(opts: {
   retryMessage?: string;
   phaseLabel: 'detect' | 'analyze';
 }): Promise<{ parsed: Record<string, unknown>; out: AICallResult }> {
-  const config = getEngineConfig(opts.engine);
-
   let out = await callAI(opts.messages, opts.engine, opts.hd, {
-    outputTokens: config.maxOutputTokens,
     onProgress: opts.onProgress,
   });
   let parsed = tryParseJSON(out.text);
@@ -362,7 +320,6 @@ async function callAIExpectingJSONObject(opts: {
     { role: 'user', content: opts.retryMessage ?? JSON_RETRY_PROMPT },
   ];
   out = await callAI(retryMessages, opts.engine, opts.hd, {
-    outputTokens: config.retryMaxOutputTokens,
     onProgress: opts.onProgress,
   });
   parsed = tryParseJSON(out.text);
@@ -390,40 +347,11 @@ export async function analyzePage(opts: AnalyzeOptions): Promise<AnalyzeResult> 
   const config = getEngineConfig(opts.engine);
   const maxDim = opts.hd ? config.maxImageDimHD : config.maxImageDim;
 
-  // ─── target: PDF document (Anthropic Direct + PDF) หรือ image (ทุกกรณีอื่น) ──
-  // A3 fallback: ถ้า PDF path ล้มเหลว (extract/upload error) → fallback ใช้ image
-  const useDocument =
-    Boolean(config.isAnthropicDirect) && Boolean(opts.pdfPage);
-  let targetImageDataUrl = '';
-  let targetDocument: PdfDocSource | null = null;
-  if (useDocument && opts.pdfPage) {
-    try {
-      targetDocument = await getPdfPageSource({
-        blob: opts.pdfPage.blob,
-        fileId: opts.pdfPage.fileId,
-        pageNum: opts.pdfPage.pageNum,
-        apiKey: config.apiKey,
-        fileName: opts.pdfPage.fileName,
-      });
-      console.info(
-        `[ai] 📄 PDF page ${opts.pdfPage.pageNum} → ${targetDocument.kind} (${(targetDocument.bytes / 1024).toFixed(0)}KB)`,
-      );
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.warn(
-        `[ai] ⚠️ PDF path ล้มเหลว — fallback ไปใช้ image: ${msg}`,
-      );
-      targetDocument = null;
-      opts.onProgress?.(`⚠️ PDF ส่งไม่ได้ — fallback image: ${msg.slice(0, 80)}`);
-    }
-  }
-  if (!targetDocument) {
-    targetImageDataUrl = downsampleCanvasToDataUrl(
-      opts.bitmap,
-      maxDim,
-      config.imageQuality,
-    );
-  }
+  const targetImageDataUrl = downsampleCanvasToDataUrl(
+    opts.bitmap,
+    maxDim,
+    config.imageQuality,
+  );
   const refs = opts.referenceImages?.slice(0, 4) ?? [];
 
   let activeDiscipline: AIDiscipline;
@@ -436,15 +364,12 @@ export async function analyzePage(opts: AnalyzeOptions): Promise<AnalyzeResult> 
     );
     console.info('[ai] mode=auto — กำลังตรวจจับประเภทแบบ…');
     const detectStart = Date.now();
-    const detectTarget: ChatContentPart = targetDocument
-      ? { type: 'document', source: targetDocument, cacheEphemeral: true }
-      : { type: 'image_url', image_url: { url: targetImageDataUrl } };
     const detectMessages: ChatMessage[] = [
       { role: 'system', content: getSystemPromptForMode('auto') },
       {
         role: 'user',
         content: [
-          detectTarget,
+          { type: 'image_url', image_url: { url: targetImageDataUrl } },
           { type: 'text', text: getAutoDetectUserPrompt() },
         ],
       },
@@ -482,40 +407,33 @@ export async function analyzePage(opts: AnalyzeOptions): Promise<AnalyzeResult> 
     activeDiscipline,
     targetImageDataUrl,
     refs,
-    targetDocument,
     opts.customUserPrompt,
   );
-  // Anthropic Direct → streaming คอย emit progress จริงตามที่ AI ตอบ
-  //   → bypass runWithProgress (ไม่งั้น timer 1s จะ overwrite progress ของ stream)
-  // engine อื่น (Gemini/GPT/Qwen) → ใช้ timer เดิม (ไม่ stream)
-  const useStreaming = Boolean(config.isAnthropicDirect);
-  const analyzeCall = () =>
-    callAIExpectingJSONObject({
-      messages,
-      engine: opts.engine,
-      hd: opts.hd ?? false,
-      onProgress: opts.onProgress,
-      phaseLabel: 'analyze',
-    });
-  const out = useStreaming
-    ? await analyzeCall()
-    : await runWithProgress(analyzeCall, opts.onProgress);
+  const out = await runWithProgress(
+    () =>
+      callAIExpectingJSONObject({
+        messages,
+        engine: opts.engine,
+        hd: opts.hd ?? false,
+        onProgress: opts.onProgress,
+        phaseLabel: 'analyze',
+      }),
+    opts.onProgress,
+  );
 
   const result = out.parsed as unknown as AIAnalysisResponse;
   result.discipline = activeDiscipline;
   if (!Array.isArray(result.items)) result.items = [];
 
-  // truncation guard — คำตอบโดน max_tokens ตัด (Anthropic stop_reason='max_tokens' → finishReason='length')
+  // truncation guard — คำตอบโดน max_tokens ตัด (edge normalize → finishReason='length')
   const truncated = out.out.finishReason === 'length';
   if (truncated) {
     console.warn('[ai] ⚠️ Response ถูกตัด (max_tokens) — อาจถอดไม่ครบ');
   }
 
   const elapsedMs = Date.now() - start;
-  const costStr =
-    out.out.costUsd != null ? ` | cost: $${out.out.costUsd.toFixed(4)}` : '';
   console.info(
-    `[ai] ✅ วิเคราะห์เสร็จ — items: ${result.items.length} | tokens: ${fmtTokens(out.out.tokens?.prompt_tokens)}/${fmtTokens(out.out.tokens?.completion_tokens)} | ${(elapsedMs / 1000).toFixed(1)}s${costStr}`,
+    `[ai] ✅ วิเคราะห์เสร็จ — items: ${result.items.length} | tokens: ${fmtTokens(out.out.tokens?.prompt_tokens)}/${fmtTokens(out.out.tokens?.completion_tokens)} | ${(elapsedMs / 1000).toFixed(1)}s`,
   );
 
   return {
@@ -533,15 +451,12 @@ export async function analyzePage(opts: AnalyzeOptions): Promise<AnalyzeResult> 
 
 /** สร้าง messages array สำหรับ analyze ครั้งแรก (รวม references)
  *
- *  targetDocument ≠ null → ใช้ PDF document แทน image (Anthropic Direct เท่านั้น)
- *  ภาพ reference ยังเป็น image เสมอ (ไม่ใช่ document) — references มาจากหลายไฟล์
- *  รวมไป crop เป็น JPEG เพื่อความ portable
+ *  ทุกภาพ (target + reference) ส่งเป็น image (JPEG downsample) — portable ทุก provider
  */
 export function buildAnalyzeMessages(
   discipline: AIDiscipline,
   targetImageDataUrl: string,
   references: AIReferenceImage[],
-  targetDocument?: PdfDocSource | null,
   customUserPrompt?: string,
 ): ChatMessage[] {
   const system = getSystemPromptForMode(discipline);
@@ -574,18 +489,10 @@ export function buildAnalyzeMessages(
     });
   }
 
-  if (targetDocument) {
-    userContent.push({
-      type: 'document',
-      source: targetDocument,
-      cacheEphemeral: true,
-    });
-  } else {
-    userContent.push({
-      type: 'image_url',
-      image_url: { url: targetImageDataUrl },
-    });
-  }
+  userContent.push({
+    type: 'image_url',
+    image_url: { url: targetImageDataUrl },
+  });
 
   const finalText =
     baseUserText +
@@ -601,7 +508,7 @@ export function buildAnalyzeMessages(
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// callAI — รับ messages array แบบ OpenAI-compat
+// callAI — flatten messages → Edge Function `analyze`
 // ═══════════════════════════════════════════════════════════════════════
 
 interface AICallResult {
@@ -609,14 +516,59 @@ interface AICallResult {
   model: string;
   tokens?: { prompt_tokens?: number; completion_tokens?: number };
   finishReason?: string;
-  /** ค่าใช้จ่ายต่อ request เป็น USD (ถ้ารู้) — ปัจจุบันรองรับ OpenRouter ผ่าน header x-openrouter-cost */
-  costUsd?: number;
 }
 
 interface CallAIOptions {
-  outputTokens?: number;
-  /** progress callback ใช้เฉพาะ engine ที่ stream ได้ (Anthropic Direct) — non-stream engine ignore */
   onProgress?: ProgressCallback;
+}
+
+const tokenFmt = new Intl.NumberFormat('en-US');
+function fmtTokens(n?: number): string {
+  if (n == null || !Number.isFinite(n)) return '?';
+  return tokenFmt.format(n);
+}
+
+/**
+ * flatten messages (OpenAI-compat) → payload ของ edge
+ *  - system: รวมทุก role:system (กฎ 1–15) → ส่งเป็น body.system (Anthropic cache ได้)
+ *  - images: รวม image_url data URL ทุกใบ (reference ก่อน target)
+ *  - prompt: รวม text ของ user/assistant turn (assistant ใส่ป้ายกำกับ — เก็บ context chat)
+ */
+function buildEdgePayload(messages: ChatMessage[]): {
+  system: string;
+  prompt: string;
+  images: string[];
+} {
+  const systemParts: string[] = [];
+  const promptParts: string[] = [];
+  const images: string[] = [];
+
+  for (const m of messages) {
+    if (m.role === 'system') {
+      if (typeof m.content === 'string' && m.content.trim()) {
+        systemParts.push(m.content);
+      }
+      continue;
+    }
+    const label = m.role === 'assistant' ? '[AI ตอบก่อนหน้า]\n' : '';
+    if (typeof m.content === 'string') {
+      if (m.content.trim()) promptParts.push(label + m.content);
+      continue;
+    }
+    const texts: string[] = [];
+    for (const c of m.content) {
+      if (c.type === 'text') texts.push(c.text);
+      else images.push(c.image_url.url);
+    }
+    const joined = texts.join('\n');
+    if (joined.trim()) promptParts.push(label + joined);
+  }
+
+  return {
+    system: systemParts.join('\n\n'),
+    prompt: promptParts.join('\n\n'),
+    images,
+  };
 }
 
 export async function callAI(
@@ -626,30 +578,29 @@ export async function callAI(
   options: CallAIOptions = {},
 ): Promise<AICallResult> {
   const config = getEngineConfig(engine);
-  if (config.apiKey.trim()) {
-    return callAIDirect(messages, engine, hd, options);
-  }
-
-  // Edge Function path: ส่ง messages array ผ่าน body (fallback ถ้าไม่ได้ใส่ browser key)
   const client = getSupabase();
   if (!client) {
     throw new Error(
-      `ยังไม่ได้ตั้ง API key ของ ${config.label} ใน .env.local และยังไม่มี Supabase Edge Function`,
+      'ยังไม่ได้เชื่อมต่อ Supabase — ต้อง login ก่อนใช้ AI (API key อยู่ฝั่ง server)',
     );
   }
 
-  // Edge fn เดิมรับ {prompt, imageDataUrl} — ใช้ fallback: flatten messages →
-  // เอา system + ข้อความ user รวมเป็น prompt + ส่งภาพแรกที่เจอ
-  const fallback = flattenForLegacyEdge(messages);
+  const { system, prompt, images } = buildEdgePayload(messages);
+  if (images.length === 0) {
+    throw new Error('ไม่มีภาพแบบส่งไป AI');
+  }
+
+  options.onProgress?.('🤖 กำลังส่งให้ AI…');
+
   const { data, error } = await client.functions.invoke('analyze', {
     body: {
       pageId: '__inline__',
-      imageDataUrl: fallback.imageDataUrl,
-      prompt: fallback.prompt,
+      images,
+      prompt,
+      system,
       hd,
-      engine,
-      // ถ้า Edge fn รุ่นใหม่รองรับ messages array จะใช้ field นี้
-      messages,
+      provider: config.provider,
+      model: config.model,
     },
   });
 
@@ -658,721 +609,23 @@ export async function callAI(
       `เรียก Edge Function ไม่สำเร็จ: ${error.message ?? String(error)}`,
     );
   }
-  if (!data || (data as { error?: string }).error) {
-    throw new Error(
-      (data as { error?: string })?.error ?? 'Edge Function ตอบกลับว่างเปล่า',
-    );
-  }
-  const ok = data as {
-    raw: string;
-    meta: { model: string; tokens?: AICallResult['tokens'] };
-  };
-  return { text: ok.raw, model: ok.meta.model, tokens: ok.meta.tokens };
-}
-
-/** อ่าน cost จาก response header (รองรับหลายชื่อ — OpenRouter ใช้ x-openrouter-cost) */
-function parseCostHeader(headers: Headers): number | undefined {
-  const candidates = [
-    'x-openrouter-cost',
-    'openrouter-cost',
-    'x-cost-usd',
-    'x-stainless-cost',
-  ];
-  for (const name of candidates) {
-    const raw = headers.get(name);
-    if (raw == null) continue;
-    const n = Number(raw);
-    if (Number.isFinite(n)) return n;
-  }
-  return undefined;
-}
-
-const tokenFmt = new Intl.NumberFormat('en-US');
-function fmtTokens(n?: number): string {
-  if (n == null || !Number.isFinite(n)) return '?';
-  return tokenFmt.format(n);
-}
-
-/** Log การใช้ token + cost ของ AI call เพื่อ debug/ติดตามค่าใช้จ่าย */
-function logUsage(opts: {
-  engine: AIEngine;
-  promptTokens?: number;
-  completionTokens?: number;
-  finishReason?: string;
-  costUsd?: number;
-}): void {
-  const config = getEngineConfig(opts.engine);
-  console.info(
-    `[ai] ${config.icon} ${config.label} — input: ${fmtTokens(opts.promptTokens)} tokens, output: ${fmtTokens(opts.completionTokens)} tokens | finish_reason: ${opts.finishReason ?? '-'}`,
-  );
-  if (opts.costUsd != null) {
-    console.info(`[ai] 💰 Cost: $${opts.costUsd.toFixed(4)}`);
-  }
-}
-
-function extractAssistantText(payload: unknown): string {
-  if (!payload || typeof payload !== 'object') return '';
-  const obj = payload as Record<string, unknown>;
-  const choices = obj.choices;
-  if (Array.isArray(choices) && choices.length > 0) {
-    const first = choices[0] as Record<string, unknown>;
-    const msg = first?.message as Record<string, unknown> | undefined;
-    const content = msg?.content;
-    if (typeof content === 'string') return content;
-    if (Array.isArray(content)) {
-      const parts = content
-        .map((part) => {
-          if (typeof part === 'string') return part;
-          if (!part || typeof part !== 'object') return '';
-          const p = part as Record<string, unknown>;
-          const t = p.text;
-          return typeof t === 'string' ? t : '';
-        })
-        .filter(Boolean);
-      if (parts.length > 0) return parts.join('\n');
-    }
-  }
-  const candidates = obj.candidates;
-  if (Array.isArray(candidates) && candidates.length > 0) {
-    const content = (candidates[0] as Record<string, unknown>).content as
-      | Record<string, unknown>
-      | undefined;
-    const parts = content?.parts;
-    if (Array.isArray(parts)) {
-      const text = parts
-        .map((part) => {
-          if (!part || typeof part !== 'object') return '';
-          const t = (part as Record<string, unknown>).text;
-          return typeof t === 'string' ? t : '';
-        })
-        .filter(Boolean)
-        .join('\n');
-      if (text) return text;
-    }
-  }
-  return '';
-}
-
-async function callAIDirect(
-  messages: ChatMessage[],
-  engine: AIEngine,
-  hd: boolean,
-  options: CallAIOptions = {},
-): Promise<AICallResult> {
-  const config = getEngineConfig(engine);
-  const outputTokens = options.outputTokens ?? config.maxOutputTokens;
-
-  // เก็บสถิติ
-  const totalChars = estimatePromptChars(messages);
-  console.info(
-    `[ai] ${config.label} | HD: ${hd} | prompt total chars: ${totalChars} | max_tokens: ${outputTokens}`,
-  );
-
-  // ─── Anthropic Direct (Messages API) ────────────────────────────────
-  if (config.isAnthropicDirect) {
-    return callAnthropicDirect(messages, config, outputTokens, options.onProgress);
-  }
-
-  // OpenRouter รองรับ `usage: { include: true }` → คืน cost ใน body (usage.cost)
-  // ตรวจจาก endpoint เพื่อเปิดเฉพาะ request ที่ผ่าน OpenRouter
-  const isOpenRouter = config.endpoint.includes('openrouter.ai');
-
-  const ctrl = new AbortController();
-  const timeoutId = window.setTimeout(() => ctrl.abort(), config.timeoutMs);
-
-  try {
-    const requestBody: Record<string, unknown> = {
-      model: config.model,
-      messages,
-      max_tokens: outputTokens,
-      temperature: 0.1,
-      response_format: { type: 'json_object' },
+  const res = data as {
+    raw?: string;
+    error?: string;
+    meta?: {
+      model?: string;
+      tokens?: AICallResult['tokens'];
+      finishReason?: string;
     };
-    if (isOpenRouter) {
-      requestBody.usage = { include: true };
-    }
-
-    const res = await fetch(config.endpoint, {
-      method: 'POST',
-      signal: ctrl.signal,
-      headers: {
-        Authorization: `Bearer ${config.apiKey}`,
-        'Content-Type': 'application/json',
-        ...(config.extraHeaders ?? {}),
-      },
-      body: JSON.stringify(requestBody),
-    });
-    if (!res.ok) {
-      const txt = await res.text();
-      throw new Error(`${config.label} error ${res.status}: ${txt.slice(0, 500)}`);
-    }
-    // อ่าน cost จาก header ก่อน (อาจถูก expose หรือไม่ก็ได้)
-    const costFromHeader = parseCostHeader(res.headers);
-
-    const json = (await res.json()) as Record<string, unknown>;
-    const text = extractAssistantText(json);
-    const finishReason =
-      Array.isArray(json.choices) && json.choices.length > 0
-        ? (((json.choices[0] as Record<string, unknown>)
-            ?.finish_reason as string | undefined) ??
-          undefined)
-        : undefined;
-    const usage = json.usage as
-      | {
-          prompt_tokens?: number;
-          completion_tokens?: number;
-          cost?: number;
-        }
-      | undefined;
-
-    // OpenRouter ส่ง cost (USD) มาใน usage.cost เมื่อขอ `usage: { include: true }`
-    // ใช้ body ก่อน fallback ไป header
-    const costFromBody =
-      typeof usage?.cost === 'number' && Number.isFinite(usage.cost)
-        ? usage.cost
-        : undefined;
-    const costUsd = costFromBody ?? costFromHeader;
-
-    logUsage({
-      engine,
-      promptTokens: usage?.prompt_tokens,
-      completionTokens: usage?.completion_tokens,
-      finishReason,
-      costUsd,
-    });
-
-    return {
-      text,
-      model: config.model,
-      tokens: usage,
-      finishReason,
-      costUsd,
-    };
-  } catch (err) {
-    if (err instanceof Error && err.name === 'AbortError') {
-      throw new Error(
-        `⏱️ AI ใช้เวลาเกิน ${Math.round(config.timeoutMs / 60_000)} นาที — ลอง:\n• ปิด HD\n• ลดจำนวนหน้าอ้างอิง\n• เลือก mode เฉพาะแทน อัตโนมัติ`,
-      );
-    }
-    throw err;
-  } finally {
-    window.clearTimeout(timeoutId);
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════
-// Anthropic Direct (Messages API) — format ต่างจาก OpenAI:
-//   - system prompt อยู่ใน field "system" (ไม่ใช่ message role)
-//   - image: { type:'image', source:{ type:'base64', media_type, data } }
-//   - response: content[0].text (ไม่ใช่ choices[0].message.content)
-// ═══════════════════════════════════════════════════════════════════════
-
-type AnthropicCacheControl = { type: 'ephemeral' };
-
-type AnthropicContentPart =
-  | { type: 'text'; text: string; cache_control?: AnthropicCacheControl }
-  | {
-      type: 'image';
-      source: { type: 'base64'; media_type: string; data: string };
-      cache_control?: AnthropicCacheControl;
-    }
-  | {
-      type: 'document';
-      source:
-        | { type: 'base64'; media_type: 'application/pdf'; data: string }
-        | { type: 'file'; file_id: string };
-      cache_control?: AnthropicCacheControl;
-    };
-
-interface AnthropicMessage {
-  role: 'user' | 'assistant';
-  content: AnthropicContentPart[];
-}
-
-/** แยก media_type + base64 data ออกจาก data URL ("data:image/jpeg;base64,xxxx") */
-function parseDataUrl(url: string): { mediaType: string; data: string } {
-  const m = url.match(/^data:([^;]+);base64,(.*)$/s);
-  if (m) return { mediaType: m[1]!, data: m[2]! };
-  return { mediaType: 'image/jpeg', data: url };
-}
-
-/** แปลง messages (OpenAI-compat) → Anthropic Messages API format
- *
- *  คืน hasDocument = true ถ้ามี document block (≥1 อันใน user content)
- *  caller ใช้ flag นี้ตัดสินใจส่ง anthropic-beta header
- */
-function toAnthropicFormat(messages: ChatMessage[]): {
-  system: string;
-  messages: AnthropicMessage[];
-  hasDocument: boolean;
-  hasFileId: boolean;
-} {
-  let system = '';
-  let hasDocument = false;
-  let hasFileId = false;
-  const out: AnthropicMessage[] = [];
-  for (const m of messages) {
-    if (m.role === 'system') {
-      const txt = typeof m.content === 'string' ? m.content : '';
-      system += (system ? '\n\n' : '') + txt;
-      continue;
-    }
-    const content: AnthropicContentPart[] =
-      typeof m.content === 'string'
-        ? [{ type: 'text', text: m.content }]
-        : m.content.map((part): AnthropicContentPart => {
-            if (part.type === 'text') return { type: 'text', text: part.text };
-            if (part.type === 'document') {
-              hasDocument = true;
-              const cacheControl: AnthropicCacheControl | undefined =
-                part.cacheEphemeral === false ? undefined : { type: 'ephemeral' };
-              if (part.source.kind === 'file_id') {
-                hasFileId = true;
-                return {
-                  type: 'document',
-                  source: { type: 'file', file_id: part.source.fileId },
-                  ...(cacheControl ? { cache_control: cacheControl } : {}),
-                };
-              }
-              return {
-                type: 'document',
-                source: {
-                  type: 'base64',
-                  media_type: 'application/pdf',
-                  data: part.source.data,
-                },
-                ...(cacheControl ? { cache_control: cacheControl } : {}),
-              };
-            }
-            const { mediaType, data } = parseDataUrl(part.image_url.url);
-            return {
-              type: 'image',
-              source: { type: 'base64', media_type: mediaType, data },
-            };
-          });
-    out.push({ role: m.role, content });
-  }
-  return { system, messages: out, hasDocument, hasFileId };
-}
-
-/** ดึง text จาก Anthropic response — content[] เป็น array ของ block (เอาเฉพาะ type:text) */
-function extractAnthropicText(payload: unknown): string {
-  if (!payload || typeof payload !== 'object') return '';
-  const content = (payload as Record<string, unknown>).content;
-  if (!Array.isArray(content)) return '';
-  return content
-    .map((p) => {
-      if (!p || typeof p !== 'object') return '';
-      const t = (p as Record<string, unknown>).text;
-      return typeof t === 'string' ? t : '';
-    })
-    .filter(Boolean)
-    .join('\n');
-}
-
-/**
- * เรียก Anthropic Direct (Messages API) — streaming-first
- *
- *  - ลอง stream ก่อน (UX ดี + กัน timeout output ยาว)
- *  - ถ้า stream fail "ก่อน" ได้ text ใด ๆ → fallback non-stream 1 ครั้ง
- *  - ถ้า fail "หลัง" รับ text บางส่วน → return partial + throw error (UI handle)
- */
-async function callAnthropicDirect(
-  messages: ChatMessage[],
-  config: AIEngineConfig,
-  outputTokens: number,
-  onProgress?: ProgressCallback,
-): Promise<AICallResult> {
-  try {
-    return await callAnthropicDirectStreaming(
-      messages,
-      config,
-      outputTokens,
-      onProgress,
-    );
-  } catch (err) {
-    // ถ้า error เป็น partial-stream (มี text แล้ว) — โยนต่อให้ caller
-    if (err instanceof StreamPartialError) {
-      throw err.inner;
-    }
-    const msg = err instanceof Error ? err.message : String(err);
-    console.warn(
-      `[ai] ⚠️ stream ล้มเหลวก่อนรับ text — fallback non-stream: ${msg}`,
-    );
-    onProgress?.('⚠️ stream fail → ลอง non-stream...');
-    return callAnthropicDirectNonStream(messages, config, outputTokens);
-  }
-}
-
-/** error wrapper เพื่อบอก caller ว่า stream fail "หลัง" ได้ text บางส่วนแล้ว — ไม่ควร fallback */
-class StreamPartialError extends Error {
-  inner: Error;
-  constructor(inner: Error) {
-    super(inner.message);
-    this.name = 'StreamPartialError';
-    this.inner = inner;
-  }
-}
-
-interface AnthropicUsage {
-  input_tokens?: number;
-  output_tokens?: number;
-  cache_creation_input_tokens?: number;
-  cache_read_input_tokens?: number;
-}
-
-/** สร้าง headers + request body สำหรับ Anthropic Messages API */
-function buildAnthropicRequest(
-  messages: ChatMessage[],
-  config: AIEngineConfig,
-  outputTokens: number,
-  stream: boolean,
-): {
-  headers: Record<string, string>;
-  body: string;
-} {
-  const {
-    system,
-    messages: anthropicMessages,
-    hasDocument,
-    hasFileId,
-  } = toAnthropicFormat(messages);
-
-  const betaParts: string[] = [];
-  if (hasDocument) betaParts.push('pdfs-2024-09-25');
-  if (hasFileId) betaParts.push('files-api-2025-04-14');
-  const betaHeader = betaParts.join(',');
-
-  const requestBody: Record<string, unknown> = {
-    model: config.model,
-    max_tokens: outputTokens,
-    temperature: 0,
-    messages: anthropicMessages,
-    ...(stream ? { stream: true } : {}),
-  };
-  if (system) requestBody.system = system;
-
-  const headers: Record<string, string> = {
-    'x-api-key': config.apiKey,
-    'anthropic-version': '2023-06-01',
-    'anthropic-dangerous-direct-browser-access': 'true',
-    'content-type': 'application/json',
-  };
-  if (betaHeader) headers['anthropic-beta'] = betaHeader;
-  if (stream) headers['accept'] = 'text/event-stream';
-
-  return { headers, body: JSON.stringify(requestBody) };
-}
-
-function logAnthropicCache(usage: AnthropicUsage | undefined): void {
-  if (!usage) return;
-  if (usage.cache_read_input_tokens || usage.cache_creation_input_tokens) {
-    console.info(
-      `[ai] 💾 cache — read: ${fmtTokens(usage.cache_read_input_tokens)} tokens, created: ${fmtTokens(usage.cache_creation_input_tokens)} tokens`,
-    );
-  }
-}
-
-/** Streaming variant — SSE parser */
-async function callAnthropicDirectStreaming(
-  messages: ChatMessage[],
-  config: AIEngineConfig,
-  outputTokens: number,
-  onProgress?: ProgressCallback,
-): Promise<AICallResult> {
-  const { headers, body } = buildAnthropicRequest(
-    messages,
-    config,
-    outputTokens,
-    true,
-  );
-
-  const ctrl = new AbortController();
-  const timeoutId = window.setTimeout(() => ctrl.abort(), config.timeoutMs);
-
-  let accumulated = '';
-  let inputTokens: number | undefined;
-  let cacheReadTokens: number | undefined;
-  let cacheCreateTokens: number | undefined;
-  let outputTokensFinal: number | undefined;
-  let stopReason: string | undefined;
-  let model = config.model;
-  let lastProgressAt = Date.now();
-
-  onProgress?.('📤 ส่ง prompt → AI...');
-
-  try {
-    const res = await fetch(config.endpoint, {
-      method: 'POST',
-      signal: ctrl.signal,
-      headers,
-      body,
-    });
-    if (!res.ok) {
-      const txt = await res.text();
-      throw new Error(
-        `${config.label} error ${res.status}: ${txt.slice(0, 500)}`,
-      );
-    }
-    if (!res.body) {
-      throw new Error('ไม่มี response body — streaming ใช้ไม่ได้');
-    }
-
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-
-      // SSE: events แยกด้วย \n\n
-      const splitIdx = buffer.lastIndexOf('\n\n');
-      if (splitIdx === -1) continue;
-      const ready = buffer.slice(0, splitIdx);
-      buffer = buffer.slice(splitIdx + 2);
-
-      for (const evt of ready.split('\n\n')) {
-        if (!evt.trim()) continue;
-        let eventType = '';
-        const dataLines: string[] = [];
-        for (const line of evt.split('\n')) {
-          if (line.startsWith('event: ')) eventType = line.slice(7).trim();
-          else if (line.startsWith('event:')) eventType = line.slice(6).trim();
-          else if (line.startsWith('data: ')) dataLines.push(line.slice(6));
-          else if (line.startsWith('data:')) dataLines.push(line.slice(5));
-        }
-        if (dataLines.length === 0) continue;
-        const dataStr = dataLines.join('\n');
-
-        let data: Record<string, unknown>;
-        try {
-          data = JSON.parse(dataStr);
-        } catch {
-          console.warn('[ai-stream] parse fail:', dataStr.slice(0, 120));
-          continue;
-        }
-
-        switch (eventType) {
-          case 'message_start': {
-            const msgObj = data.message as
-              | { usage?: AnthropicUsage; model?: string }
-              | undefined;
-            const u = msgObj?.usage;
-            if (u) {
-              inputTokens = u.input_tokens;
-              cacheReadTokens = u.cache_read_input_tokens;
-              cacheCreateTokens = u.cache_creation_input_tokens;
-            }
-            if (msgObj?.model) model = msgObj.model;
-            onProgress?.(
-              `⏳ AI เริ่มตอบ... (input ${fmtTokens(inputTokens)} tokens, cache read ${fmtTokens(cacheReadTokens)})`,
-            );
-            break;
-          }
-          case 'content_block_delta': {
-            const delta = data.delta as
-              | { type?: string; text?: string }
-              | undefined;
-            if (delta?.type === 'text_delta' && typeof delta.text === 'string') {
-              accumulated += delta.text;
-              const now = Date.now();
-              if (now - lastProgressAt > 500) {
-                lastProgressAt = now;
-                onProgress?.(
-                  `⏳ AI กำลังตอบ... ${accumulated.length.toLocaleString()} chars`,
-                );
-              }
-            }
-            break;
-          }
-          case 'message_delta': {
-            const usage = data.usage as AnthropicUsage | undefined;
-            if (usage?.output_tokens != null) {
-              outputTokensFinal = usage.output_tokens;
-            }
-            const sr = (data.delta as { stop_reason?: string } | undefined)
-              ?.stop_reason;
-            if (typeof sr === 'string') stopReason = sr;
-            break;
-          }
-          case 'message_stop':
-            break;
-          case 'error': {
-            const errObj = data.error as
-              | { type?: string; message?: string }
-              | undefined;
-            throw new Error(
-              `Anthropic stream error: ${errObj?.message ?? JSON.stringify(errObj ?? data)}`,
-            );
-          }
-          // ping / content_block_start / content_block_stop — skip
-        }
-      }
-    }
-
-    const finishReason = stopReason === 'max_tokens' ? 'length' : stopReason;
-    const tokens =
-      inputTokens != null || outputTokensFinal != null
-        ? {
-            prompt_tokens: inputTokens,
-            completion_tokens: outputTokensFinal,
-          }
-        : undefined;
-
-    logAnthropicCache({
-      input_tokens: inputTokens,
-      output_tokens: outputTokensFinal,
-      cache_read_input_tokens: cacheReadTokens,
-      cache_creation_input_tokens: cacheCreateTokens,
-    });
-    logUsage({
-      engine: config.id,
-      promptTokens: tokens?.prompt_tokens,
-      completionTokens: tokens?.completion_tokens,
-      finishReason,
-    });
-
-    onProgress?.(`✅ AI ตอบครบ (${accumulated.length.toLocaleString()} chars)`);
-    return { text: accumulated, model, tokens, finishReason };
-  } catch (err) {
-    if (err instanceof Error && err.name === 'AbortError') {
-      const e = new Error(
-        `⏱️ AI ใช้เวลาเกิน ${Math.round(config.timeoutMs / 60_000)} นาที — ลอง:\n• ปิด HD\n• ลดจำนวนหน้าอ้างอิง`,
-      );
-      // ถ้ามี text แล้ว → wrap เป็น partial เพื่อ caller ไม่ retry
-      if (accumulated.length > 0) throw new StreamPartialError(e);
-      throw e;
-    }
-    // ถ้ามี accumulated แล้ว → ห้าม fallback non-stream (จะ retry ซ้ำราคาแพง)
-    if (accumulated.length > 0) {
-      const wrapped =
-        err instanceof Error ? err : new Error(String(err));
-      console.warn(
-        `[ai-stream] error หลังรับ ${accumulated.length} chars — return partial`,
-      );
-      throw new StreamPartialError(wrapped);
-    }
-    throw err;
-  } finally {
-    window.clearTimeout(timeoutId);
-  }
-}
-
-/** Non-stream variant — fallback เดิม (ทำตัวเหมือนก่อน refactor) */
-async function callAnthropicDirectNonStream(
-  messages: ChatMessage[],
-  config: AIEngineConfig,
-  outputTokens: number,
-): Promise<AICallResult> {
-  const { headers, body } = buildAnthropicRequest(
-    messages,
-    config,
-    outputTokens,
-    false,
-  );
-
-  const ctrl = new AbortController();
-  const timeoutId = window.setTimeout(() => ctrl.abort(), config.timeoutMs);
-  try {
-    const res = await fetch(config.endpoint, {
-      method: 'POST',
-      signal: ctrl.signal,
-      headers,
-      body,
-    });
-    if (!res.ok) {
-      const txt = await res.text();
-      throw new Error(
-        `${config.label} error ${res.status}: ${txt.slice(0, 500)}`,
-      );
-    }
-    const json = (await res.json()) as Record<string, unknown>;
-    const text = extractAnthropicText(json);
-    const stopReason =
-      typeof json.stop_reason === 'string' ? json.stop_reason : undefined;
-    const finishReason = stopReason === 'max_tokens' ? 'length' : stopReason;
-    const usage = json.usage as AnthropicUsage | undefined;
-    const tokens = usage
-      ? {
-          prompt_tokens: usage.input_tokens,
-          completion_tokens: usage.output_tokens,
-        }
-      : undefined;
-
-    logAnthropicCache(usage);
-    logUsage({
-      engine: config.id,
-      promptTokens: tokens?.prompt_tokens,
-      completionTokens: tokens?.completion_tokens,
-      finishReason,
-    });
-
-    return { text, model: config.model, tokens, finishReason };
-  } catch (err) {
-    if (err instanceof Error && err.name === 'AbortError') {
-      throw new Error(
-        `⏱️ AI ใช้เวลาเกิน ${Math.round(config.timeoutMs / 60_000)} นาที — ลอง:\n• ปิด HD\n• ลดจำนวนหน้าอ้างอิง\n• เลือก mode เฉพาะแทน อัตโนมัติ`,
-      );
-    }
-    throw err;
-  } finally {
-    window.clearTimeout(timeoutId);
-  }
-}
-
-function estimatePromptChars(messages: ChatMessage[]): number {
-  let n = 0;
-  for (const m of messages) {
-    if (typeof m.content === 'string') n += m.content.length;
-    else {
-      for (const c of m.content) {
-        if (c.type === 'text') n += c.text.length;
-        else if (c.type === 'document') n += 2000; // overhead ของ PDF (ไม่นับ base64)
-        else n += 1000; // overhead ของรูป (ไม่นับ base64)
-      }
-    }
-  }
-  return n;
-}
-
-/** flatten messages → legacy Edge fn payload (1 image + 1 prompt)
- *
- *  หมายเหตุ: ถ้ามี document part — flatten ไม่รองรับ (Edge fn เก่าไม่รู้จัก PDF)
- *  caller ต้องการันตีว่า document part ใช้กับ Anthropic Direct เท่านั้น
- */
-function flattenForLegacyEdge(messages: ChatMessage[]): {
-  prompt: string;
-  imageDataUrl: string;
-} {
-  const sysParts: string[] = [];
-  const userParts: string[] = [];
-  let firstImage: string | null = null;
-
-  for (const m of messages) {
-    if (m.role === 'system' && typeof m.content === 'string') {
-      sysParts.push(m.content);
-    } else if (m.role === 'user') {
-      if (typeof m.content === 'string') {
-        userParts.push(m.content);
-      } else {
-        for (const c of m.content) {
-          if (c.type === 'text') userParts.push(c.text);
-          else if (c.type === 'image_url' && !firstImage) {
-            firstImage = c.image_url.url;
-          } else if (c.type === 'document') {
-            throw new Error(
-              'Legacy Edge Function ไม่รองรับ PDF document — ใช้ Anthropic Direct เท่านั้น',
-            );
-          }
-        }
-      }
-    }
+  } | null;
+  if (!res || res.error) {
+    throw new Error(res?.error ?? 'Edge Function ตอบกลับว่างเปล่า');
   }
 
   return {
-    prompt: [...sysParts, '## งาน', ...userParts].join('\n\n'),
-    imageDataUrl: firstImage ?? '',
+    text: res.raw ?? '',
+    model: res.meta?.model ?? config.model,
+    tokens: res.meta?.tokens,
+    finishReason: res.meta?.finishReason,
   };
 }

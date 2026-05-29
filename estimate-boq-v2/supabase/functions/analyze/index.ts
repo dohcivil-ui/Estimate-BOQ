@@ -68,6 +68,8 @@ interface AnalyzeRequest {
 /** ผลลัพธ์ที่ normalize แล้วจากทุก provider */
 interface ProviderResult {
   text: string;
+  /** normalize: 'length' = โดน max_tokens ตัด (frontend ใช้ตรวจ truncation) */
+  finishReason?: string;
   usage: {
     prompt_tokens?: number;
     completion_tokens?: number;
@@ -229,6 +231,7 @@ serve(async (req: Request) => {
       model,
       elapsedMs,
       tokens: result.usage,
+      finishReason: result.finishReason,
       analysisId,
     },
   });
@@ -294,9 +297,11 @@ async function callOpenRouter(args: {
 
   const json = await res.json();
   const text = json.choices?.[0]?.message?.content ?? '';
+  const finishReason = json.choices?.[0]?.finish_reason ?? undefined;
   const u = json.usage ?? {};
   return {
     text,
+    finishReason,
     usage: {
       prompt_tokens: u.prompt_tokens,
       completion_tokens: u.completion_tokens,
@@ -369,9 +374,13 @@ async function callAnthropic(args: {
     .filter((b: { type?: string }) => b.type === 'text')
     .map((b: { text?: string }) => b.text ?? '')
     .join('');
+  // Anthropic stop_reason 'max_tokens' → normalize เป็น 'length' (เหมือน OpenAI)
+  const finishReason =
+    json.stop_reason === 'max_tokens' ? 'length' : (json.stop_reason ?? undefined);
   const u = json.usage ?? {};
   return {
     text,
+    finishReason,
     usage: {
       prompt_tokens: u.input_tokens,
       completion_tokens: u.output_tokens,

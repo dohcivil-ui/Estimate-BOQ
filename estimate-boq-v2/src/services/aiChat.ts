@@ -1,10 +1,10 @@
 /**
- * Chat follow-up — ส่ง user message เข้า Qwen พร้อม conversation history
+ * Chat follow-up — ส่ง user message + conversation history ผ่าน edge `analyze`
  *
  * Architecture:
  *   - Turn 1: system + user(images + initial text) + assistant(JSON result)
  *   - Turn 2+: เพิ่ม user/assistant ลงไปเรื่อยๆ (text-only)
- *   - ภาพไม่ต้องส่งซ้ำในรอบหลัง — Qwen เห็น conversation history
+ *   - ภาพไม่ต้องส่งซ้ำในรอบหลัง — history (text) ถูก flatten เข้า prompt
  *
  * ผลลัพธ์:
  *   - ถ้า AI ตอบ JSON ที่ parse ได้ → AIChatMessage.parsedResult set
@@ -24,13 +24,11 @@ import {
   cleanJsonResponse,
   downsampleCanvasToDataUrl,
   tryParseAIResponse,
-  type AnalyzePdfPage,
   type ChatContentPart,
   type ChatMessage,
   type ProgressCallback,
 } from './aiAnalyze';
 import { getEngineConfig, type AIEngine } from './aiEngines';
-import { getPdfPageSource } from './aiPdfDoc';
 
 const HISTORY_TURN_LIMIT = 10; // เก็บ user+assistant รวม 10 ข้อความล่าสุด
 const FOLLOWUP_SUFFIX = `\n\nคำแนะนำ:
@@ -42,13 +40,11 @@ export interface SendChatOptions {
   analysis: AIAnalysis;
   conversation: AIConversation;
   targetBitmap: HTMLCanvasElement | null;
-  /** ถ้ามี + engine = Anthropic Direct → ใช้ PDF document แทน bitmap (cache reuse) */
-  pdfPage?: AnalyzePdfPage;
   referenceImages?: AIReferenceImage[];
   userMessage: string;
   engine: AIEngine;
   hd?: boolean;
-  /** progress callback ใช้ระหว่าง stream (Anthropic Direct เท่านั้น) */
+  /** progress callback (spinner ระหว่างรอ edge) */
   onProgress?: ProgressCallback;
 }
 
@@ -73,39 +69,19 @@ export async function sendChatMessage(opts: SendChatOptions): Promise<SendChatRe
     throw new Error('ยังไม่มีผลวิเคราะห์เริ่มต้น — กดวิเคราะห์ก่อน');
   }
 
-  // ─── เลือก target: PDF document (Anthropic Direct + PDF) หรือ image ────
-  // A3 fallback: ถ้า PDF path ล้มเหลว → fallback ใช้ image
-  const useDocument =
-    Boolean(config.isAnthropicDirect) && Boolean(opts.pdfPage);
-  let turn1Target: ChatContentPart | null = null;
-  if (useDocument && opts.pdfPage) {
-    try {
-      const source = await getPdfPageSource({
-        blob: opts.pdfPage.blob,
-        fileId: opts.pdfPage.fileId,
-        pageNum: opts.pdfPage.pageNum,
-        apiKey: config.apiKey,
-        fileName: opts.pdfPage.fileName,
-      });
-      turn1Target = { type: 'document', source, cacheEphemeral: true };
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.warn(
-        `[ai-chat] ⚠️ PDF path ล้มเหลว — fallback ไปใช้ image: ${msg}`,
-      );
-    }
+  // ─── target: image ของหน้าที่กำลังวิเคราะห์ ───────────────────────────
+  if (!targetBitmap) {
+    throw new Error('ไม่มี bitmap ของหน้าที่กำลังวิเคราะห์ — เปิดหน้าใหม่อีกครั้ง');
   }
-  if (!turn1Target) {
-    if (!targetBitmap) {
-      throw new Error('ไม่มี bitmap ของหน้าที่กำลังวิเคราะห์ — เปิดหน้าใหม่อีกครั้ง');
-    }
-    const targetImageDataUrl = downsampleCanvasToDataUrl(
-      targetBitmap,
-      opts.hd ? config.maxImageDimHD : config.maxImageDim,
-      config.imageQuality,
-    );
-    turn1Target = { type: 'image_url', image_url: { url: targetImageDataUrl } };
-  }
+  const targetImageDataUrl = downsampleCanvasToDataUrl(
+    targetBitmap,
+    opts.hd ? config.maxImageDimHD : config.maxImageDim,
+    config.imageQuality,
+  );
+  const turn1Target: ChatContentPart = {
+    type: 'image_url',
+    image_url: { url: targetImageDataUrl },
+  };
 
   // ─── Build messages array ─────────────────────────────────────────────
   const messages: ChatMessage[] = [
