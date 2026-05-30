@@ -23,6 +23,8 @@ import {
   buildReferenceImage,
   cleanJsonResponse,
 } from '@/services/aiAnalyze';
+import { detectBoxes } from '@/services/boxDetect';
+import { useDetectionStore } from '@/stores/detectionStore';
 import { buildUserMessage, sendChatMessage } from '@/services/aiChat';
 import { importItemsToBoq } from '@/services/aiImportToBoq';
 import {
@@ -694,6 +696,31 @@ function ChatInputBlock({ latest }: { latest: AIAnalysis | null }) {
   // ─── analyze: ใช้ preset + (ถ้า dirty) custom prompt ─────────────────
   const handleAnalyze = async () => {
     if (!page || !page.bitmap) return;
+
+    // Perceptron: detect-box path (แยกจาก flow BOQ — ctx 33K + คืน markup)
+    if (engine === 'perceptron') {
+      const det = useDetectionStore.getState();
+      det.setBusy(true);
+      setProgress('📦 Perceptron ตรวจจับกล่อง...');
+      setError(null);
+      try {
+        const res = await detectBoxes({
+          bitmap: page.bitmap,
+          engine,
+          hd,
+          prompt: promptDirty.current ? prompt : undefined,
+          onProgress: setProgress,
+        });
+        det.setBoxes(page.id, res.boxes);
+        setProgress('');
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+      } finally {
+        det.setBusy(false);
+      }
+      return;
+    }
+
     const ai = useAIStore.getState();
     const mode = preset.mode; // custom preset = 'auto' (detect schema)
     const analysisId = ai.startAnalyze(page.id, hd, mode, engine);

@@ -24,6 +24,7 @@ import { importFilesIntoStore } from '@/services/importFiles';
 import { RasterLayer } from './canvas/RasterLayer';
 import { GridLayer } from './canvas/GridLayer';
 import { MeasurementsLayer } from './canvas/MeasurementsLayer';
+import { DetectionLayer } from './canvas/DetectionLayer';
 import { DraftLayer } from './canvas/DraftLayer';
 import { SnapHud } from './canvas/SnapHud';
 import { ScaleDialog } from './ScaleDialog';
@@ -132,6 +133,7 @@ export function CanvasArea() {
             spacingPage={gridSpacingPage}
           />
           <MeasurementsLayer measurements={measurements} transform={transform} />
+          <DetectionLayer transform={transform} />
           <DraftLayer
             tool={activeTool}
             draftPoints={draftPoints}
