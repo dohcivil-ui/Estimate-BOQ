@@ -133,7 +133,6 @@ export function CanvasArea() {
             spacingPage={gridSpacingPage}
           />
           <MeasurementsLayer measurements={measurements} transform={transform} />
-          <DetectionLayer transform={transform} />
           <DraftLayer
             tool={activeTool}
             draftPoints={draftPoints}
@@ -141,6 +140,7 @@ export function CanvasArea() {
             transform={transform}
             unitPerPixel={scale?.unitPerPixel ?? null}
           />
+          <DetectionLayer transform={transform} />
           <SnapHud
             snap={interaction.currentSnap}
             transform={transform}

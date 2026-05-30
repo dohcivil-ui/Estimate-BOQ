@@ -1,62 +1,106 @@
 // src/services/perceptronBoxes.ts
-// แปลงผลลัพธ์ box ดิบจาก Perceptron Mk1 → กล่องที่วาดบน canvas ได้
-//
-// Perceptron คืน annotation เป็น markup แบบนี้ (พิกัด normalize 0–1000 ต่อแกน):
-//   <collection mention="F2">
-//     <point_box> (248,352) (280,396) </point_box>   ← มุมบนซ้าย (x1,y1) , มุมล่างขวา (x2,y2)
-//     ...
-//   </collection>
+// ───────────────────────────────────────────────────────────────────────
+// Parser สำหรับ Perceptron Mk1 annotation (annotation_format:"box")
+// รองรับ 2 รูปแบบที่โมเดลคืน:
+//   (A) inline label : F2, C2 (A, 1) <point_box> (247,350) (280,396) </point_box>
+//                      F1, C3        <point_box> (660,502) (688,532) </point_box>
+//   (B) collection   : <collection mention="F2"> <point_box> (x1,y1)(x2,y2) </point_box> … </collection>
+// พิกัด normalized 0–1000 ต่อแกน, ลำดับ (x,y)  →  map เป็น px ด้วย imgW/imgH
+// ───────────────────────────────────────────────────────────────────────
+
+export const NORM_BASE = 1000;
 
 export interface FootingBoxNorm {
-  type: string;              // "F2" | "F1" | ...
-  nx1: number; ny1: number;  // มุมบนซ้าย (0–1000)
-  nx2: number; ny2: number;  // มุมล่างขวา (0–1000)
+  type: string;
+  nx1: number;
+  ny1: number;
+  nx2: number;
+  ny2: number;
 }
 
 export interface FootingBoxPx {
   type: string;
-  x: number; y: number; w: number; h: number; // pixel บนรูปจริง
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
 }
 
-const NORM_BASE = 1000; // ยืนยันแล้วจาก overlay test: Perceptron normalize 0–1000 ต่อแกน
+// ── ดึงชนิดฐานจาก label: "F2, C2 (A, 1)" → "F2" | "F1, C3" → "F1" ──
+function typeFromLabel(label: string): string {
+  const m = label.match(/[A-Za-z]{1,3}\d+/); // token แรกแบบ F2 / C3 / GB1
+  return m ? m[0].toUpperCase() : '?';
+}
 
-const COLLECTION_RE = /<collection\s+mention="([^"]+)">([\s\S]*?)<\/collection>/g;
-const POINTBOX_RE =
-  /<point_box>\s*\(\s*(\d+)\s*,\s*(\d+)\s*\)\s*\(\s*(\d+)\s*,\s*(\d+)\s*\)\s*<\/point_box>/g;
+// 1 กล่อง: <label?> <point_box> (x1,y1) (x2,y2) </point_box>
+function boxRegex(): RegExp {
+  return /([^\n<>]*?)<point_box>\s*\(\s*(\d+)\s*,\s*(\d+)\s*\)\s*\(\s*(\d+)\s*,\s*(\d+)\s*\)\s*<\/point_box>/gi;
+}
+function collectionRegex(): RegExp {
+  return /<collection\s+mention=["']([^"']+)["']\s*>([\s\S]*?)<\/collection>/gi;
+}
 
-/** ดึงกล่องทั้งหมด (normalized) จาก content ที่โมเดลคืนมา */
 export function parsePerceptronBoxes(content: string): FootingBoxNorm[] {
   const boxes: FootingBoxNorm[] = [];
-  let c: RegExpExecArray | null;
-  COLLECTION_RE.lastIndex = 0;
-  while ((c = COLLECTION_RE.exec(content)) !== null) {
-    const type = c[1].trim();
-    const body = c[2];
-    let p: RegExpExecArray | null;
-    POINTBOX_RE.lastIndex = 0;
-    while ((p = POINTBOX_RE.exec(body)) !== null) {
-      boxes.push({ type, nx1: +p[1], ny1: +p[2], nx2: +p[3], ny2: +p[4] });
+
+  // (B) format collection — type มาจาก mention
+  const colRe = collectionRegex();
+  let cm: RegExpExecArray | null;
+  let hadCollection = false;
+  while ((cm = colRe.exec(content)) !== null) {
+    hadCollection = true;
+    const type = cm[1].trim().toUpperCase();
+    const inner = cm[2];
+    const bRe = boxRegex();
+    let bm: RegExpExecArray | null;
+    while ((bm = bRe.exec(inner)) !== null) {
+      boxes.push({
+        type,
+        nx1: Number(bm[2]),
+        ny1: Number(bm[3]),
+        nx2: Number(bm[4]),
+        ny2: Number(bm[5]),
+      });
     }
+  }
+  if (hadCollection && boxes.length > 0) return boxes;
+
+  // (A) format inline label — type มาจากข้อความหน้า <point_box>
+  const bRe = boxRegex();
+  let m: RegExpExecArray | null;
+  while ((m = bRe.exec(content)) !== null) {
+    boxes.push({
+      type: typeFromLabel(m[1].trim()),
+      nx1: Number(m[2]),
+      ny1: Number(m[3]),
+      nx2: Number(m[4]),
+      ny2: Number(m[5]),
+    });
   }
   return boxes;
 }
 
-/** แปลง normalized → pixel ของรูปจริง (imgW × imgH px) */
-export function toPixels(b: FootingBoxNorm, imgW: number, imgH: number): FootingBoxPx {
+export function toPixels(
+  b: FootingBoxNorm,
+  imgW: number,
+  imgH: number,
+): FootingBoxPx {
   return {
     type: b.type,
-    x: (b.nx1 / NORM_BASE) * imgW,
-    y: (b.ny1 / NORM_BASE) * imgH,
-    w: ((b.nx2 - b.nx1) / NORM_BASE) * imgW,
-    h: ((b.ny2 - b.ny1) / NORM_BASE) * imgH,
+    x1: (b.nx1 / NORM_BASE) * imgW,
+    y1: (b.ny1 / NORM_BASE) * imgH,
+    x2: (b.nx2 / NORM_BASE) * imgW,
+    y2: (b.ny2 / NORM_BASE) * imgH,
   };
 }
 
-/** อ่านบรรทัดสรุป เช่น "F2=12 | F1=2 | รวม=14" ไว้ cross-check กับจำนวนกล่องที่ parse ได้ */
+// สรุปบรรทัด "F2=12 | F1=2 | รวม=14" → { F2:12, F1:2, รวม:14 }
 export function parseSummary(content: string): Record<string, number> {
   const out: Record<string, number> = {};
-  const re = /([A-Za-zก-๙]+)\s*=\s*(\d+)/g;
+  const re = /([A-Za-zก-๙]+\d*)\s*=\s*(\d+)/g;
   let m: RegExpExecArray | null;
-  while ((m = re.exec(content)) !== null) out[m[1]] = +m[2];
+  while ((m = re.exec(content)) !== null) {
+    out[m[1]] = Number(m[2]);
+  }
   return out;
 }

@@ -1,24 +1,22 @@
 /**
  * DetectionLayer — วาดกล่องที่ AI (Perceptron) ตรวจพบ บน canvas
  * - สีตามชนิดฐาน (F2 cyan / F1 amber / อื่น ๆ violet)
- * - คลิก → เลือก + เรืองแสง (glow)
- * - label ชนิดเหนือกล่อง
- * พิกัด box เป็น page coords → แปลงเป็น screen ด้วย transform เดิม (เหมือน MeasurementsLayer)
+ * - คลิก → เลือก + เรืองแสง (glow), label ชนิดเหนือกล่อง
+ * พิกัด box เป็น page coords → แปลงเป็น screen ด้วย transform เดิม (เหมือน DraftLayer)
  */
 import { Layer, Rect, Text, Group } from 'react-konva';
 import type { ViewTransform } from '@/types/viewport';
 import { useDetectionStore } from '@/stores/detectionStore';
 import type { DetectedBox } from '@/services/boxDetect';
 
-// สีตามชนิด — เพิ่มได้ตามชนิดที่เจอบ่อย ที่เหลือใช้ DEFAULT
 const TYPE_COLORS: Record<string, string> = {
-  F2: '#34d3ee', // cyan — ฐานจุดตัด
-  F1: '#ffb43a', // amber — ฐานพิเศษ
+  F2: '#34d3ee',
+  F1: '#ffb43a',
   C2: '#34d3ee',
   C3: '#ffb43a',
 };
-const DEFAULT_COLOR = '#a78bfa'; // violet
-const SELECTED_COLOR = '#39e58c'; // เขียว
+const DEFAULT_COLOR = '#a78bfa';
+const SELECTED_COLOR = '#39e58c';
 
 interface Props {
   transform: ViewTransform;
@@ -29,19 +27,18 @@ export function DetectionLayer({ transform }: Props) {
   const selectedId = useDetectionStore((s) => s.selectedId);
   const select = useDetectionStore((s) => s.select);
 
-  if (boxes.length === 0) return null;
-
   return (
     <Layer>
-      {boxes.map((b) => (
-        <BoxShape
-          key={b.id}
-          box={b}
-          transform={transform}
-          selected={b.id === selectedId}
-          onSelect={() => select(b.id)}
-        />
-      ))}
+      {transform &&
+        boxes.map((b) => (
+          <BoxShape
+            key={b.id}
+            box={b}
+            transform={transform}
+            selected={b.id === selectedId}
+            onSelect={() => select(b.id)}
+          />
+        ))}
     </Layer>
   );
 }
@@ -75,7 +72,7 @@ function BoxShape({
         stroke={color}
         strokeWidth={selected ? 3 : 2}
         cornerRadius={3}
-        fill={`${color}${selected ? '26' : '14'}`} // hex alpha (#RRGGBBAA)
+        fill={`${color}${selected ? '26' : '14'}`}
         shadowColor={color}
         shadowBlur={selected ? 16 : 0}
         shadowOpacity={selected ? 0.9 : 0}

@@ -24,7 +24,7 @@ import {
   cleanJsonResponse,
 } from '@/services/aiAnalyze';
 import { detectBoxes } from '@/services/boxDetect';
-import { useDetectionStore } from '@/stores/detectionStore';
+import { countByType, useDetectionStore } from '@/stores/detectionStore';
 import { buildUserMessage, sendChatMessage } from '@/services/aiChat';
 import { importItemsToBoq } from '@/services/aiImportToBoq';
 import {
@@ -599,6 +599,8 @@ function ChatInputBlock({ latest }: { latest: AIAnalysis | null }) {
     (s) => s.chatBusyAnalysisId === (latest?.id ?? '__none__'),
   );
   const engine = useAIStore((s) => s.engine);
+  const detBusy = useDetectionStore((s) => s.busy);
+  const detBoxes = useDetectionStore((s) => s.boxes);
   const setEngine = useAIStore((s) => s.setEngine);
   const availableEngines = useMemo(() => getAvailableEngines(), []);
   const setChatBusy = useAIStore((s) => s.setChatBusy);
@@ -712,7 +714,8 @@ function ChatInputBlock({ latest }: { latest: AIAnalysis | null }) {
           onProgress: setProgress,
         });
         det.setBoxes(page.id, res.boxes);
-        setProgress('');
+        setProgress(`เสร็จ — พบ ${res.boxes.length} กล่อง`);
+        setTimeout(() => setProgress(''), 2000);
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
       } finally {
@@ -811,7 +814,7 @@ function ChatInputBlock({ latest }: { latest: AIAnalysis | null }) {
     else void handleAnalyze();
   };
 
-  const sending = busy || chatBusy;
+  const sending = busy || chatBusy || detBusy;
   const sendLabel = followUp
     ? sending
       ? progress || '⌛ ส่ง…'
@@ -819,6 +822,11 @@ function ChatInputBlock({ latest }: { latest: AIAnalysis | null }) {
     : sending
       ? progress || '⌛ AI กำลังวิเคราะห์…'
       : '🤖 วิเคราะห์';
+
+  const detectionSummary =
+    Object.entries(countByType(detBoxes))
+      .map(([t, n]) => `${t}×${n}`)
+      .join(' · ') + ` · รวม ${detBoxes.length} กล่อง`;
 
   return (
     <div className="space-y-2 rounded border border-bg-border bg-bg-raised p-2">
@@ -836,6 +844,12 @@ function ChatInputBlock({ latest }: { latest: AIAnalysis | null }) {
           <span className="text-ink-primary">
             {DISCIPLINE_LABELS[latest!.discipline]}
           </span>
+        </div>
+      )}
+
+      {engine === 'perceptron' && detBoxes.length > 0 && (
+        <div className="rounded border border-cyan-400/40 bg-cyan-400/10 p-2 text-xs text-cyan-200">
+          ✅ ตรวจพบ: {detectionSummary}
         </div>
       )}
 
@@ -871,7 +885,7 @@ function ChatInputBlock({ latest }: { latest: AIAnalysis | null }) {
         <button
           type="button"
           onClick={handleSend}
-          disabled={sending || !page || (!followUp && !prompt.trim()) || (followUp && !prompt.trim())}
+          disabled={sending || !page || (engine !== 'perceptron' && !prompt.trim())}
           className="flex-1 rounded bg-accent px-3 py-2 text-sm font-medium text-ink-inverse hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
         >
           {sendLabel}

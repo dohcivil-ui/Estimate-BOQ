@@ -1,14 +1,4 @@
-// src/services/boxDetect.ts
-// ───────────────────────────────────────────────────────────────────────
-// Perceptron box-detection path — แยกจาก flow BOQ (analyzePage)
-//
-// เหตุผลที่ต้องแยก:
-//   - Perceptron ctx แค่ 33K → ใช้ system prompt กฎ 1-15 ไม่ได้ (ล้น)
-//   - Perceptron คืน markup <point_box> ไม่ใช่ JSON → ผ่าน callAIExpectingJSONObject ไม่ได้
-//
-// flow: prompt สั้น → callAI() ตรง (edge เติม annotation_format:"box" เอง) → parsePerceptronBoxes
-//   → แปลง normalized 0-1000 → page coords (พิกัดเดียวกับ measurement → ใช้ transform เดิมวาดได้)
-// ───────────────────────────────────────────────────────────────────────
+// src/services/boxDetect.ts  [DIAGNOSTIC — มี console.log ชั่วคราว]
 import {
   callAI,
   downsampleCanvasToDataUrl,
@@ -19,10 +9,9 @@ import { parsePerceptronBoxes, type FootingBoxNorm } from './perceptronBoxes';
 
 export interface DetectedBox {
   id: string;
-  type: string; // "F2" | "F1" | ...
-  // page coordinates (พิกัดรูปจริง frozen @ import — เดียวกับ measurement points)
+  type: string;
   x: number;
-  y: number; // มุมบนซ้าย
+  y: number;
   w: number;
   h: number;
 }
@@ -35,10 +24,9 @@ export interface DetectResult {
   tokens?: { prompt_tokens?: number; completion_tokens?: number };
 }
 
-const NORM_BASE = 1000; // Perceptron normalize 0–1000 ต่อแกน (ยืนยันจาก overlay test)
+const NORM_BASE = 1000;
 const uid = (): string => crypto.randomUUID();
 
-// prompt สั้น (พอดี ctx 33K) — grid-first + คืน box (ค่า default; ส่ง custom ได้)
 export const DEFAULT_DETECT_PROMPT = `นับฐานรากในแปลนฐานรากนี้แบบ grid-first แล้วคืน bounding box ของทุกฐาน:
 STEP 1 — Grid: เส้นแกนยาว(1,2,3...) = N, แกนสั้น(A,B...) = M → จุดตัด = N×M
 STEP 2 — ฐานที่จุดตัด: ทุกจุดตัดมีฐาน 1 ฐาน อ่านชนิด (เช่น F2)
@@ -48,7 +36,7 @@ STEP 4 — คืน bounding box: 1 กล่องต่อ 1 ฐาน (ท�
 
 export async function detectBoxes(opts: {
   bitmap: HTMLCanvasElement;
-  engine: AIEngine; // ควรเป็น 'perceptron'
+  engine: AIEngine;
   hd?: boolean;
   prompt?: string;
   onProgress?: (msg: string) => void;
@@ -61,7 +49,6 @@ export async function detectBoxes(opts: {
     config.imageQuality,
   );
 
-  // ❗ ไม่มี system prompt ใหญ่ — แค่ user message สั้น + รูป (กัน ctx 33K ล้น)
   const messages: ChatMessage[] = [
     {
       role: 'user',
@@ -77,11 +64,11 @@ export async function detectBoxes(opts: {
     onProgress: opts.onProgress,
   });
 
-  // page dims = ขนาด bitmap (พิกัดรูปจริง) — normalized 0-1000 map เป็นสัดส่วนของรูปเต็ม
   const W = opts.bitmap.width;
   const H = opts.bitmap.height;
 
   const norm = parsePerceptronBoxes(out.text);
+
   const boxes: DetectedBox[] = norm.map((b: FootingBoxNorm) => ({
     id: uid(),
     type: b.type,
