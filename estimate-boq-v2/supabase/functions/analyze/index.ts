@@ -10,6 +10,10 @@
 //   → frontend สลับ GPT-5.4 / Gemini 2.5 Pro / Claude ได้โดยไม่ต้อง redeploy
 //   (Gemini/GPT ยิงผ่าน OpenRouter ด้วย model string — ไม่ต้องมี branch แยก)
 //
+// Perceptron Mk1 (openrouter / perceptron/perceptron-mk1):
+//   → ขอ bounding box ด้วย annotation_format:"box" (เติมใน callOpenRouter)
+//   → คืน markup <point_box> (ไม่ใช่ JSON) → ไม่ผ่าน JSON parse, ส่ง raw ให้ frontend
+//
 // Secrets ที่ต้องตั้งใน Supabase:
 //   # เลือก provider default (ไม่บังคับ — default = openrouter)
 //   supabase secrets set AI_PROVIDER=openrouter
@@ -195,19 +199,27 @@ serve(async (req: Request) => {
     return jsonResponse({ error: `empty response from ${provider}` }, 502);
   }
 
-  // ─── parse JSON (strip fence + retry-tolerant) ──────────────────────
-  const parsed = tryParseJSON(text);
-  if (!parsed) {
-    await updateAnalysisStatus(
-      admin,
-      analysisId,
-      'error',
-      `JSON parse failed: ${text.slice(0, 300)}`,
-    );
-    return jsonResponse(
-      { error: 'AI ตอบไม่ใช่ JSON ที่ถูกต้อง', raw: text },
-      500,
-    );
+  // ─── parse output ────────────────────────────────────────────────────
+  // Perceptron คืน markup <point_box> (ไม่ใช่ JSON) → ไม่ parse ส่ง raw ให้ frontend
+  // engine อื่นคืน JSON (BOQ) → parse ตามเดิม, ถ้าพังคืน error
+  const isPerceptronModel = model.includes('perceptron');
+  let parsed: unknown;
+  if (isPerceptronModel) {
+    parsed = { format: 'perceptron-box', raw: text };
+  } else {
+    parsed = tryParseJSON(text);
+    if (!parsed) {
+      await updateAnalysisStatus(
+        admin,
+        analysisId,
+        'error',
+        `JSON parse failed: ${text.slice(0, 300)}`,
+      );
+      return jsonResponse(
+        { error: 'AI ตอบไม่ใช่ JSON ที่ถูกต้อง', raw: text },
+        500,
+      );
+    }
   }
 
   const elapsedMs = Date.now() - startMs;
@@ -258,7 +270,7 @@ function resolveModel(
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// OpenRouter (OpenAI-compatible) — รองรับ Claude / GPT / Gemini ผ่าน model string
+// OpenRouter (OpenAI-compatible) — รองรับ Claude / GPT / Gemini / Perceptron ผ่าน model string
 // ═══════════════════════════════════════════════════════════════════════
 async function callOpenRouter(args: {
   apiKey: string;
@@ -279,6 +291,15 @@ async function callOpenRouter(args: {
       ]
     : [{ role: 'user', content: userContent }];
 
+  // Perceptron Mk1: ขอ bounding box แบบ structured + cap max_tokens (model max output ~8.2K)
+  const isPerceptron = model.includes('perceptron');
+  const reqBody: Record<string, unknown> = {
+    model,
+    messages,
+    max_tokens: isPerceptron ? Math.min(MAX_OUTPUT_TOKENS, 8000) : MAX_OUTPUT_TOKENS,
+  };
+  if (isPerceptron) reqBody.annotation_format = 'box';
+
   const res = await fetch(OPENROUTER_ENDPOINT, {
     method: 'POST',
     headers: {
@@ -287,7 +308,7 @@ async function callOpenRouter(args: {
       'HTTP-Referer': 'https://estimate-boq.app',
       'X-Title': 'estimate-boq',
     },
-    body: JSON.stringify({ model, messages, max_tokens: MAX_OUTPUT_TOKENS }),
+    body: JSON.stringify(reqBody),
   });
 
   if (!res.ok) {

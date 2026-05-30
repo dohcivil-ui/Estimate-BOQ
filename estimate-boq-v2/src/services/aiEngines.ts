@@ -7,21 +7,23 @@
  * แต่ละ engine map → { provider, model } ส่งเข้า edge ทุกครั้ง
  *   (env บน edge เป็นแค่ fallback ถ้า body ไม่ส่ง model)
  *
- *   Claude         → anthropic  / claude-opus-4-6
- *   GPT-5.4        → openrouter / openai/gpt-5.4
- *   Gemini 2.5 Pro → openrouter / google/gemini-2.5-pro
- *   GPT-4.1 Mini   → openrouter / openai/gpt-4.1-mini   (ตัวถูก/เร็ว)
- *   Gemini 2.5 Flash → openrouter / google/gemini-2.5-flash (ตัวถูก/เร็ว)
+ *   Claude          → anthropic  / claude-opus-4-6           (แม่นสุด — accuracy)
+ *   Gemini 2.5 Pro  → openrouter / google/gemini-2.5-pro     (สำรองความแม่น)
+ *   Gemini 2.5 Flash→ openrouter / google/gemini-2.5-flash   (เร็ว/ถูก)
+ *   Perceptron Mk1  → openrouter / perceptron/perceptron-mk1 (คืน bounding box, ctx 33K)
+ *
+ * ถอดออกแล้ว (เทสต์นับไม่แม่น):
+ *   GPT-5.4      → 10/12 subtract trap
+ *   GPT-4.1 Mini → กุมิติ (อันตรายกับ BOQ)
  */
 
 export type AIProvider = 'anthropic' | 'openrouter';
 
 export type AIEngine =
   | 'claude'
-  | 'gpt54'
-  | 'gpt41mini'
   | 'gemini-pro'
-  | 'gemini-flash';
+  | 'gemini-flash'
+  | 'perceptron';
 
 export interface AIEngineConfig {
   id: AIEngine;
@@ -59,15 +61,6 @@ const ENGINE_CONFIGS: Record<AIEngine, AIEngineConfig> = {
     model: 'claude-opus-4-6',
     ...COMMON_IMAGE,
   },
-  gpt54: {
-    id: 'gpt54',
-    label: 'GPT-5.4',
-    shortLabel: '5.4',
-    icon: '🧠',
-    provider: 'openrouter',
-    model: 'openai/gpt-5.4',
-    ...COMMON_IMAGE,
-  },
   'gemini-pro': {
     id: 'gemini-pro',
     label: 'Gemini 2.5 Pro',
@@ -75,15 +68,6 @@ const ENGINE_CONFIGS: Record<AIEngine, AIEngineConfig> = {
     icon: '💎',
     provider: 'openrouter',
     model: 'google/gemini-2.5-pro',
-    ...COMMON_IMAGE,
-  },
-  gpt41mini: {
-    id: 'gpt41mini',
-    label: 'GPT-4.1 Mini',
-    shortLabel: 'Mini',
-    icon: '🧠',
-    provider: 'openrouter',
-    model: 'openai/gpt-4.1-mini',
     ...COMMON_IMAGE,
   },
   'gemini-flash': {
@@ -95,19 +79,30 @@ const ENGINE_CONFIGS: Record<AIEngine, AIEngineConfig> = {
     model: 'google/gemini-2.5-flash',
     ...COMMON_IMAGE,
   },
+  perceptron: {
+    id: 'perceptron',
+    label: 'Perceptron Mk1',
+    shortLabel: 'Box',
+    icon: '📦',
+    provider: 'openrouter',
+    // purpose-built OCR/counting/spatial — คืน bounding box ต่อ object
+    // annotation_format:"box" ใส่ที่ edge (เป็น request param ไม่ใช่ config)
+    // ⚠️ ctx 33K → prompt สั้น; ถูก+เร็ว ($0.0018/รอบ ~10s); ไม่ติด subtract trap
+    model: 'perceptron/perceptron-mk1',
+    ...COMMON_IMAGE,
+  },
 };
 
 export function getEngineConfig(engine: AIEngine): AIEngineConfig {
   return ENGINE_CONFIGS[engine];
 }
 
-/** ลำดับ default — claude > gpt54 > gemini-pro > gpt41mini > gemini-flash */
+/** ลำดับ default — claude > gemini-pro > gemini-flash > perceptron */
 const ENGINE_PRIORITY: AIEngine[] = [
   'claude',
-  'gpt54',
   'gemini-pro',
-  'gpt41mini',
   'gemini-flash',
+  'perceptron',
 ];
 
 /**
@@ -131,28 +126,26 @@ export function getEngineShortLabel(engine: AIEngine): string {
 export function isAIEngine(value: unknown): value is AIEngine {
   return (
     value === 'claude' ||
-    value === 'gpt54' ||
-    value === 'gpt41mini' ||
     value === 'gemini-pro' ||
-    value === 'gemini-flash'
+    value === 'gemini-flash' ||
+    value === 'perceptron'
   );
 }
 
 /**
  * Migrate engine id เก่า → ใหม่
- *  - 'anthropic-opus' (รวมเข้า claude)          → 'claude'
- *  - 'qwen'           (เลิกใช้)                  → 'claude'
- *  - 'gemini'         (เดิมเป็น Flash)           → 'gemini-flash'
- *  - 'gpt4o'/'gpt41'  (rename สู่ GPT-5.4)       → 'gpt54'
- *  - 'gpt5mini'       (เปลี่ยนเป็น 4.1 Mini)     → 'gpt41mini'
+ *  - 'anthropic-opus' (รวมเข้า claude)             → 'claude'
+ *  - 'qwen'           (เลิกใช้)                     → 'claude'
+ *  - 'gemini'         (เดิมเป็น Flash)              → 'gemini-flash'
+ *  - GPT ทุกตัว (gpt4o/gpt41/gpt54 — ถอดออก)       → 'claude'
+ *  - GPT mini ทุกตัว (gpt5mini/gpt41mini — ถอดออก) → 'gemini-flash'
  *  คืน null ถ้า value ไม่ใช่ id เก่าที่ต้อง migrate
  */
 export function migrateLegacyEngineId(value: unknown): AIEngine | null {
   if (value === 'anthropic-opus') return 'claude';
   if (value === 'qwen') return 'claude';
   if (value === 'gemini') return 'gemini-flash';
-  if (value === 'gpt4o') return 'gpt54';
-  if (value === 'gpt41') return 'gpt54';
-  if (value === 'gpt5mini') return 'gpt41mini';
+  if (value === 'gpt4o' || value === 'gpt41' || value === 'gpt54') return 'claude';
+  if (value === 'gpt5mini' || value === 'gpt41mini') return 'gemini-flash';
   return null;
 }
