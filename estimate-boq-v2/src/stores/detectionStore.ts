@@ -11,6 +11,8 @@ interface DetectionState {
   boxes: DetectedBox[];
   selectedId: string | null;
   busy: boolean;
+  /** ข้อความดิบจากโมเดล (reasoning STEP 1-4 + สรุป) ของรอบตรวจล่าสุด */
+  lastRaw: string;
 
   /** เซ็ตผลตรวจจับใหม่ (แทนของเดิมของหน้านั้น) */
   setBoxes: (pageId: string, boxes: DetectedBox[]) => void;
@@ -20,6 +22,8 @@ interface DetectionState {
   /** เพิ่มกล่องที่ AI พลาด (วาดเอง) */
   addBox: (box: DetectedBox) => void;
   setBusy: (busy: boolean) => void;
+  /** เก็บข้อความดิบจากโมเดลไว้โชว์ reasoning */
+  setLastRaw: (raw: string) => void;
   clearForPage: (pageId: string) => void;
   clear: () => void;
 }
@@ -29,6 +33,7 @@ export const useDetectionStore = create<DetectionState>((set) => ({
   boxes: [],
   selectedId: null,
   busy: false,
+  lastRaw: '',
 
   setBoxes: (pageId, boxes) => set({ pageId, boxes, selectedId: null }),
   select: (id) => set({ selectedId: id }),
@@ -39,9 +44,13 @@ export const useDetectionStore = create<DetectionState>((set) => ({
     })),
   addBox: (box) => set((s) => ({ boxes: [...s.boxes, box] })),
   setBusy: (busy) => set({ busy }),
+  setLastRaw: (lastRaw) => set({ lastRaw }),
   clearForPage: (pageId) =>
-    set((s) => (s.pageId === pageId ? { boxes: [], selectedId: null } : s)),
-  clear: () => set({ pageId: null, boxes: [], selectedId: null, busy: false }),
+    set((s) =>
+      s.pageId === pageId ? { boxes: [], selectedId: null, lastRaw: '' } : s,
+    ),
+  clear: () =>
+    set({ pageId: null, boxes: [], selectedId: null, busy: false, lastRaw: '' }),
 }));
 
 /** สรุปจำนวนต่อชนิด (สำหรับ badge เช่น "F2×12 · F1×2") */

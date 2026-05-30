@@ -149,6 +149,16 @@ const ENGINE_ACTIVE_CLASS: Record<AIEngine, string> = {
   'gemini-flash': 'border-sky-400 bg-sky-400/15 text-sky-200',
 };
 
+// ลบ markup กล่อง (<point_box>, <collection>) ออกจาก raw → เหลือ reasoning อ่านสะอาดเหมือน playground
+function stripBoxMarkup(raw: string): string {
+  return raw
+    .replace(/<point_box>[\s\S]*?<\/point_box>/gi, '')
+    .replace(/<\/?collection[^>]*>/gi, '')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 function EnginePills({
   engine,
   availableEngines,
@@ -601,6 +611,7 @@ function ChatInputBlock({ latest }: { latest: AIAnalysis | null }) {
   const engine = useAIStore((s) => s.engine);
   const detBusy = useDetectionStore((s) => s.busy);
   const detBoxes = useDetectionStore((s) => s.boxes);
+  const detRaw = useDetectionStore((s) => s.lastRaw);
   const setEngine = useAIStore((s) => s.setEngine);
   const availableEngines = useMemo(() => getAvailableEngines(), []);
   const setChatBusy = useAIStore((s) => s.setChatBusy);
@@ -714,6 +725,7 @@ function ChatInputBlock({ latest }: { latest: AIAnalysis | null }) {
           onProgress: setProgress,
         });
         det.setBoxes(page.id, res.boxes);
+        det.setLastRaw(res.raw);
         const mismatch =
           res.expected !== null && res.expected !== res.boxes.length;
         setProgress(
@@ -856,6 +868,17 @@ function ChatInputBlock({ latest }: { latest: AIAnalysis | null }) {
       {engine === 'perceptron' && detBoxes.length > 0 && (
         <div className="rounded border border-cyan-400/40 bg-cyan-400/10 p-2 text-xs text-cyan-200">
           ✅ ตรวจพบ: {detectionSummary}
+        </div>
+      )}
+
+      {engine === 'perceptron' && detRaw.trim() && (
+        <div className="space-y-1">
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-ink-muted">
+            🤖 คำตอบ/เหตุผลของ AI
+          </div>
+          <div className="max-h-48 overflow-y-auto whitespace-pre-wrap rounded border border-bg-border bg-bg-base p-2 text-xs text-ink-secondary">
+            {stripBoxMarkup(detRaw)}
+          </div>
         </div>
       )}
 
