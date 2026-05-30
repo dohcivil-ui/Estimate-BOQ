@@ -32,50 +32,38 @@ function typeFromLabel(label: string): string {
   return m ? m[0].toUpperCase() : '?';
 }
 
-// 1 กล่อง: <label?> <point_box> (x1,y1) (x2,y2) </point_box>
-function boxRegex(): RegExp {
-  return /([^\n<>]*?)<point_box>\s*\(\s*(\d+)\s*,\s*(\d+)\s*\)\s*\(\s*(\d+)\s*,\s*(\d+)\s*\)\s*<\/point_box>/gi;
-}
-function collectionRegex(): RegExp {
-  return /<collection\s+mention=["']([^"']+)["']\s*>([\s\S]*?)<\/collection>/gi;
+// Tokenizer: เดินผ่าน content ตามลำดับ จับ 3 อย่าง
+//   (1) <collection mention="TYPE">  → group 1 = TYPE
+//   (2) </collection>
+//   (3) <label?> <point_box> (x1,y1) (x2,y2) </point_box>  → group 2 = label, 3–6 = พิกัด
+// แยก alt ด้วย group index ที่ติด: group1 → open, group3 → point_box, ที่เหลือ → close
+function tokenRegex(): RegExp {
+  return /<collection\s+mention=["']([^"']+)["']\s*>|<\/collection>|([^\n<>]*?)<point_box>\s*\(\s*(\d+)\s*,\s*(\d+)\s*\)\s*\(\s*(\d+)\s*,\s*(\d+)\s*\)\s*<\/point_box>/gi;
 }
 
 export function parsePerceptronBoxes(content: string): FootingBoxNorm[] {
   const boxes: FootingBoxNorm[] = [];
-
-  // (B) format collection — type มาจาก mention
-  const colRe = collectionRegex();
-  let cm: RegExpExecArray | null;
-  let hadCollection = false;
-  while ((cm = colRe.exec(content)) !== null) {
-    hadCollection = true;
-    const type = cm[1].trim().toUpperCase();
-    const inner = cm[2];
-    const bRe = boxRegex();
-    let bm: RegExpExecArray | null;
-    while ((bm = bRe.exec(inner)) !== null) {
-      boxes.push({
-        type,
-        nx1: Number(bm[2]),
-        ny1: Number(bm[3]),
-        nx2: Number(bm[4]),
-        ny2: Number(bm[5]),
-      });
-    }
-  }
-  if (hadCollection && boxes.length > 0) return boxes;
-
-  // (A) format inline label — type มาจากข้อความหน้า <point_box>
-  const bRe = boxRegex();
+  const re = tokenRegex();
+  let collectionType: string | null = null; // type จาก <collection> ที่กำลังเปิดอยู่
   let m: RegExpExecArray | null;
-  while ((m = bRe.exec(content)) !== null) {
-    boxes.push({
-      type: typeFromLabel(m[1].trim()),
-      nx1: Number(m[2]),
-      ny1: Number(m[3]),
-      nx2: Number(m[4]),
-      ny2: Number(m[5]),
-    });
+  while ((m = re.exec(content)) !== null) {
+    if (m[1] !== undefined) {
+      // (1) เปิด collection → ทุกกล่องข้างในใช้ type นี้
+      collectionType = m[1].trim().toUpperCase();
+    } else if (m[3] !== undefined) {
+      // (3) point_box: ใน collection → ใช้ mention; นอก collection → inline label
+      const inlineType = typeFromLabel((m[2] ?? '').trim());
+      boxes.push({
+        type: collectionType ?? inlineType,
+        nx1: Number(m[3]),
+        ny1: Number(m[4]),
+        nx2: Number(m[5]),
+        ny2: Number(m[6]),
+      });
+    } else {
+      // (2) ปิด collection
+      collectionType = null;
+    }
   }
   return boxes;
 }
@@ -103,4 +91,12 @@ export function parseSummary(content: string): Record<string, number> {
     out[m[1]] = Number(m[2]);
   }
   return out;
+}
+
+// จำนวนที่โมเดล "อ้างว่านับได้" จากบรรทัดสรุป (key รวม/total) — ไว้ cross-check กับกล่องที่ parse จริง
+// คืน null ถ้าไม่มีบรรทัดสรุป
+export function parseExpectedTotal(content: string): number | null {
+  const sum = parseSummary(content);
+  const total = sum['รวม'] ?? sum['total'] ?? sum['Total'] ?? sum['TOTAL'];
+  return typeof total === 'number' ? total : null;
 }

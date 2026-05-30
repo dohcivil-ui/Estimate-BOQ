@@ -1,11 +1,15 @@
-// src/services/boxDetect.ts  [DIAGNOSTIC — มี console.log ชั่วคราว]
+// src/services/boxDetect.ts
 import {
   callAI,
   downsampleCanvasToDataUrl,
   type ChatMessage,
 } from './aiAnalyze';
 import { getEngineConfig, type AIEngine } from './aiEngines';
-import { parsePerceptronBoxes, type FootingBoxNorm } from './perceptronBoxes';
+import {
+  parseExpectedTotal,
+  parsePerceptronBoxes,
+  type FootingBoxNorm,
+} from './perceptronBoxes';
 
 export interface DetectedBox {
   id: string;
@@ -22,17 +26,27 @@ export interface DetectResult {
   model: string;
   elapsedMs: number;
   tokens?: { prompt_tokens?: number; completion_tokens?: number };
+  /** จำนวนที่โมเดลอ้างจากบรรทัดสรุป "รวม=N" (null = ไม่มีบรรทัดสรุป) */
+  expected: number | null;
 }
 
 const NORM_BASE = 1000;
 const uid = (): string => crypto.randomUUID();
 
-export const DEFAULT_DETECT_PROMPT = `นับฐานรากในแปลนฐานรากนี้แบบ grid-first แล้วคืน bounding box ของทุกฐาน:
-STEP 1 — Grid: เส้นแกนยาว(1,2,3...) = N, แกนสั้น(A,B...) = M → จุดตัด = N×M
-STEP 2 — ฐานที่จุดตัด: ทุกจุดตัดมีฐาน 1 ฐาน อ่านชนิด (เช่น F2)
-STEP 3 — ฐานพิเศษ (F1) นอกจุดตัด: สแกนครบ 4 ด้าน เจอฝั่งหนึ่งต้องเช็คฝั่งตรงข้าม นับเพิ่มแยก ห้ามลบออกจากจุดตัด
-STEP 4 — คืน bounding box: 1 กล่องต่อ 1 ฐาน (ทั้ง F2 และ F1) แต่ละกล่องแนบ label ชนิดฐาน + ตำแหน่ง grid
-ตอบ: F2=? | F1=? | รวม=? พร้อมพิกัดกล่องของทุกฐาน`;
+export const DEFAULT_DETECT_PROMPT = `นับฐานรากในแปลนฐานรากนี้แบบ grid-first ทำตามลำดับ ห้ามข้าม:
+STEP 1 — Grid: นับเส้นแกนยาว (1,2,3...) = N, แกนสั้น (A,B...) = M → จุดตัด = N×M
+STEP 2 — ฐานที่จุดตัด: ทุกจุดตัดมีฐาน 1 ฐาน อ่านชนิด ไล่ทุกจุดเป็น <ยาว><สั้น>:<ชนิด> เช่น 1A:F2 1B:F2 ...
+STEP 3 — ฐานพิเศษนอกจุดตัด (สำคัญที่สุด):
+- ฐานชนิดอื่น (เช่น F1) ที่อยู่กลางช่วง/ขอบ มักมีมากกว่า 1 ตัว — อย่าหยุดหลังเจอตัวแรก
+- สแกนให้ครบทั้ง 4 ด้าน: ขอบซ้าย ขอบขวา ขอบบน ขอบล่าง และกึ่งกลางทุกแนว
+- ฐานพิเศษมักวางสมมาตร — เจอฝั่งหนึ่งแล้ว ต้องเช็คฝั่งตรงข้ามเสมอ
+- ไล่รายตำแหน่งของฐานพิเศษทุกตัว (เช่น ซ้ายกลาง / ขวากลาง) ห้ามสรุปจำนวนโดยไม่ระบุตำแหน่ง
+- นับ "เพิ่ม" แยก ห้ามลบออกจากจำนวนจุดตัด
+STEP 4 — ทวนก่อนตอบ: สแกนครบทั้ง 4 ขอบหรือยัง? ฐานพิเศษเช็คฝั่งตรงข้ามครบไหม?
+STEP 5 — คืน bounding box ของทุกฐาน 1 กล่องต่อ 1 ฐาน โดย label ต้องตรงกับ STEP 2/3:
+แยกเป็น <collection mention="F2"> สำหรับฐานจุดตัด และ <collection mention="F1"> สำหรับฐานพิเศษ
+ห้ามยัดทุกฐานไว้ collection เดียว
+ปิดท้ายด้วยสรุป: F2=? | F1=? | รวม=?`;
 
 export async function detectBoxes(opts: {
   bitmap: HTMLCanvasElement;
@@ -84,5 +98,6 @@ export async function detectBoxes(opts: {
     model: out.model,
     elapsedMs: Date.now() - start,
     tokens: out.tokens,
+    expected: parseExpectedTotal(out.text),
   };
 }

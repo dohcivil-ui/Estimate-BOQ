@@ -714,8 +714,14 @@ function ChatInputBlock({ latest }: { latest: AIAnalysis | null }) {
           onProgress: setProgress,
         });
         det.setBoxes(page.id, res.boxes);
-        setProgress(`เสร็จ — พบ ${res.boxes.length} กล่อง`);
-        setTimeout(() => setProgress(''), 2000);
+        const mismatch =
+          res.expected !== null && res.expected !== res.boxes.length;
+        setProgress(
+          mismatch
+            ? `⚠️ เสร็จ — พบ ${res.boxes.length} กล่อง (โมเดลอ้าง ${res.expected})`
+            : `เสร็จ — พบ ${res.boxes.length} กล่อง`,
+        );
+        setTimeout(() => setProgress(''), mismatch ? 4000 : 2000);
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
       } finally {
