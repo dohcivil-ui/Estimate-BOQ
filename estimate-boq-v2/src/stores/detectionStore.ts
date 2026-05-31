@@ -45,6 +45,46 @@ export interface Member {
   status: MemberStatus;
 }
 
+/**
+ * มิติที่ผู้ใช้พิมพ์เองต่อ mark (ทาง A — compute structural BOQ โดยไม่พึ่ง AI)
+ *   - key ใน markDims = mark normalize UPPERCASE
+ *   - count มาจาก tag (tallyMembers) · มิติมาจาก dict นี้ · ปริมาณ = compute เดิม
+ *   - rebar เก็บเป็น string ดิบ (เช่น "16-DB12") แล้ว parse ใน builder
+ */
+export type MarkDims =
+  | {
+      kind: 'footing';
+      W: number;
+      L: number;
+      T: number;
+      depth: number;
+      rebar: string;
+    }
+  | {
+      kind: 'column';
+      W: number;
+      L: number;
+      H: number;
+      vBars: string;
+      tie: string;
+    }
+  | {
+      kind: 'beam';
+      W: number;
+      H: number;
+      pieces: { length: number; count: number }[];
+      mainBars: string;
+      stirrup: string;
+    }
+  | {
+      kind: 'slab';
+      areaSqm: number;
+      thickness: number;
+      meshWireMM: number;
+      meshSpacing: number;
+      sandThk?: number;
+    };
+
 /** ต้นแบบสำหรับ copy-stamp — เก็บ ชื่อ+สี+ขนาด ของ marker ที่จะคัดลอกวาง */
 export interface StampTemplate {
   mark: string;
@@ -117,6 +157,8 @@ interface DetectionState {
   ocrBusy: boolean;
   /** ข้อความสถานะ OCR (เช่น กำลังโหลดตัวอ่านป้าย…) */
   ocrStatus: string | null;
+  /** มิติที่ผู้ใช้พิมพ์ต่อ mark (key = UPPERCASE) — ไม่เข้า history ของ members */
+  markDims: Record<string, MarkDims>;
   past: Member[][];
   future: Member[][];
 
@@ -160,6 +202,12 @@ interface DetectionState {
   /** ตั้งสถานะ OCR (busy + ข้อความ) */
   setOcr: (busy: boolean, status?: string | null) => void;
 
+  // ── markDims (ทาง A — มิติต่อ mark) ───────────────────────
+  /** ตั้ง/แก้มิติของ mark (normalize key เป็น UPPERCASE) */
+  setMarkDim: (mark: string, dims: MarkDims) => void;
+  /** ลบมิติของ mark */
+  clearMarkDim: (mark: string) => void;
+
   // ── history ────────────────────────────────────────────────
   undo: () => void;
   redo: () => void;
@@ -184,6 +232,7 @@ export const useDetectionStore = create<DetectionState>((set, get) => ({
   expectedByMark: {},
   ocrBusy: false,
   ocrStatus: null,
+  markDims: {},
   past: [],
   future: [],
 
@@ -324,6 +373,19 @@ export const useDetectionStore = create<DetectionState>((set, get) => ({
   setExpected: (map) => set({ expectedByMark: map }),
   setOcr: (busy, status) =>
     set({ ocrBusy: busy, ocrStatus: status ?? null }),
+
+  setMarkDim: (mark, dims) =>
+    set((s) => ({
+      markDims: { ...s.markDims, [mark.trim().toUpperCase()]: dims },
+    })),
+  clearMarkDim: (mark) =>
+    set((s) => {
+      const key = mark.trim().toUpperCase();
+      if (!(key in s.markDims)) return s;
+      const next = { ...s.markDims };
+      delete next[key];
+      return { markDims: next };
+    }),
 
   undo: () =>
     set((s) => {

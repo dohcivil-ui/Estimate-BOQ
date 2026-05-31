@@ -10,18 +10,36 @@
  * ⚠️ นับเฉพาะ member ที่ระบายตำแหน่งแล้ว (geometry != null) — seed/ghost ไม่นับ
  */
 import { useEffect, useMemo, useState } from 'react';
-import { useActivePage } from '@/stores/drawingStore';
+import { useActivePage, useDrawingStore } from '@/stores/drawingStore';
 import {
   useDetectionStore,
   useMembersForPage,
   splitMarks,
+  categoryForMark,
   type Member,
 } from '@/stores/detectionStore';
 import { useToolStore } from '@/stores/toolStore';
 import { useLatestAnalysisForPage } from '@/stores/aiStore';
 import { getMarkColor } from '@/services/markColors';
 import { ocrAt, parseMarks, isOcrReady } from '@/services/labelOcr';
+import { buildBOQ } from '@/services/compute/buildBOQ';
+import { importItemsToBoq } from '@/services/aiImportToBoq';
+import { MarkDimsDialog } from '@/components/MarkDimsDialog';
 import type { AIItem } from '@/types/ai';
+
+/** ชื่อหน้าแบบสำหรับ trace ใน BOQ (mirror AIPanel.pageNameOf) */
+function pageNameOf(pageId: string): string {
+  const s = useDrawingStore.getState();
+  const p = s.pages.find((x) => x.id === pageId);
+  if (!p) return 'หน้าแบบ';
+  const f = s.files.find((x) => x.id === p.fileId);
+  return f ? `${f.name} หน้า ${p.pageNumber}` : `หน้า ${p.pageNumber}`;
+}
+
+/** หมวดที่กรอกมิติ/คำนวณได้ (other = ข้าม) */
+function isDimKind(mark: string): boolean {
+  return categoryForMark(mark) !== 'other';
+}
 
 const PRESET_MARKS = ['F2', 'F1', 'C2', 'C3', 'GB1', 'GB2', 'GS'];
 const SWATCHES = [
@@ -119,6 +137,9 @@ export function PaintPanel() {
   const stamp = useDetectionStore((s) => s.stamp);
   const startStamp = useDetectionStore((s) => s.startStamp);
   const stopStamp = useDetectionStore((s) => s.stopStamp);
+  const markDims = useDetectionStore((s) => s.markDims);
+  const setMarkDim = useDetectionStore((s) => s.setMarkDim);
+  const clearMarkDim = useDetectionStore((s) => s.clearMarkDim);
 
   const setActiveTool = useToolStore((s) => s.setActiveTool);
   const activeTool = useToolStore((s) => s.activeTool);
@@ -127,9 +148,32 @@ export function PaintPanel() {
   const latest = useLatestAnalysisForPage(pageId);
 
   const [renameInput, setRenameInput] = useState('');
+  /** mark ที่กำลังเปิด popup เติมมิติ — null = ปิด */
+  const [dimsForMark, setDimsForMark] = useState<string | null>(null);
 
   const groups = useMemo(() => groupByToken(members), [members]);
   const hidden = new Set(hiddenMarks);
+
+  // มิติที่ยังไม่เติม (เฉพาะหมวดที่คำนวณได้) — roll-up เตือน
+  const marksNeedingDims = groups.filter(
+    (g) => isDimKind(g.mark) && !markDims[g.mark],
+  ).length;
+
+  // ── BOQ preview สด (ทาง A): count←tag · มิติ←markDims · ปริมาณ←compute ──
+  const memberInputs = useMemo(
+    () =>
+      members
+        .filter((m) => m.geometry != null)
+        .map((m) => ({ mark: m.mark, status: m.status })),
+    [members],
+  );
+  const computed = useMemo(
+    () =>
+      memberInputs.length > 0 && Object.keys(markDims).length > 0
+        ? buildBOQ({ extract: [], members: memberInputs, markDims })
+        : null,
+    [memberInputs, markDims],
+  );
 
   // เข้าแท็บ "ระบาย" → เริ่มที่โหมดติดป้าย (paint) ทันที ไม่ต้องสลับเอง
   useEffect(() => {
@@ -162,6 +206,21 @@ export function PaintPanel() {
   const handleClearPage = () => {
     const ids = members.map((m) => m.id);
     if (ids.length > 0) deleteMembers(ids);
+  };
+
+  // import ผลคำนวณ (จาก tag + มิติ) เข้า BOQ
+  const handleImportComputed = () => {
+    if (!page || !computed || computed.items.length === 0) return;
+    const outcome = importItemsToBoq({
+      items: computed.items,
+      discipline: 'structural',
+      pageId: page.id,
+      pageName: pageNameOf(page.id),
+      sourceRef: `paint:${page.id}:marks`,
+    });
+    const skipMsg =
+      outcome.skippedItems > 0 ? ` (ข้าม ${outcome.skippedItems} รายการ)` : '';
+    alert(`📥 เพิ่ม ${outcome.boqIds.length} รายการเข้า BOQ แล้ว${skipMsg}`);
   };
 
   // OCR เสริม (ไม่อัตโนมัติ) — อ่านป้ายรอบ marker ที่เลือก → เติมเป็นข้อเสนอในช่องชื่อ
@@ -460,6 +519,11 @@ export function PaintPanel() {
             ⚠️ ยังไม่ตั้งชื่อ {unnamed} ตัว (ยังไม่เข้านับ) — เลือกแล้วตั้งชื่อ
           </p>
         )}
+        {marksNeedingDims > 0 && (
+          <p className="mb-1 text-[11px] text-warning">
+            ✏️ ยังไม่เติมมิติ {marksNeedingDims} mark — กดปุ่ม ✏️ ท้ายรายการเพื่อคำนวณ BOQ
+          </p>
+        )}
         {groups.length === 0 ? (
           <p className="text-[11px] text-ink-muted">
             ยังไม่มีชิ้นงาน — เลือกสีแล้วคลิกบนแบบเพื่อปักหมุด
@@ -509,6 +573,20 @@ export function PaintPanel() {
                       )}
                     </span>
                   </button>
+                  {isDimKind(g.mark) && (
+                    <button
+                      type="button"
+                      onClick={() => setDimsForMark(g.mark)}
+                      title={
+                        markDims[g.mark] ? 'แก้มิติ' : 'เติมมิติเพื่อคำนวณ BOQ'
+                      }
+                      className={`rounded px-1 py-1 text-xs hover:bg-bg-hover ${
+                        markDims[g.mark] ? 'text-success' : 'text-warning'
+                      }`}
+                    >
+                      {markDims[g.mark] ? '✓' : '✏️'}
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => toggleHiddenMark(g.mark)}
@@ -523,6 +601,68 @@ export function PaintPanel() {
           </ul>
         )}
       </div>
+
+      {/* ── BOQ โครงสร้าง (จาก tag + มิติที่เติม) ───────────── */}
+      {memberInputs.length > 0 && (
+        <div className="border-t border-bg-border pt-3">
+          <p className="mb-1 text-[11px] font-semibold text-ink-secondary">
+            🧮 BOQ โครงสร้าง (นับจาก tag · มิติจากที่เติม)
+          </p>
+          {computed == null ? (
+            <p className="text-[11px] text-ink-muted">
+              เติมมิติอย่างน้อย 1 mark (ปุ่ม ✏️) เพื่อคำนวณปริมาณ
+            </p>
+          ) : computed.items.length === 0 ? (
+            <p className="text-[11px] text-warning">
+              ยังคำนวณไม่ได้ — เติมมิติให้ครบก่อน
+            </p>
+          ) : (
+            <>
+              <ul className="mb-2 space-y-0.5">
+                {computed.items.map((it, i) => (
+                  <li
+                    key={i}
+                    className="flex items-center justify-between gap-2 text-[11px]"
+                  >
+                    <span className="text-ink-primary">{it.name}</span>
+                    <span className="shrink-0 text-ink-muted">
+                      {it.quantity} {it.unit}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <button
+                type="button"
+                onClick={handleImportComputed}
+                className="w-full rounded bg-accent px-2 py-1.5 text-xs font-medium text-ink-inverse hover:opacity-90"
+              >
+                📥 Import to BOQ ({computed.items.length} รายการ)
+              </button>
+            </>
+          )}
+          {computed && computed.warnings.length > 0 && (
+            <ul className="mt-2 space-y-0.5">
+              {computed.warnings
+                .filter((w) => w.startsWith('❓') || w.startsWith('⚠️'))
+                .map((w, i) => (
+                  <li key={i} className="text-[10px] text-warning">
+                    {w}
+                  </li>
+                ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {dimsForMark && (
+        <MarkDimsDialog
+          mark={dimsForMark}
+          existing={markDims[dimsForMark]}
+          onSave={(dims) => setMarkDim(dimsForMark, dims)}
+          onClear={() => clearMarkDim(dimsForMark)}
+          onClose={() => setDimsForMark(null)}
+        />
+      )}
     </div>
   );
 }

@@ -17,7 +17,8 @@
  * pure module: ไม่มี dependency กับ store/supabase/react
  */
 import type { AIItem, AIMaterial } from '@/types/ai';
-import { buildSpecs } from './boqAdapter.ts';
+import { buildSpecs, specsFromMarks } from './boqAdapter.ts';
+import type { MarkDims } from '@/stores/detectionStore';
 import {
   computeFooting,
   type FootingQty,
@@ -219,6 +220,8 @@ export interface MemberCountInput {
   /** รหัส — อาจประกอบ "F2,C2" (split เป็น token นับฐาน/เสาแยก) */
   mark: string;
   status: 'draft' | 'confirmed';
+  /** พื้นที่ของชิ้นพื้น (slab) ตร.ม. — ใช้ sum ต่อ mark เป็น slabAreaByMark */
+  areaSqm?: number;
 }
 
 export interface BuildBOQOptions {
@@ -237,19 +240,32 @@ export interface BuildBOQOptions {
    *   - member ที่ยัง draft → warning "ยังไม่ตรวจ N ชิ้น"
    */
   members?: MemberCountInput[];
+  /**
+   * มิติต่อ mark ที่ผู้ใช้พิมพ์ (ทาง A) — ถ้ามี entry และมี members:
+   *   ใช้ specsFromMarks(tally, markDims) แทน buildSpecs(extract) (compute โดยไม่พึ่ง AI)
+   */
+  markDims?: Record<string, MarkDims>;
 }
 
 /**
  * นับ member ต่อ mark — ฐาน/เสานับแยก category (กัน mark ชนกันข้ามหมวด)
  *  + จำนวน draft รวมทุกหมวด (ไว้เตือน "ยังไม่ยืนยัน")
  */
-function tallyMembers(members: MemberCountInput[]): {
+export interface MemberTally {
   footingByMark: Map<string, number>;
   columnByMark: Map<string, number>;
+  /** จำนวน tag คาน ต่อ mark — cross-check กับ pieces.sum(count) ใน dict */
+  beamByMark: Map<string, number>;
+  /** รวมพื้นที่ slab (ตร.ม.) ต่อ mark — ปริมาณพื้นจาก tag */
+  slabAreaByMark: Map<string, number>;
   draftTotal: number;
-} {
+}
+
+function tallyMembers(members: MemberCountInput[]): MemberTally {
   const footingByMark = new Map<string, number>();
   const columnByMark = new Map<string, number>();
+  const beamByMark = new Map<string, number>();
+  const slabAreaByMark = new Map<string, number>();
   let draftTotal = 0;
   for (const m of members) {
     // รหัสประกอบ "F2,C2" → นับ F2 เป็นฐาน + C2 เป็นเสา แยก token
@@ -259,11 +275,18 @@ function tallyMembers(members: MemberCountInput[]): {
         footingByMark.set(token, (footingByMark.get(token) ?? 0) + 1);
       } else if (cat === 'column') {
         columnByMark.set(token, (columnByMark.get(token) ?? 0) + 1);
+      } else if (cat === 'beam') {
+        beamByMark.set(token, (beamByMark.get(token) ?? 0) + 1);
+      } else if (cat === 'slab') {
+        slabAreaByMark.set(
+          token,
+          (slabAreaByMark.get(token) ?? 0) + (m.areaSqm ?? 0),
+        );
       }
     }
     if (m.status === 'draft') draftTotal += 1;
   }
-  return { footingByMark, columnByMark, draftTotal };
+  return { footingByMark, columnByMark, beamByMark, slabAreaByMark, draftTotal };
 }
 
 export interface BuildBOQResult {
@@ -274,23 +297,29 @@ export interface BuildBOQResult {
 }
 
 export function buildBOQ(opts: BuildBOQOptions): BuildBOQResult {
-  const specs = buildSpecs({ extract: opts.extract ?? [] });
+  const tally = opts.members ? tallyMembers(opts.members) : null;
+  const markDims = opts.markDims;
+  // ทาง A: มี member + มีมิติที่พิมพ์ ≥1 → compute จาก tag+dict (ไม่พึ่ง AI extract)
+  const fromMarks =
+    tally != null && markDims != null && Object.keys(markDims).length > 0;
+
+  const specs = fromMarks
+    ? specsFromMarks({ tally, markDims })
+    : buildSpecs({ extract: opts.extract ?? [] });
   const warnings: string[] = [...specs.warnings];
   const items: AIItem[] = [];
 
-  // override จำนวนฐานตามที่ระบาย/ยืนยันบน canvas (ถ้ามี)
-  const tally = opts.members ? tallyMembers(opts.members) : null;
-
   for (const f of specs.footings) {
-    const marked = tally?.footingByMark.get(f.type.trim().toUpperCase());
-    const spec =
-      marked != null && marked > 0 && marked !== f.count
-        ? { ...f, count: marked }
-        : f;
-    if (marked != null && marked > 0 && marked !== f.count) {
-      warnings.push(
-        `ℹ️ ${f.type}: ใช้จำนวนจากการระบายบนแบบ (${marked} ฐาน) แทนค่า AI (${f.count})`,
-      );
+    // เส้น AI extract: override จำนวนฐานตามที่ระบายบนแบบ (เส้น marks count = ถูกอยู่แล้ว)
+    let spec = f;
+    if (!fromMarks && tally) {
+      const marked = tally.footingByMark.get(f.type.trim().toUpperCase());
+      if (marked != null && marked > 0 && marked !== f.count) {
+        spec = { ...f, count: marked };
+        warnings.push(
+          `ℹ️ ${f.type}: ใช้จำนวนจากการระบายบนแบบ (${marked} ฐาน) แทนค่า AI (${f.count})`,
+        );
+      }
     }
     const q = computeFooting(spec);
     warnings.push(...q.warnings);

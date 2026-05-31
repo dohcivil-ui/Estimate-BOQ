@@ -13,7 +13,9 @@
  */
 import type { AIItem } from '@/types/ai';
 import type { FootingSpec, RebarLayer, PedestalSpec } from './footingCompute.ts';
-import type { BeamSpec, SlabSpec } from './beamCompute.ts';
+import type { BeamSpec, BeamBar, SlabSpec } from './beamCompute.ts';
+// type-only — ไม่ดึง zustand เข้า pure module (erased ตอน compile)
+import type { MarkDims } from '@/stores/detectionStore';
 
 // ─────────────────────────────────────────────────────────────
 // คู่ ฐาน ↔ ตอม่อ (กฎผู้ใช้: F2↔C2, F1↔C3) — ตอม่ออ่านจาก Column Schedule
@@ -274,6 +276,130 @@ export function buildSpecs(input: AdapterInput): AdapterResult {
 
   const beams = buildBeams(extract, warnings);
   const slabs = buildSlabs(extract, warnings);
+
+  return { footings, beams, slabs, warnings };
+}
+
+// ─────────────────────────────────────────────────────────────
+// ทาง A — สเปกจาก "tag count + มิติที่ผู้ใช้พิมพ์" (ไม่พึ่ง AI)
+//   count ← tag (footingByMark/beamByMark/slabAreaByMark)
+//   มิติ/เหล็ก ← markDims dict (ผู้ใช้พิมพ์)
+//   ไม่มีมิติ → ❓ 'ยังไม่เติมมิติ {mark}' แล้วข้าม (ไม่เดา)
+// ─────────────────────────────────────────────────────────────
+export interface MarksSpecInput {
+  /** subset ของ MemberTally — เฉพาะ map ที่ต้องใช้ (เลี่ยง circular dep ที่ runtime) */
+  tally: {
+    footingByMark: Map<string, number>;
+    beamByMark: Map<string, number>;
+    slabAreaByMark: Map<string, number>;
+  };
+  markDims: Record<string, MarkDims>;
+}
+
+export function specsFromMarks(input: MarksSpecInput): AdapterResult {
+  const warnings: string[] = [];
+  const { tally, markDims } = input;
+  const footings: FootingSpec[] = [];
+  const beams: BeamSpec[] = [];
+  const slabs: SlabSpec[] = [];
+
+  // ── ฐานราก ──
+  for (const [mark, count] of tally.footingByMark) {
+    const d = markDims[mark];
+    if (!d || d.kind !== 'footing') {
+      warnings.push(`❓ ยังไม่เติมมิติ ${mark} (ฐานราก) — กดปุ่ม ✏️ เพื่อเติม`);
+      continue;
+    }
+    const rebar = parseFootingRebar(d.rebar);
+    if (rebar.length === 0) {
+      warnings.push(`❓ ${mark}: อ่านเหล็กตะแกรงฐานไม่ออกจาก "${d.rebar || '—'}"`);
+    }
+
+    // ตอม่อ (คู่ตาม PEDESTAL_OF — มิติจาก markDims[pedMark] kind=column)
+    let pedestal: PedestalSpec | undefined;
+    const pedMark = PEDESTAL_OF[mark];
+    if (pedMark) {
+      const pd = markDims[pedMark];
+      if (pd && pd.kind === 'column') {
+        const vBars = parseVBars(pd.vBars);
+        const tie = parseTie(pd.tie);
+        if (pd.W && pd.L && pd.H && vBars && tie) {
+          pedestal = { W: pd.W, L: pd.L, H: pd.H, vBars, tie };
+        } else {
+          warnings.push(
+            `❓ ${mark}/${pedMark}: ตอม่ออ่านมิติ/เหล็กไม่ครบ — คิดเฉพาะฐาน`,
+          );
+        }
+      } else {
+        warnings.push(
+          `❓ ${mark}: ยังไม่เติมมิติตอม่อ ${pedMark} — คิดเฉพาะฐาน`,
+        );
+      }
+    }
+
+    footings.push({
+      type: mark,
+      W: d.W,
+      L: d.L,
+      T: d.T,
+      depth: d.depth,
+      count,
+      rebar: rebar.length > 0 ? rebar : undefined,
+      pedestal,
+      refSheet: 'S2-02',
+    });
+  }
+
+  // ── คาน ──
+  for (const [mark, tagCount] of tally.beamByMark) {
+    const d = markDims[mark];
+    if (!d || d.kind !== 'beam') {
+      warnings.push(`❓ ยังไม่เติมมิติ ${mark} (คาน) — กดปุ่ม ✏️ เพื่อเติม`);
+      continue;
+    }
+    const main = parseVBars(d.mainBars);
+    const mainBars: BeamBar[] = main
+      ? [{ size: main.size, count: main.count }]
+      : [];
+    if (!main) {
+      warnings.push(`❓ ${mark}: อ่านเหล็กยืนหลักไม่ออกจาก "${d.mainBars || '—'}"`);
+    }
+    const stirrup = parseTie(d.stirrup) ?? { size: 'RB6', spacing: 0.15 };
+    if (!parseTie(d.stirrup)) {
+      warnings.push(`❓ ${mark}: อ่านปลอกไม่ออกจาก "${d.stirrup || '—'}" — ใช้ RB6@0.15`);
+    }
+    // cross-check: จำนวนช่วงใน dict vs จำนวน tag (ไม่ block)
+    const piecesCount = d.pieces.reduce((s, p) => s + p.count, 0);
+    if (piecesCount !== tagCount) {
+      warnings.push(
+        `⚠️ ${mark}: จำนวนช่วงในมิติ (${piecesCount}) ≠ จำนวน tag บนแบบ (${tagCount}) — ตรวจซ้ำ`,
+      );
+    }
+    beams.push({
+      type: mark,
+      W: d.W,
+      H: d.H,
+      pieces: d.pieces.map((p) => ({ length: p.length, count: p.count })),
+      mainBars,
+      stirrup,
+    });
+  }
+
+  // ── พื้น ──
+  for (const [mark] of tally.slabAreaByMark) {
+    const d = markDims[mark];
+    if (!d || d.kind !== 'slab') {
+      warnings.push(`❓ ยังไม่เติมมิติ ${mark} (พื้น) — กดปุ่ม ✏️ เพื่อเติม`);
+      continue;
+    }
+    slabs.push({
+      name: mark,
+      area_m2: d.areaSqm,
+      thickness: d.thickness,
+      mesh: { wireMM: d.meshWireMM, spacing: d.meshSpacing },
+      sandThk: d.sandThk,
+    });
+  }
 
   return { footings, beams, slabs, warnings };
 }
