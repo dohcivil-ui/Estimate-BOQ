@@ -85,6 +85,9 @@ export type MarkDims =
       sandThk?: number;
     };
 
+/** ที่มาของมิติต่อ mark — 'ai' = AI อ่านให้ (ควรเพ่งตรวจ) · 'manual' = ผู้ใช้พิมพ์เอง */
+export type MarkDimsSource = 'ai' | 'manual';
+
 /** ต้นแบบสำหรับ copy-stamp — เก็บ ชื่อ+สี+ขนาด ของ marker ที่จะคัดลอกวาง */
 export interface StampTemplate {
   mark: string;
@@ -159,6 +162,8 @@ interface DetectionState {
   ocrStatus: string | null;
   /** มิติที่ผู้ใช้พิมพ์ต่อ mark (key = UPPERCASE) — ไม่เข้า history ของ members */
   markDims: Record<string, MarkDims>;
+  /** ที่มาของมิติต่อ mark (key = UPPERCASE) — คู่กับ markDims */
+  markDimsSource: Record<string, MarkDimsSource>;
   past: Member[][];
   future: Member[][];
 
@@ -203,9 +208,9 @@ interface DetectionState {
   setOcr: (busy: boolean, status?: string | null) => void;
 
   // ── markDims (ทาง A — มิติต่อ mark) ───────────────────────
-  /** ตั้ง/แก้มิติของ mark (normalize key เป็น UPPERCASE) */
-  setMarkDim: (mark: string, dims: MarkDims) => void;
-  /** ลบมิติของ mark */
+  /** ตั้ง/แก้มิติของ mark (normalize key เป็น UPPERCASE) · source default 'manual' */
+  setMarkDim: (mark: string, dims: MarkDims, source?: MarkDimsSource) => void;
+  /** ลบมิติของ mark (ลบทั้ง dims + source) */
   clearMarkDim: (mark: string) => void;
 
   // ── history ────────────────────────────────────────────────
@@ -233,6 +238,7 @@ export const useDetectionStore = create<DetectionState>((set, get) => ({
   ocrBusy: false,
   ocrStatus: null,
   markDims: {},
+  markDimsSource: {},
   past: [],
   future: [],
 
@@ -374,17 +380,23 @@ export const useDetectionStore = create<DetectionState>((set, get) => ({
   setOcr: (busy, status) =>
     set({ ocrBusy: busy, ocrStatus: status ?? null }),
 
-  setMarkDim: (mark, dims) =>
-    set((s) => ({
-      markDims: { ...s.markDims, [mark.trim().toUpperCase()]: dims },
-    })),
+  setMarkDim: (mark, dims, source = 'manual') =>
+    set((s) => {
+      const key = mark.trim().toUpperCase();
+      return {
+        markDims: { ...s.markDims, [key]: dims },
+        markDimsSource: { ...s.markDimsSource, [key]: source },
+      };
+    }),
   clearMarkDim: (mark) =>
     set((s) => {
       const key = mark.trim().toUpperCase();
       if (!(key in s.markDims)) return s;
       const next = { ...s.markDims };
       delete next[key];
-      return { markDims: next };
+      const nextSrc = { ...s.markDimsSource };
+      delete nextSrc[key];
+      return { markDims: next, markDimsSource: nextSrc };
     }),
 
   undo: () =>

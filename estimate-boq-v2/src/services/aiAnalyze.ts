@@ -23,6 +23,7 @@ import {
   getUserPromptForDiscipline,
 } from './aiPrompts';
 import { getEngineConfig, type AIEngine } from './aiEngines';
+import { categoryForMark, type MarkDims } from '@/stores/detectionStore';
 
 // ─── Progress stage messages (เวลาเป็น ms) ──────────────────────────────
 const PROGRESS_STAGES: Array<{ at: number; msg: string }> = [
@@ -646,4 +647,243 @@ export async function callAI(
     tokens: res.meta?.tokens,
     finishReason: res.meta?.finishReason,
   };
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// analyzeDimensions — "อ่านมิติอย่างเดียว" (Phase 1)
+//   call แยกจาก analyzePage: ไม่นับ tag (count ยังมาจาก tag ในแอป)
+//   อ่านแบบขยาย/schedule ที่แนบ → คืนมิติต่อ mark → map เข้า markDims
+// ═══════════════════════════════════════════════════════════════════════
+
+export interface DimsReadResult {
+  /** mark ที่อ่านครบ field → พร้อม setMarkDim(mark, dims, 'ai') */
+  dims: Record<string, MarkDims>;
+  /** mark ที่อ่านไม่ชัด/ไม่ครบ — ไม่ set, เก็บเหตุผล */
+  unreadable: { mark: string; reason: string }[];
+  /** raw response ก่อน parse (log/debug) */
+  raw: string;
+  model: string;
+}
+
+const DIMS_SYSTEM_PROMPT = `คุณคือผู้ช่วยวิศวกรโยธาที่ "ถอดมิติ" จากแบบขยาย/ตาราง schedule ของงานโครงสร้างเท่านั้น
+
+งานเดียวของคุณ:
+- อ่านมิติของ mark ที่ผู้ใช้ระบุ จากภาพแบบขยาย/ตารางที่แนบมา แล้วคืนเป็น JSON ล้วน
+
+ข้อห้ามเด็ดขาด:
+- ห้ามนับจำนวนชิ้น/จำนวน tag (จำนวนแอปนับเองจากผังแล้ว — ไม่ใช่งานของคุณ)
+- ห้ามเดามิติ ถ้าอ่านไม่ชัด/ไม่พบในแบบ → ใส่ใน unreadable[] พร้อมเหตุผลสั้น ๆ
+- ห้ามตอบ markdown / คำอธิบาย — ตอบ JSON object ล้วนเท่านั้น
+
+หน่วย:
+- ความยาว/ความกว้าง/ความหนา/ความลึก เป็น "เมตร" (เช่น 1.50)
+- ขนาดลวด mesh (meshWireMM) เป็น "มิลลิเมตร"`;
+
+/** map JSON object ดิบ → MarkDims ตาม kind (เชื่อ category ของ mark ไม่ใช่ kind ที่ AI ส่งมา) */
+function coerceMarkDims(
+  mark: string,
+  raw: unknown,
+): { dims: MarkDims } | { reason: string } {
+  if (!raw || typeof raw !== 'object') {
+    return { reason: 'AI ไม่ส่งข้อมูลมิติของ mark นี้' };
+  }
+  const o = raw as Record<string, unknown>;
+  const num = (v: unknown): number | null => {
+    const n = typeof v === 'string' ? Number(v) : v;
+    return typeof n === 'number' && Number.isFinite(n) && n > 0 ? n : null;
+  };
+  const text = (v: unknown): string =>
+    typeof v === 'string' ? v.trim() : typeof v === 'number' ? String(v) : '';
+
+  const cat = categoryForMark(mark);
+
+  if (cat === 'footing') {
+    const W = num(o.W);
+    const L = num(o.L);
+    const T = num(o.T);
+    const depth = num(o.depth);
+    const rebar = text(o.rebar);
+    if (W == null || L == null || T == null || depth == null || !rebar) {
+      return { reason: 'มิติฐานรากไม่ครบ (ต้องมี W,L,T,depth,rebar)' };
+    }
+    return { dims: { kind: 'footing', W, L, T, depth, rebar } };
+  }
+
+  if (cat === 'column') {
+    const W = num(o.W);
+    const L = num(o.L);
+    const H = num(o.H);
+    const vBars = text(o.vBars);
+    const tie = text(o.tie);
+    if (W == null || L == null || H == null || !vBars || !tie) {
+      return { reason: 'มิติเสาไม่ครบ (ต้องมี W,L,H,vBars,tie)' };
+    }
+    return { dims: { kind: 'column', W, L, H, vBars, tie } };
+  }
+
+  if (cat === 'beam') {
+    const W = num(o.W);
+    const H = num(o.H);
+    const mainBars = text(o.mainBars);
+    const stirrup = text(o.stirrup);
+    const piecesRaw = Array.isArray(o.pieces) ? o.pieces : [];
+    const pieces: { length: number; count: number }[] = [];
+    for (const p of piecesRaw) {
+      if (!p || typeof p !== 'object') continue;
+      const pr = p as Record<string, unknown>;
+      const length = num(pr.length);
+      const count = num(pr.count);
+      if (length != null && count != null) {
+        pieces.push({ length, count: Math.round(count) });
+      }
+    }
+    if (W == null || H == null || !mainBars || !stirrup) {
+      return { reason: 'มิติคานไม่ครบ (ต้องมี W,H,mainBars,stirrup)' };
+    }
+    // pieces ว่างได้ (ความยาว/จำนวนต่อ span อาจกรอกเองทีหลัง) — แต่ต้องมี cross-section
+    return { dims: { kind: 'beam', W, H, pieces, mainBars, stirrup } };
+  }
+
+  if (cat === 'slab') {
+    const areaSqm = num(o.areaSqm);
+    const thickness = num(o.thickness);
+    const meshWireMM = num(o.meshWireMM);
+    const meshSpacing = num(o.meshSpacing);
+    const sandThk = num(o.sandThk);
+    if (
+      areaSqm == null ||
+      thickness == null ||
+      meshWireMM == null ||
+      meshSpacing == null
+    ) {
+      return {
+        reason: 'มิติพื้นไม่ครบ (ต้องมี areaSqm,thickness,meshWireMM,meshSpacing)',
+      };
+    }
+    return {
+      dims: {
+        kind: 'slab',
+        areaSqm,
+        thickness,
+        meshWireMM,
+        meshSpacing,
+        ...(sandThk != null ? { sandThk } : {}),
+      },
+    };
+  }
+
+  return { reason: `ไม่ทราบหมวดของ mark "${mark}" — ระบุมิติเองในฟอร์ม` };
+}
+
+export async function analyzeDimensions(opts: {
+  marks: string[];
+  references: AIReferenceImage[];
+  engine: AIEngine;
+  hd?: boolean;
+  onProgress?: ProgressCallback;
+}): Promise<DimsReadResult> {
+  const marks = Array.from(
+    new Set(opts.marks.map((m) => m.trim().toUpperCase()).filter(Boolean)),
+  );
+  if (marks.length === 0) {
+    throw new Error('ไม่มี mark ให้ AI อ่านมิติ — ปักหมุด mark ก่อน');
+  }
+  if (opts.references.length === 0) {
+    throw new Error(
+      'ต้องแนบหน้าแบบขยาย/schedule (เลือกหน้าอ้างอิงก่อน) — ไม่งั้น AI ไม่มีมิติให้อ่าน',
+    );
+  }
+
+  const userText = `mark ที่ต้องอ่านมิติ: ${marks.join(', ')}
+
+คืน JSON object: key = ชื่อ mark, value = ออบเจกต์มิติตาม shape ของหมวดนั้น
+  footing → {"kind":"footing","W":number,"L":number,"T":number,"depth":number,"rebar":"เช่น 16-DB12"}
+  column  → {"kind":"column","W":number,"L":number,"H":number,"vBars":"เช่น 4-DB12","tie":"เช่น RB9@0.15"}
+  beam    → {"kind":"beam","W":number,"H":number,"pieces":[{"length":number,"count":number}],"mainBars":"...","stirrup":"..."}
+  slab    → {"kind":"slab","areaSqm":number,"thickness":number,"meshWireMM":number,"meshSpacing":number,"sandThk":number}
+
+mark ที่อ่านไม่ชัด/ไม่พบในแบบ → ใส่ใน "unreadable": [{"mark":"...","reason":"..."}] อย่าเดา
+
+ตัวอย่างรูปแบบคำตอบ:
+{"F2":{"kind":"footing","W":1.50,"L":1.50,"T":0.30,"depth":1.20,"rebar":"16-DB12"},"unreadable":[{"mark":"GS","reason":"ไม่พบในตาราง"}]}`;
+
+  const userContent: ChatContentPart[] = [
+    {
+      type: 'text',
+      text: `📋 แบบขยาย/ตาราง schedule ${opts.references.length} หน้า — อ่านมิติจากหน้าเหล่านี้:`,
+    },
+  ];
+  for (const ref of opts.references) {
+    userContent.push({
+      type: 'text',
+      text: `--- หน้า ${ref.pageNum}: ${ref.label} ---`,
+    });
+    userContent.push({ type: 'image_url', image_url: { url: ref.dataUrl } });
+  }
+  userContent.push({ type: 'text', text: userText });
+
+  const messages: ChatMessage[] = [
+    { role: 'system', content: DIMS_SYSTEM_PROMPT },
+    { role: 'user', content: userContent },
+  ];
+
+  // ── log-first (Phase 1 บังคับ): จำนวนภาพ + หน้าที่ส่ง ──
+  console.info(
+    `[ai-dims] → ส่ง ${opts.references.length} ภาพ | หน้า: ${opts.references
+      .map((r) => r.pageNum)
+      .join(', ')} | marks: ${marks.join(', ')}`,
+  );
+
+  const out = await callAI(messages, opts.engine, opts.hd ?? false, {
+    onProgress: opts.onProgress,
+  });
+
+  // ── log-first: raw response ก่อน parse ──
+  console.info('[ai-dims] ← raw response:', out.text);
+
+  const parsed = tryParseAIResponse(out.text);
+  const dims: Record<string, MarkDims> = {};
+  const unreadable: { mark: string; reason: string }[] = [];
+
+  if (!parsed || typeof parsed !== 'object') {
+    throw new Error(
+      `AI ตอบไม่ใช่ JSON ที่อ่านได้\nตัวอย่าง: ${out.text.slice(0, 300)}`,
+    );
+  }
+  const obj = parsed as Record<string, unknown>;
+
+  // 1) รวม unreadable ที่ AI ส่งมาเอง
+  const aiUnreadable = obj.unreadable;
+  const aiUnreadableMarks = new Set<string>();
+  if (Array.isArray(aiUnreadable)) {
+    for (const u of aiUnreadable) {
+      if (!u || typeof u !== 'object') continue;
+      const ur = u as Record<string, unknown>;
+      const m = typeof ur.mark === 'string' ? ur.mark.trim().toUpperCase() : '';
+      if (!m) continue;
+      aiUnreadableMarks.add(m);
+      unreadable.push({
+        mark: m,
+        reason:
+          typeof ur.reason === 'string' && ur.reason.trim()
+            ? ur.reason.trim()
+            : 'AI อ่านไม่ชัด',
+      });
+    }
+  }
+
+  // 2) coerce แต่ละ mark ที่ขอ — เชื่อ category ของ mark ไม่ใช่ kind ที่ AI ส่ง
+  for (const mark of marks) {
+    if (aiUnreadableMarks.has(mark)) continue;
+    const entry = obj[mark];
+    if (entry === undefined) {
+      unreadable.push({ mark, reason: 'AI ไม่ส่งมิติของ mark นี้' });
+      continue;
+    }
+    const r = coerceMarkDims(mark, entry);
+    if ('dims' in r) dims[mark] = r.dims;
+    else unreadable.push({ mark, reason: r.reason });
+  }
+
+  return { dims, unreadable, raw: out.text, model: out.model };
 }

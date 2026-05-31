@@ -19,13 +19,15 @@ import {
   type Member,
 } from '@/stores/detectionStore';
 import { useToolStore } from '@/stores/toolStore';
-import { useLatestAnalysisForPage } from '@/stores/aiStore';
+import { useLatestAnalysisForPage, useAIStore } from '@/stores/aiStore';
+import { useAIReferenceStore } from '@/stores/aiReferenceStore';
 import { getMarkColor } from '@/services/markColors';
 import { ocrAt, parseMarks, isOcrReady } from '@/services/labelOcr';
 import { buildBOQ } from '@/services/compute/buildBOQ';
 import { importItemsToBoq } from '@/services/aiImportToBoq';
+import { analyzeDimensions, buildReferenceImage } from '@/services/aiAnalyze';
 import { MarkDimsDialog } from '@/components/MarkDimsDialog';
-import type { AIItem } from '@/types/ai';
+import type { AIItem, AIReferenceImage } from '@/types/ai';
 
 /** ชื่อหน้าแบบสำหรับ trace ใน BOQ (mirror AIPanel.pageNameOf) */
 function pageNameOf(pageId: string): string {
@@ -138,6 +140,7 @@ export function PaintPanel() {
   const startStamp = useDetectionStore((s) => s.startStamp);
   const stopStamp = useDetectionStore((s) => s.stopStamp);
   const markDims = useDetectionStore((s) => s.markDims);
+  const markDimsSource = useDetectionStore((s) => s.markDimsSource);
   const setMarkDim = useDetectionStore((s) => s.setMarkDim);
   const clearMarkDim = useDetectionStore((s) => s.clearMarkDim);
 
@@ -145,11 +148,23 @@ export function PaintPanel() {
   const activeTool = useToolStore((s) => s.activeTool);
   const clearDraft = useToolStore((s) => s.clearDraft);
 
+  // AI อ่านมิติ — ใช้หน้าอ้างอิงชุดเดียวกับ AIPanel (refIds) + engine ปัจจุบัน
+  const allPages = useDrawingStore((s) => s.pages);
+  const files = useDrawingStore((s) => s.files);
+  const refIds = useAIReferenceStore((s) => s.pageIds);
+  const engine = useAIStore((s) => s.engine);
+
   const latest = useLatestAnalysisForPage(pageId);
 
   const [renameInput, setRenameInput] = useState('');
   /** mark ที่กำลังเปิด popup เติมมิติ — null = ปิด */
   const [dimsForMark, setDimsForMark] = useState<string | null>(null);
+  // สถานะ "AI อ่านมิติ"
+  const [dimsBusy, setDimsBusy] = useState(false);
+  const [dimsMsg, setDimsMsg] = useState<string | null>(null);
+  const [dimsUnreadable, setDimsUnreadable] = useState<
+    { mark: string; reason: string }[]
+  >([]);
 
   const groups = useMemo(() => groupByToken(members), [members]);
   const hidden = new Set(hiddenMarks);
@@ -173,6 +188,36 @@ export function PaintPanel() {
         ? buildBOQ({ extract: [], members: memberInputs, markDims })
         : null,
     [memberInputs, markDims],
+  );
+
+  // หน้าอ้างอิง (แบบขยาย/schedule) — ชุดเดียวกับที่เลือกใน AIPanel
+  const referenceImages = useMemo<AIReferenceImage[]>(() => {
+    const out: AIReferenceImage[] = [];
+    for (const id of refIds.slice(0, 4)) {
+      const p = allPages.find((x) => x.id === id);
+      if (!p?.bitmap) continue;
+      const f = files.find((x) => x.id === p.fileId);
+      try {
+        out.push(
+          buildReferenceImage({
+            pageId: p.id,
+            bitmap: p.bitmap,
+            pageNum: p.pageNumber,
+            label: f?.name ?? '—',
+            engine,
+          }),
+        );
+      } catch (err) {
+        console.warn('[paint-dims] ref image fail:', err);
+      }
+    }
+    return out;
+  }, [refIds, allPages, files, engine]);
+
+  // mark หมวดที่อ่านมิติได้ (footing/column/beam/slab) บนหน้านี้
+  const dimMarks = useMemo(
+    () => groups.filter((g) => isDimKind(g.mark)).map((g) => g.mark),
+    [groups],
   );
 
   // เข้าแท็บ "ระบาย" → เริ่มที่โหมดติดป้าย (paint) ทันที ไม่ต้องสลับเอง
@@ -221,6 +266,48 @@ export function PaintPanel() {
     const skipMsg =
       outcome.skippedItems > 0 ? ` (ข้าม ${outcome.skippedItems} รายการ)` : '';
     alert(`📥 เพิ่ม ${outcome.boqIds.length} รายการเข้า BOQ แล้ว${skipMsg}`);
+  };
+
+  // 🤖 ให้ AI อ่านมิติจากหน้าแบบขยาย/schedule → เติม markDims (source='ai')
+  const handleReadDims = async () => {
+    if (dimsBusy) return;
+    if (dimMarks.length === 0) {
+      setDimsMsg('⚠️ ยังไม่มี mark โครงสร้างบนหน้านี้ — ปักหมุดก่อน');
+      return;
+    }
+    if (referenceImages.length === 0) {
+      setDimsMsg(
+        '⚠️ เลือก "หน้าอ้างอิง" (แบบขยาย/schedule เช่น หน้า 18) ในแผง AI ก่อน — AI ต้องมีหน้าให้อ่านมิติ',
+      );
+      return;
+    }
+    setDimsBusy(true);
+    setDimsUnreadable([]);
+    setDimsMsg('🤖 กำลังส่งให้ AI อ่านมิติ…');
+    try {
+      const out = await analyzeDimensions({
+        marks: dimMarks,
+        references: referenceImages,
+        engine,
+        hd: false,
+        onProgress: (m) => setDimsMsg(m),
+      });
+      const readMarks = Object.keys(out.dims);
+      for (const mark of readMarks) {
+        setMarkDim(mark, out.dims[mark]!, 'ai');
+      }
+      setDimsUnreadable(out.unreadable);
+      const parts = [`✅ AI เติมมิติ ${readMarks.length} mark`];
+      if (out.unreadable.length > 0) {
+        parts.push(`อ่านไม่ออก ${out.unreadable.length}`);
+      }
+      setDimsMsg(parts.join(' · '));
+    } catch (err) {
+      console.error('[paint-dims] error:', err);
+      setDimsMsg(`❌ ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setDimsBusy(false);
+    }
   };
 
   // OCR เสริม (ไม่อัตโนมัติ) — อ่านป้ายรอบ marker ที่เลือก → เติมเป็นข้อเสนอในช่องชื่อ
@@ -573,6 +660,22 @@ export function PaintPanel() {
                       )}
                     </span>
                   </button>
+                  {isDimKind(g.mark) && markDims[g.mark] && (
+                    <span
+                      className={`shrink-0 rounded px-1 text-[9px] ${
+                        markDimsSource[g.mark] === 'ai'
+                          ? 'bg-accent/20 text-accent'
+                          : 'text-ink-muted'
+                      }`}
+                      title={
+                        markDimsSource[g.mark] === 'ai'
+                          ? 'มิติจาก AI — ตรวจ/แก้ได้'
+                          : 'มิติที่พิมพ์เอง'
+                      }
+                    >
+                      {markDimsSource[g.mark] === 'ai' ? 'AI อ่าน' : 'พิมพ์เอง'}
+                    </span>
+                  )}
                   {isDimKind(g.mark) && (
                     <button
                       type="button"
@@ -601,6 +704,36 @@ export function PaintPanel() {
           </ul>
         )}
       </div>
+
+      {/* ── 🤖 AI อ่านมิติ → เติม markDims อัตโนมัติ ───────────── */}
+      {dimMarks.length > 0 && (
+        <div className="border-t border-bg-border pt-3">
+          <button
+            type="button"
+            onClick={handleReadDims}
+            disabled={dimsBusy}
+            title="ส่งหน้าอ้างอิง (แบบขยาย/schedule) ให้ AI อ่านมิติของ mark ที่ปักไว้ แล้วเติมลงฟอร์มอัตโนมัติ — count ยังนับจาก tag เดิม"
+            className="flex w-full items-center justify-center gap-1.5 rounded bg-bg-raised px-2 py-1.5 text-xs font-medium text-ink-secondary hover:bg-bg-hover disabled:opacity-50"
+          >
+            {dimsBusy && (
+              <span className="inline-block h-3 w-3 animate-spin rounded-full border border-bg-border border-t-accent" />
+            )}
+            🤖 ให้ AI อ่านมิติ ({dimMarks.length} mark)
+          </button>
+          {dimsMsg && (
+            <p className="mt-1 text-[11px] text-ink-secondary">{dimsMsg}</p>
+          )}
+          {dimsUnreadable.length > 0 && (
+            <ul className="mt-1 space-y-0.5">
+              {dimsUnreadable.map((u) => (
+                <li key={u.mark} className="text-[10px] text-warning">
+                  ✏️ {u.mark}: {u.reason} — กรอกเอง
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       {/* ── BOQ โครงสร้าง (จาก tag + มิติที่เติม) ───────────── */}
       {memberInputs.length > 0 && (
@@ -658,6 +791,7 @@ export function PaintPanel() {
         <MarkDimsDialog
           mark={dimsForMark}
           existing={markDims[dimsForMark]}
+          source={markDimsSource[dimsForMark]}
           onSave={(dims) => setMarkDim(dimsForMark, dims)}
           onClear={() => clearMarkDim(dimsForMark)}
           onClose={() => setDimsForMark(null)}

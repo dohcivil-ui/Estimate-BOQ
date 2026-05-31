@@ -10,6 +10,7 @@ import { useState } from 'react';
 import {
   categoryForMark,
   type MarkDims,
+  type MarkDimsSource,
   type MemberCategory,
 } from '@/stores/detectionStore';
 
@@ -39,6 +40,8 @@ function numField(v: string): number {
 interface Props {
   mark: string;
   existing: MarkDims | undefined;
+  /** ที่มาของมิติเดิม — 'ai' แสดงป้าย "AI อ่าน" ให้ตรวจก่อนใช้ */
+  source?: MarkDimsSource;
   onSave: (dims: MarkDims) => void;
   onClear: () => void;
   onClose: () => void;
@@ -47,6 +50,7 @@ interface Props {
 export function MarkDimsDialog({
   mark,
   existing,
+  source,
   onSave,
   onClear,
   onClose,
@@ -159,6 +163,14 @@ export function MarkDimsDialog({
             {kind && (
               <span className="ml-1 text-xs text-ink-muted">
                 ({KIND_LABEL[kind]})
+              </span>
+            )}
+            {existing && source === 'ai' && (
+              <span
+                className="ml-1 rounded bg-accent/20 px-1 text-[10px] text-accent"
+                title="มิติชุดนี้ AI อ่านมาจากแบบขยาย — ตรวจให้ชัวร์ก่อน บันทึกแล้วจะถือว่ายืนยันเอง"
+              >
+                AI อ่าน — ตรวจก่อน
               </span>
             )}
           </p>
