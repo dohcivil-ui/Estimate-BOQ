@@ -25,6 +25,7 @@ import {
   cleanJsonResponse,
 } from '@/services/aiAnalyze';
 import { buildUserMessage, sendChatMessage } from '@/services/aiChat';
+import { buildTagTally } from '@/services/markParse';
 import { importItemsToBoq } from '@/services/aiImportToBoq';
 import { buildBOQ } from '@/services/compute/buildBOQ';
 import {
@@ -702,7 +703,18 @@ function ChatInputBlock({ latest }: { latest: AIAnalysis | null }) {
   });
   const [progress, setProgress] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
+  const [tallyPreview, setTallyPreview] = useState<string | null>(null);
   const promptDirty = useRef(false);
+
+  // อ่าน tally marker บนหน้า active (geometry!=null) → บล็อก "จำนวนจริงจาก tag"
+  const buildPageTagTally = (): string => {
+    if (!page) return '';
+    const members = useDetectionStore
+      .getState()
+      .getForPage(page.id)
+      .map((m) => ({ mark: m.mark, hasGeometry: m.geometry != null }));
+    return buildTagTally(members);
+  };
 
   const preset: PromptPreset =
     getPreset(presetId) ?? DEFAULT_PRESET!;
@@ -832,6 +844,7 @@ function ChatInputBlock({ latest }: { latest: AIAnalysis | null }) {
         hd,
         referenceImages,
         customUserPrompt: promptDirty.current ? prompt : undefined,
+        tagTally: buildPageTagTally(),
         onProgress: setProgress,
       });
       ai.completeAnalyze(analysisId, out.discipline, out.result, out.raw, {
@@ -974,6 +987,26 @@ function ChatInputBlock({ latest }: { latest: AIAnalysis | null }) {
       {error && (
         <div className="rounded border border-danger/40 bg-danger/10 p-2 text-xs text-danger">
           {error}
+        </div>
+      )}
+
+      {!followUp && (
+        <div className="space-y-1">
+          <button
+            type="button"
+            onClick={() => setTallyPreview(buildPageTagTally())}
+            disabled={sending}
+            className="rounded border border-bg-border px-2 py-1 text-[10px] text-ink-muted hover:text-ink-primary disabled:opacity-50"
+          >
+            🔢 ดูจำนวนที่จะส่ง
+          </button>
+          {tallyPreview !== null && (
+            <div className="rounded border border-bg-border bg-bg-base px-2 py-1 text-[10px] text-ink-secondary">
+              {tallyPreview
+                ? `📎 แนบอัตโนมัติ: ${tallyPreview}`
+                : 'ยังไม่มี marker ที่ tag ไว้บนหน้านี้ — ปักหมุดในแท็บ "ระบาย" ก่อน'}
+            </div>
+          )}
         </div>
       )}
 

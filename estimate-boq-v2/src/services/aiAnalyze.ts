@@ -48,6 +48,11 @@ export interface AnalyzeOptions {
    * (default: getUserPromptForDiscipline(discipline))
    */
   customUserPrompt?: string;
+  /**
+   * บล็อก "จำนวนจริงจาก tag" ที่แอปประกอบจาก marker บนหน้า — prepend ก่อน task
+   * อัตโนมัติ (แยกจาก customUserPrompt เพื่อให้แนบเสมอแม้ user แก้ prompt)
+   */
+  tagTally?: string;
   /** callback อัปเดต UI ระหว่างรอ */
   onProgress?: ProgressCallback;
   projectId?: string;
@@ -408,6 +413,7 @@ export async function analyzePage(opts: AnalyzeOptions): Promise<AnalyzeResult> 
     targetImageDataUrl,
     refs,
     opts.customUserPrompt,
+    opts.tagTally,
   );
   const out = await runWithProgress(
     () =>
@@ -458,13 +464,19 @@ export function buildAnalyzeMessages(
   targetImageDataUrl: string,
   references: AIReferenceImage[],
   customUserPrompt?: string,
+  tagTally?: string,
 ): ChatMessage[] {
   const system = getSystemPromptForMode(discipline);
   const trimmed = customUserPrompt?.trim();
-  const baseUserText =
+  const task =
     trimmed && trimmed.length > 0
       ? trimmed
       : getUserPromptForDiscipline(discipline);
+  // จำนวนจาก tag (ถ้ามี) แนบนำหน้า task เสมอ — ทั้ง Anthropic + OpenRouter
+  //   ผ่าน buildEdgePayload เส้นเดียว
+  const tally = tagTally?.trim();
+  const baseUserText =
+    tally && tally.length > 0 ? `${tally}\n\n${task}` : task;
 
   const userContent: ChatContentPart[] = [];
 
