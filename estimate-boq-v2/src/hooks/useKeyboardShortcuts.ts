@@ -17,6 +17,7 @@ import { useSnapStore } from '@/stores/snapStore';
 import { useOrthoStore } from '@/stores/orthoStore';
 import { useToolStore } from '@/stores/toolStore';
 import { useMeasurementStore } from '@/stores/measurementStore';
+import { useDetectionStore } from '@/stores/detectionStore';
 import { useDrawingStore } from '@/stores/drawingStore';
 import { useViewportStore } from '@/stores/viewportStore';
 import { useCanvasSize } from '@/stores/canvasSizeStore';
@@ -29,6 +30,7 @@ const TOOL_KEYS: Record<string, Tool> = {
   l: 'length',
   a: 'area',
   c: 'count',
+  g: 'paint',
 };
 
 function isTypingTarget(target: EventTarget | null): boolean {
@@ -101,10 +103,14 @@ export function useKeyboardShortcuts(opts: {
         return;
       }
 
+      // paint tool active → undo/redo/delete ทำกับ detectionStore
+      const paintActive = useToolStore.getState().activeTool === 'paint';
+
       // Undo / Redo
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
         e.preventDefault();
-        useMeasurementStore.getState().undo();
+        if (paintActive) useDetectionStore.getState().undo();
+        else useMeasurementStore.getState().undo();
         return;
       }
       if (
@@ -113,12 +119,21 @@ export function useKeyboardShortcuts(opts: {
           (e.shiftKey && e.key.toLowerCase() === 'z'))
       ) {
         e.preventDefault();
-        useMeasurementStore.getState().redo();
+        if (paintActive) useDetectionStore.getState().redo();
+        else useMeasurementStore.getState().redo();
         return;
       }
 
       // Delete — remove selected
       if (e.key === 'Delete') {
+        if (paintActive) {
+          const ids = useDetectionStore.getState().selectedIds;
+          if (ids.length > 0) {
+            e.preventDefault();
+            useDetectionStore.getState().deleteMembers(ids);
+          }
+          return;
+        }
         const selId = useMeasurementStore.getState().selectedId;
         if (selId) {
           e.preventDefault();

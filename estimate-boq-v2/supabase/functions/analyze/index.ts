@@ -176,6 +176,11 @@ serve(async (req: Request) => {
 
   const startMs = Date.now();
 
+  // ── log: ยืนยันจำนวนภาพที่จะแนบเข้า payload ของ provider (อ้างอิง + หน้าหลัก) ──
+  console.info(
+    `[analyze] provider=${provider} model=${model} images=${images.length} hd=${!!body.hd}`,
+  );
+
   // ─── เรียก provider ──────────────────────────────────────────────────
   let result: ProviderResult;
   try {

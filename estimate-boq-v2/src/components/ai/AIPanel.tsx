@@ -17,16 +17,16 @@ import {
   useLatestAnalysisForPage,
 } from '@/stores/aiStore';
 import { useAIReferenceStore } from '@/stores/aiReferenceStore';
+import { useDetectionStore } from '@/stores/detectionStore';
 import {
   analyzePage,
   AutoDetectFailed,
   buildReferenceImage,
   cleanJsonResponse,
 } from '@/services/aiAnalyze';
-import { detectBoxes } from '@/services/boxDetect';
-import { countByType, useDetectionStore } from '@/stores/detectionStore';
 import { buildUserMessage, sendChatMessage } from '@/services/aiChat';
 import { importItemsToBoq } from '@/services/aiImportToBoq';
+import { buildBOQ } from '@/services/compute/buildBOQ';
 import {
   DEFAULT_PRESET,
   fillPagePlaceholders,
@@ -144,20 +144,10 @@ export function AIPanel() {
 // ═══════════════════════════════════════════════════════════════════════
 const ENGINE_ACTIVE_CLASS: Record<AIEngine, string> = {
   claude: 'border-orange-400 bg-orange-400/15 text-orange-200',
-  perceptron: 'border-cyan-400 bg-cyan-400/15 text-cyan-200',
-  'gemini-pro': 'border-teal-400 bg-teal-400/15 text-teal-200',
-  'gemini-flash': 'border-sky-400 bg-sky-400/15 text-sky-200',
+  pro31: 'border-teal-400 bg-teal-400/15 text-teal-200',
+  flash35: 'border-indigo-400 bg-indigo-400/15 text-indigo-200',
+  flash30: 'border-sky-400 bg-sky-400/15 text-sky-200',
 };
-
-// ลบ markup กล่อง (<point_box>, <collection>) ออกจาก raw → เหลือ reasoning อ่านสะอาดเหมือน playground
-function stripBoxMarkup(raw: string): string {
-  return raw
-    .replace(/<point_box>[\s\S]*?<\/point_box>/gi, '')
-    .replace(/<\/?collection[^>]*>/gi, '')
-    .replace(/[ \t]+\n/g, '\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-}
 
 function EnginePills({
   engine,
@@ -192,18 +182,33 @@ function EnginePills({
               type="button"
               onClick={() => onChange(e)}
               disabled={disabled}
-              className={`rounded-full border px-3 py-1 text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+              className={`relative rounded-full border px-3 py-1 text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
                 active
                   ? `${ENGINE_ACTIVE_CLASS[e]} font-semibold`
                   : 'border-slate-600 bg-transparent text-ink-secondary hover:border-slate-400 hover:text-ink-primary'
               }`}
-              title={config.label}
+              title={
+                config.tested
+                  ? `${config.label} · ${config.role}`
+                  : `${config.label} · ${config.role} — ⚠️ ยังไม่ทดสอบ: ตรวจ count เอง`
+              }
             >
               {config.icon} {config.shortLabel}
+              {!config.tested && (
+                <span
+                  className="ml-1 inline-block h-1.5 w-1.5 rounded-full bg-amber-400 align-middle"
+                  aria-label="ยังไม่ทดสอบ — ตรวจ count เอง"
+                />
+              )}
             </button>
           );
         })}
       </div>
+      {!getEngineConfig(engine).tested && (
+        <div className="rounded border border-amber-400/40 bg-amber-400/10 px-2 py-1 text-[10px] text-amber-200">
+          ⚠️ {getEngineConfig(engine).label} ยังไม่ทดสอบความแม่น — ตรวจ count เอง
+        </div>
+      )}
     </div>
   );
 }
@@ -292,6 +297,10 @@ function ChatStream({
 function InitialAnalysisBubble({ analysis }: { analysis: AIAnalysis }) {
   const setAnalysisImported = useAIStore((s) => s.setAnalysisImported);
   const [showPreview, setShowPreview] = useState(false);
+  const [computed, setComputed] = useState<{
+    items: AIItem[];
+    warnings: string[];
+  } | null>(null);
   const result = analysis.result;
   if (!result) return null;
   const itemCount = result.items?.length ?? 0;
@@ -317,6 +326,46 @@ function InitialAnalysisBubble({ analysis }: { analysis: AIAnalysis }) {
     const skipMsg =
       outcome.skippedItems > 0 ? ` (ข้าม ${outcome.skippedItems} item)` : '';
     alert(`📥 เพิ่ม ${outcome.boqIds.length} รายการเข้า BOQ แล้ว${skipMsg}`);
+  };
+
+  // 🧮 คำนวณปริมาณ deterministic จาก compute layer (footing/beam/slab + consumables)
+  const handleCompute = () => {
+    // จำนวนฐาน/เสาจากการระบายบนแบบ (เฉพาะที่ระบายตำแหน่งแล้ว geometry != null)
+    //   ห้ามนับจาก AI/seed — count มาจาก member ที่คนระบายเท่านั้น
+    const members = useDetectionStore
+      .getState()
+      .getForPage(analysis.pageId)
+      .filter((m) => m.geometry != null)
+      .map((m) => ({ mark: m.mark, status: m.status }));
+    const r = buildBOQ({
+      extract: result.items ?? [],
+      members: members.length > 0 ? members : undefined,
+    });
+    if (r.warnings.length > 0)
+      console.info('[buildBOQ] ⚠️ ต้องยืนยัน:\n' + r.warnings.join('\n'));
+    setComputed(r);
+    if (r.items.length === 0) {
+      alert(
+        `🧮 ยังคำนวณ BOQ ไม่ได้ — ข้อมูลไม่ครบ\n\n${r.warnings.slice(0, 8).join('\n')}`,
+      );
+      setComputed(null);
+    }
+  };
+
+  // import ผลคำนวณ (compute) เข้า BOQ
+  const handleConfirmComputed = (picked: AIItem[]) => {
+    const outcome = importItemsToBoq({
+      items: picked,
+      discipline: result.discipline,
+      pageId: analysis.pageId,
+      pageName: pageNameOf(analysis.pageId),
+      sourceRef: `${analysis.id}:compute`,
+    });
+    setAnalysisImported(analysis.id, outcome.boqIds);
+    setComputed(null);
+    const skipMsg =
+      outcome.skippedItems > 0 ? ` (ข้าม ${outcome.skippedItems} item)` : '';
+    alert(`🧮 เพิ่ม ${outcome.boqIds.length} รายการ (คำนวณ) เข้า BOQ แล้ว${skipMsg}`);
   };
 
   return (
@@ -361,13 +410,36 @@ function InitialAnalysisBubble({ analysis }: { analysis: AIAnalysis }) {
       )}
 
       {itemCount > 0 && (
-        <button
-          type="button"
-          onClick={() => setShowPreview(true)}
-          className="mt-1.5 rounded bg-accent px-2 py-1 text-[11px] font-medium text-ink-inverse hover:bg-accent-hover"
-        >
-          📥 Import to BOQ ({itemCount} items)
-        </button>
+        <div className="mt-1.5 flex flex-wrap gap-1.5">
+          {analysis.discipline === 'structural' ? (
+            <>
+              <button
+                type="button"
+                onClick={handleCompute}
+                title="คำนวณปริมาณ deterministic (คอนกรีต/ตอม่อ/ทราย/lean/ไม้แบบ/เหล็ก/ดินขุด/ถม + ลวดผูก/ตะปู/ไม้คร่า) จากมิติที่ AI ถอดได้"
+                className="rounded bg-accent px-2 py-1 text-[11px] font-medium text-ink-inverse hover:bg-accent-hover"
+              >
+                🧮 Import to BOQ (คำนวณปริมาณ)
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowPreview(true)}
+                title="ดูรายการดิบจาก AI (ไม่ผ่าน compute) — สำหรับตรวจสอบ"
+                className="rounded border border-bg-border bg-bg-base px-2 py-1 text-[11px] font-medium text-ink-secondary hover:bg-bg-hover"
+              >
+                รายการดิบจาก AI ({itemCount})
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowPreview(true)}
+              className="rounded bg-accent px-2 py-1 text-[11px] font-medium text-ink-inverse hover:bg-accent-hover"
+            >
+              📥 Import to BOQ ({itemCount} items)
+            </button>
+          )}
+        </div>
       )}
       {showPreview && (
         <ImportPreview
@@ -375,6 +447,14 @@ function InitialAnalysisBubble({ analysis }: { analysis: AIAnalysis }) {
           headerLabel={`${DISCIPLINE_LABELS[analysis.discipline]} — ${pageNameOf(analysis.pageId)}`}
           onConfirm={handleConfirm}
           onClose={() => setShowPreview(false)}
+        />
+      )}
+      {computed && (
+        <ImportPreview
+          items={computed.items}
+          headerLabel={`🧮 คำนวณปริมาณ — ${pageNameOf(analysis.pageId)}`}
+          onConfirm={handleConfirmComputed}
+          onClose={() => setComputed(null)}
         />
       )}
     </div>
@@ -609,9 +689,6 @@ function ChatInputBlock({ latest }: { latest: AIAnalysis | null }) {
     (s) => s.chatBusyAnalysisId === (latest?.id ?? '__none__'),
   );
   const engine = useAIStore((s) => s.engine);
-  const detBusy = useDetectionStore((s) => s.busy);
-  const detBoxes = useDetectionStore((s) => s.boxes);
-  const detRaw = useDetectionStore((s) => s.lastRaw);
   const setEngine = useAIStore((s) => s.setEngine);
   const availableEngines = useMemo(() => getAvailableEngines(), []);
   const setChatBusy = useAIStore((s) => s.setChatBusy);
@@ -644,6 +721,11 @@ function ChatInputBlock({ latest }: { latest: AIAnalysis | null }) {
     }
     return nums.sort((a, b) => a - b);
   }, [refIds, allPages, page?.id]);
+
+  // ─── สลับหน้า active → ล้าง dirty เพื่อให้ prompt เติมเลขหน้าใหม่ตามหน้านั้น ──
+  useEffect(() => {
+    promptDirty.current = false;
+  }, [page?.id]);
 
   // ─── sync prompt textarea กับ preset (เฉพาะ analyze mode + ยังไม่แก้เอง) ──
   // เติม placeholder [หน้าหลัก]/[อ้างอิง] ด้วยเลขหน้าจริง
@@ -681,13 +763,22 @@ function ChatInputBlock({ latest }: { latest: AIAnalysis | null }) {
     }
   };
 
-  const referenceImages = useMemo<AIReferenceImage[]>(() => {
-    if (refIds.length === 0) return [];
+  // refImages = ภาพอ้างอิงที่แนบได้จริง · refSkipped = หน้าที่เลือกแต่แนบไม่ได้ (เช่น bitmap ยังไม่ render)
+  const { referenceImages, refSkipped } = useMemo<{
+    referenceImages: AIReferenceImage[];
+    refSkipped: number[];
+  }>(() => {
     const out: AIReferenceImage[] = [];
+    const skipped: number[] = [];
+    if (refIds.length === 0) return { referenceImages: out, refSkipped: skipped };
     for (const id of refIds.slice(0, 4)) {
       if (id === page?.id) continue;
       const p = allPages.find((x) => x.id === id);
-      if (!p || !p.bitmap) continue;
+      if (!p) continue;
+      if (!p.bitmap) {
+        skipped.push(p.pageNumber);
+        continue;
+      }
       const f = files.find((x) => x.id === p.fileId);
       try {
         out.push(
@@ -701,44 +792,29 @@ function ChatInputBlock({ latest }: { latest: AIAnalysis | null }) {
         );
       } catch (err) {
         console.warn('[ai-panel] ref image fail:', err);
+        skipped.push(p.pageNumber);
       }
     }
-    return out;
+    return { referenceImages: out, refSkipped: skipped };
   }, [refIds, allPages, files, page, engine]);
 
   // ─── analyze: ใช้ preset + (ถ้า dirty) custom prompt ─────────────────
   const handleAnalyze = async () => {
     if (!page || !page.bitmap) return;
 
-    // Perceptron: detect-box path (แยกจาก flow BOQ — ctx 33K + คืน markup)
-    if (engine === 'perceptron') {
-      const det = useDetectionStore.getState();
-      det.setBusy(true);
-      setProgress('📦 Perceptron ตรวจจับกล่อง...');
-      setError(null);
-      try {
-        const res = await detectBoxes({
-          bitmap: page.bitmap,
-          engine,
-          hd,
-          prompt: promptDirty.current ? prompt : undefined,
-          onProgress: setProgress,
-        });
-        det.setBoxes(page.id, res.boxes);
-        det.setLastRaw(res.raw);
-        const mismatch =
-          res.expected !== null && res.expected !== res.boxes.length;
-        setProgress(
-          mismatch
-            ? `⚠️ เสร็จ — พบ ${res.boxes.length} กล่อง (โมเดลอ้าง ${res.expected})`
-            : `เสร็จ — พบ ${res.boxes.length} กล่อง`,
-        );
-        setTimeout(() => setProgress(''), mismatch ? 4000 : 2000);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : String(e));
-      } finally {
-        det.setBusy(false);
-      }
+    // ── log ก่อนส่ง: ยืนยันจำนวนภาพ (1 หลัก + N อ้างอิง) ──
+    console.info(
+      `[ai-panel] ส่งภาพ: 1 หลัก (หน้า ${page.pageNumber}) + ${referenceImages.length} อ้างอิง` +
+        (referenceImages.length
+          ? ` [${referenceImages.map((r) => `หน้า${r.pageNum}`).join(', ')}]`
+          : '') +
+        (refSkipped.length ? ` ⚠️ ข้าม(ไม่มี bitmap): ${refSkipped.join(',')}` : ''),
+    );
+    if (refIds.length > 0 && referenceImages.length === 0) {
+      setError(
+        `⚠️ เลือกหน้าอ้างอิง ${refIds.length} หน้า แต่แนบไม่ได้เลย (bitmap ยังไม่ render) — ` +
+          `เปิดหน้าอ้างอิงสักครั้งให้ render ก่อน แล้ววิเคราะห์ใหม่`,
+      );
       return;
     }
 
@@ -832,7 +908,7 @@ function ChatInputBlock({ latest }: { latest: AIAnalysis | null }) {
     else void handleAnalyze();
   };
 
-  const sending = busy || chatBusy || detBusy;
+  const sending = busy || chatBusy;
   const sendLabel = followUp
     ? sending
       ? progress || '⌛ ส่ง…'
@@ -840,11 +916,6 @@ function ChatInputBlock({ latest }: { latest: AIAnalysis | null }) {
     : sending
       ? progress || '⌛ AI กำลังวิเคราะห์…'
       : '🤖 วิเคราะห์';
-
-  const detectionSummary =
-    Object.entries(countByType(detBoxes))
-      .map(([t, n]) => `${t}×${n}`)
-      .join(' · ') + ` · รวม ${detBoxes.length} กล่อง`;
 
   return (
     <div className="space-y-2 rounded border border-bg-border bg-bg-raised p-2">
@@ -865,20 +936,16 @@ function ChatInputBlock({ latest }: { latest: AIAnalysis | null }) {
         </div>
       )}
 
-      {engine === 'perceptron' && detBoxes.length > 0 && (
-        <div className="rounded border border-cyan-400/40 bg-cyan-400/10 p-2 text-xs text-cyan-200">
-          ✅ ตรวจพบ: {detectionSummary}
-        </div>
-      )}
-
-      {engine === 'perceptron' && detRaw.trim() && (
-        <div className="space-y-1">
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-ink-muted">
-            🤖 คำตอบ/เหตุผลของ AI
-          </div>
-          <div className="max-h-48 overflow-y-auto whitespace-pre-wrap rounded border border-bg-border bg-bg-base p-2 text-xs text-ink-secondary">
-            {stripBoxMarkup(detRaw)}
-          </div>
+      {!followUp && referenceImages.length > 0 && (
+        <div className="rounded border border-sky-400/30 bg-sky-400/10 px-2 py-1 text-[10px] text-sky-200">
+          📎 จะแนบหน้าอ้างอิง {referenceImages.length} หน้า (
+          {referenceImages.map((r) => r.pageNum).join(', ')}) เข้า AI
+          {refSkipped.length > 0 && (
+            <span className="text-amber-300">
+              {' '}
+              · ⚠️ ข้าม {refSkipped.join(', ')} (ยังไม่ render — เปิดหน้านั้นก่อน)
+            </span>
+          )}
         </div>
       )}
 
@@ -914,7 +981,7 @@ function ChatInputBlock({ latest }: { latest: AIAnalysis | null }) {
         <button
           type="button"
           onClick={handleSend}
-          disabled={sending || !page || (engine !== 'perceptron' && !prompt.trim())}
+          disabled={sending || !page || !prompt.trim()}
           className="flex-1 rounded bg-accent px-3 py-2 text-sm font-medium text-ink-inverse hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
         >
           {sendLabel}

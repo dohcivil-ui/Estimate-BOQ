@@ -13,7 +13,7 @@ import {
   type Tool,
 } from '@/types/tool';
 
-const TOOLS: Tool[] = ['select', 'pan', 'scale', 'length', 'area', 'count'];
+const TOOLS: Tool[] = ['select', 'pan', 'scale', 'length', 'area', 'count', 'paint'];
 
 export function Toolbar() {
   const active = useActiveTool();

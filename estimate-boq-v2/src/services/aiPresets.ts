@@ -36,7 +36,7 @@ export const PROMPT_PRESETS: PromptPreset[] = [
     label: 'โครงสร้าง',
     icon: '🏗️',
     mode: 'structural',
-    defaultEngine: 'claude',
+    defaultEngine: 'flash30',
     prompt: `ถอดปริมาณงานโครงสร้าง หน้า ${PLACEHOLDER_MAIN} อ้างอิง ${PLACEHOLDER_REF}`,
   },
   {
@@ -44,7 +44,7 @@ export const PROMPT_PRESETS: PromptPreset[] = [
     label: 'สถาปัตยกรรม',
     icon: '🏛️',
     mode: 'architectural',
-    defaultEngine: 'claude',
+    defaultEngine: 'flash30',
     prompt: `ถอดปริมาณงานสถาปัตยกรรม หน้า ${PLACEHOLDER_MAIN} อ้างอิง ${PLACEHOLDER_REF}`,
   },
   {
@@ -52,7 +52,7 @@ export const PROMPT_PRESETS: PromptPreset[] = [
     label: 'ไฟฟ้า',
     icon: '⚡',
     mode: 'electrical',
-    defaultEngine: 'claude',
+    defaultEngine: 'flash30',
     prompt: `ถอดปริมาณงานไฟฟ้า หน้า ${PLACEHOLDER_MAIN} อ้างอิง ${PLACEHOLDER_REF}`,
   },
   {
@@ -60,7 +60,7 @@ export const PROMPT_PRESETS: PromptPreset[] = [
     label: 'สุขาภิบาล',
     icon: '🚰',
     mode: 'sanitary',
-    defaultEngine: 'claude',
+    defaultEngine: 'flash30',
     prompt: `ถอดปริมาณงานสุขาภิบาล หน้า ${PLACEHOLDER_MAIN} อ้างอิง ${PLACEHOLDER_REF}`,
   },
   {
@@ -68,7 +68,7 @@ export const PROMPT_PRESETS: PromptPreset[] = [
     label: 'Custom',
     icon: '✏️',
     mode: 'auto',
-    defaultEngine: 'claude',
+    defaultEngine: 'flash30',
     prompt: `ถอดปริมาณ หน้า ${PLACEHOLDER_MAIN} อ้างอิง ${PLACEHOLDER_REF}
 
 (พิมพ์คำสั่งของคุณที่นี่ — เช่น เน้นเฉพาะฐานราก, ถอดเฉพาะคาน, ตรวจสอบจำนวน F2)`,
@@ -95,6 +95,6 @@ export function fillPagePlaceholders(
   refPages: string,
 ): string {
   return prompt
-    .replace(PLACEHOLDER_MAIN, mainPage || PLACEHOLDER_MAIN)
-    .replace(PLACEHOLDER_REF, refPages || PLACEHOLDER_REF);
+    .replaceAll(PLACEHOLDER_MAIN, mainPage || PLACEHOLDER_MAIN)
+    .replaceAll(PLACEHOLDER_REF, refPages || PLACEHOLDER_REF);
 }

@@ -20,6 +20,12 @@ import { useScaleStore } from '@/stores/scaleStore';
 import { useCursorStore } from '@/stores/cursorStore';
 import { useImageDataStore, extractRasterData } from '@/stores/imageDataStore';
 import { useMeasurementStore } from '@/stores/measurementStore';
+import {
+  useDetectionStore,
+  categoryForMark,
+  findMemberAt,
+} from '@/stores/detectionStore';
+import { ocrAt, parseMarks, isOcrReady } from '@/services/labelOcr';
 import { useSnapCandidates } from './useSnapCandidates';
 import {
   commitDraft,
@@ -76,6 +82,8 @@ export function useCanvasInteraction(
   const draftPoints = useToolStore((s) => s.draftPoints);
 
   const dragState = useRef<{ x: number; y: number } | null>(null);
+  /** จุดเริ่มลากกล่อง paint (page-px) — null = ไม่ได้กำลังระบาย */
+  const paintDrag = useRef<Point2D | null>(null);
   const [currentSnap, setCurrentSnap] = useState<SnapPoint | null>(null);
   const [scaleDialog, setScaleDialog] = useState<{
     p1: Point2D;
@@ -218,6 +226,13 @@ export function useCanvasInteraction(
 
       // select tool — left click = hit test
       if (activeTool === 'select' && isLeft) {
+        // priority: member ที่ระบายไว้ก่อน → toggleSelect
+        const det = useDetectionStore.getState();
+        const memberHit = findMemberAt(det.getForPage(page.id), raw);
+        if (memberHit) {
+          det.toggleSelect(memberHit.id);
+          return;
+        }
         const measurements = useMeasurementStore
           .getState()
           .getForPage(page.id);
@@ -235,6 +250,14 @@ export function useCanvasInteraction(
             stageRef.current.container().style.cursor = 'grabbing';
           }
         }
+        return;
+      }
+
+      // ─── paint tool — เริ่มลากกล่อง (page-px) ────────────────────────
+      if (activeTool === 'paint' && isLeft) {
+        paintDrag.current = { x: raw.x, y: raw.y };
+        useToolStore.getState().setDraftPoints([{ x: raw.x, y: raw.y }]);
+        useToolStore.getState().setCursorPagePoint({ x: raw.x, y: raw.y });
         return;
       }
 
@@ -314,25 +337,122 @@ export function useCanvasInteraction(
 
       useCursorStore.getState().setPagePos(raw.x, raw.y);
 
+      // hover member (paint/select) → pill ขึ้นเฉพาะตัวที่ชี้
+      if (activeTool === 'paint' || activeTool === 'select') {
+        const det = useDetectionStore.getState();
+        const hover = findMemberAt(det.getForPage(page.id), raw);
+        if (det.hoveredId !== (hover?.id ?? null)) {
+          det.setHovered(hover?.id ?? null);
+        }
+      }
+
       // process snap+ortho เฉพาะตอนวาด หรือ snap ตลอดเวลา? — ทำตลอด เพื่อให้ผู้ใช้เห็น HUD
       const { final, snap } = processCursor(raw);
       setCurrentSnap(snap);
       useToolStore.getState().setCursorPagePoint(final);
     },
-    [page, pointerToPage, processCursor],
+    [page, activeTool, pointerToPage, processCursor],
   );
 
   const handleMouseUp = useCallback(() => {
+    // ─── paint tool — จบการลากกล่อง: ลากใหญ่พอ = สร้าง member, ไม่งั้น = คลิกเลือก ─
+    if (paintDrag.current && page) {
+      const start = paintDrag.current;
+      paintDrag.current = null;
+      const end = useToolStore.getState().cursorPagePoint ?? start;
+      useToolStore.getState().clearDraft();
+
+      const w = Math.abs(end.x - start.x);
+      const h = Math.abs(end.y - start.y);
+      const dragMinPage = 6 / transformZoom; // ~6 screen px
+      const det = useDetectionStore.getState();
+
+      if (w >= dragMinPage && h >= dragMinPage) {
+        if (det.paintMark.trim() === '') {
+          det.setPaintError('เลือกชื่อ/หมวดก่อนระบาย');
+        } else {
+          det.addMember({
+            pageId: page.id,
+            mark: det.paintMark,
+            category: categoryForMark(det.paintMark),
+            geometry: {
+              x: Math.min(start.x, end.x),
+              y: Math.min(start.y, end.y),
+              w,
+              h,
+            },
+            source: 'drag',
+          });
+        }
+      } else {
+        // คลิก (ไม่ลาก): โดน member เดิม → toggle · ว่าง → OCR อ่านป้าย
+        const hit = findMemberAt(det.getForPage(page.id), end);
+        if (hit) {
+          det.toggleSelect(hit.id);
+        } else {
+          const bitmap = page.bitmap;
+          if (!bitmap) {
+            det.setPaintError('ยังไม่มี bitmap ของหน้านี้');
+          } else {
+            // marker เล็กที่จุดคลิก (~28 screen px) — เก็บเป็น page-px
+            const sizePage = 28 / transformZoom;
+            const geom = {
+              x: end.x - sizePage / 2,
+              y: end.y - sizePage / 2,
+              w: sizePage,
+              h: sizePage,
+            };
+            const pageW = page.pageWidth;
+            const pageH = page.pageHeight;
+            const pid = page.id;
+            void (async () => {
+              det.setOcr(
+                true,
+                isOcrReady() ? 'กำลังอ่านป้าย…' : 'กำลังโหลดตัวอ่านป้าย…',
+              );
+              try {
+                const raw = await ocrAt(bitmap, end, {
+                  pageWidth: pageW,
+                  pageHeight: pageH,
+                });
+                const marks = parseMarks(raw);
+                const mk = marks.join(',');
+                const id = det.addMember({
+                  pageId: pid,
+                  mark: mk,
+                  category: categoryForMark(mk),
+                  geometry: geom,
+                  source: 'pick',
+                  status: 'draft',
+                });
+                det.setSelection([id]);
+                if (mk === '') {
+                  det.setPaintError('อ่านป้ายไม่ออก — พิมพ์รหัสเองในช่องชื่อ');
+                }
+              } catch (err) {
+                console.error('[labelOcr] error:', err);
+                det.setPaintError('อ่านป้ายไม่สำเร็จ — ดู console');
+              } finally {
+                det.setOcr(false, null);
+              }
+            })();
+          }
+        }
+      }
+    }
+
     dragState.current = null;
     if (stageRef.current) {
       stageRef.current.container().style.cursor = 'default';
     }
-  }, [stageRef]);
+  }, [page, transformZoom, stageRef]);
 
   const handleMouseLeave = useCallback(() => {
     dragState.current = null;
+    paintDrag.current = null;
     setCurrentSnap(null);
     useCursorStore.getState().clear();
+    useDetectionStore.getState().setHovered(null);
     useToolStore.getState().setCursorPagePoint(null);
     if (stageRef.current) {
       stageRef.current.container().style.cursor = 'default';
@@ -375,6 +495,9 @@ export function useCanvasInteraction(
   const cancelDraftAction = useCallback(() => {
     useToolStore.getState().clearDraft();
     setScaleDialog(null);
+    const det = useDetectionStore.getState();
+    det.clearSelection();
+    det.setHovered(null);
   }, []);
 
   const closeScaleDialog = useCallback(() => {

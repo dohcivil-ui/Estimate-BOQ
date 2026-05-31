@@ -5,36 +5,40 @@
  *   (ไม่อ้าง import.meta.env.VITE_*_API_KEY → ไม่รั่วเข้า bundle)
  *
  * แต่ละ engine map → { provider, model } ส่งเข้า edge ทุกครั้ง
- *   (env บน edge เป็นแค่ fallback ถ้า body ไม่ส่ง model)
+ *   routing: claude → Anthropic API ตรง (provider:'anthropic')
+ *            ที่เหลือ → OpenRouter (provider:'openrouter')
  *
- *   Claude          → anthropic  / claude-opus-4-6           (แม่นสุด — accuracy)
- *   Gemini 2.5 Pro  → openrouter / google/gemini-2.5-pro     (สำรองความแม่น)
- *   Gemini 2.5 Flash→ openrouter / google/gemini-2.5-flash   (เร็ว/ถูก)
- *   Perceptron Mk1  → openrouter / perceptron/perceptron-mk1 (คืน bounding box, ctx 33K)
+ * 4 ปุ่ม (เรียงซ้าย→ขวา): Claude · 3.1 Pro · 3.5 Flash · Flash
+ *   Claude  (claude)  → anthropic  / claude-opus-4-6           — deep audit (tested)
+ *   3.1 Pro (pro31)   → openrouter / gemini-3.1-pro-preview    — frontier Pro (tested)
+ *   3.5 Flash(flash35)→ openrouter / gemini-3.5-flash          — QA (tested)
+ *   Flash   (flash30) → openrouter / gemini-3-flash-preview    — daily (default, tested)
  *
- * ถอดออกแล้ว (เทสต์นับไม่แม่น):
- *   GPT-5.4      → 10/12 subtract trap
- *   GPT-4.1 Mini → กุมิติ (อันตรายกับ BOQ)
+ * ⚠️ pin Claude = claude-opus-4-6 — 4.7/4.8 regress บน grid count (อย่าอัป)
  */
 
 export type AIProvider = 'anthropic' | 'openrouter';
 
 export type AIEngine =
   | 'claude'
-  | 'gemini-pro'
-  | 'gemini-flash'
-  | 'perceptron';
+  | 'pro31'
+  | 'flash35'
+  | 'flash30';
 
 export interface AIEngineConfig {
   id: AIEngine;
   label: string;
-  /** short label สำหรับ UI selector (เช่น "Claude", "Pro", "Flash") */
+  /** short label สำหรับ UI selector */
   shortLabel: string;
   icon: string;
-  /** provider ฝั่ง edge */
+  /** provider ฝั่ง edge — 'anthropic' = ยิงตรง · 'openrouter' = ผ่าน OpenRouter */
   provider: AIProvider;
   /** model string ส่งเข้า edge (override env บน edge) */
   model: string;
+  /** บทบาทของ engine (deep audit / frontier Pro / QA / daily) */
+  role: string;
+  /** ทดสอบความแม่นแล้วหรือยัง — false → UI เตือน "ตรวจ count เอง" */
+  tested: boolean;
   maxImageDim: number;
   maxImageDimHD: number;
   imageQuality: number;
@@ -46,49 +50,58 @@ const COMMON_IMAGE = {
   maxImageDim: 3000,
   maxImageDimHD: 4000,
   imageQuality: 0.85,
-  refImageDim: 1500,
-  refImageQuality: 0.8,
+  // ⬆️ ref ต้องคมพอจะอ่านตาราง schedule (S2-02/04) ไม่งั้น AI ตอบ "ไม่มี Detail"
+  refImageDim: 2200,
+  refImageQuality: 0.85,
 } as const;
 
 const ENGINE_CONFIGS: Record<AIEngine, AIEngineConfig> = {
   claude: {
     id: 'claude',
-    label: 'Claude Opus 4.6',
+    label: 'Claude',
     shortLabel: 'Claude',
     icon: '🟠',
     provider: 'anthropic',
-    // pin 4-6 — 4.7/4.8 regress บน grid count (subtract trap) ทดสอบแล้ว 2 รอบ/ตัว
+    // ⚠️ pin 4.6 — 4.7/4.8 regress บน grid count (นับฐานจากกริด)
     model: 'claude-opus-4-6',
+    role: 'deep audit',
+    tested: true,
     ...COMMON_IMAGE,
   },
-  'gemini-pro': {
-    id: 'gemini-pro',
-    label: 'Gemini 2.5 Pro',
-    shortLabel: 'Pro',
+  pro31: {
+    id: 'pro31',
+    label: '3.1 Pro',
+    shortLabel: '3.1 Pro',
     icon: '💎',
     provider: 'openrouter',
-    model: 'google/gemini-2.5-pro',
+    // frontier Pro — เกรดผ่านแล้ว (มัก note GS/PS ให้ด้วย)
+    model: 'google/gemini-3.1-pro-preview',
+    role: 'frontier Pro',
+    tested: true,
     ...COMMON_IMAGE,
   },
-  'gemini-flash': {
-    id: 'gemini-flash',
-    label: 'Gemini 2.5 Flash',
+  flash35: {
+    id: 'flash35',
+    label: '3.5 Flash',
+    shortLabel: '3.5 Flash',
+    icon: '🔷',
+    provider: 'openrouter',
+    // QA pass — ทวนผล/ตรวจซ้ำ
+    model: 'google/gemini-3.5-flash',
+    role: 'QA',
+    tested: true,
+    ...COMMON_IMAGE,
+  },
+  flash30: {
+    id: 'flash30',
+    label: 'Flash',
     shortLabel: 'Flash',
     icon: '⚡',
     provider: 'openrouter',
-    model: 'google/gemini-2.5-flash',
-    ...COMMON_IMAGE,
-  },
-  perceptron: {
-    id: 'perceptron',
-    label: 'Perceptron Mk1',
-    shortLabel: 'Box',
-    icon: '📦',
-    provider: 'openrouter',
-    // purpose-built OCR/counting/spatial — คืน bounding box ต่อ object
-    // annotation_format:"box" ใส่ที่ edge (เป็น request param ไม่ใช่ config)
-    // ⚠️ ctx 33K → prompt สั้น; ถูก+เร็ว ($0.0018/รอบ ~10s); ไม่ติด subtract trap
-    model: 'perceptron/perceptron-mk1',
+    // daily driver (default) — ถอดมิติ/เหล็กจาก schedule
+    model: 'google/gemini-3-flash-preview',
+    role: 'daily',
+    tested: true,
     ...COMMON_IMAGE,
   },
 };
@@ -97,12 +110,12 @@ export function getEngineConfig(engine: AIEngine): AIEngineConfig {
   return ENGINE_CONFIGS[engine];
 }
 
-/** ลำดับ default — claude > gemini-pro > gemini-flash > perceptron */
+/** ลำดับซ้าย→ขวา ใน UI: Claude · 3.1 Pro · 3.5 Flash · Flash */
 const ENGINE_PRIORITY: AIEngine[] = [
   'claude',
-  'gemini-pro',
-  'gemini-flash',
-  'perceptron',
+  'pro31',
+  'flash35',
+  'flash30',
 ];
 
 /**
@@ -114,7 +127,7 @@ export function getAvailableEngines(): AIEngine[] {
 }
 
 export function getDefaultEngine(): AIEngine {
-  return 'claude';
+  return 'flash30';
 }
 
 export function getEngineShortLabel(engine: AIEngine): string {
@@ -126,26 +139,32 @@ export function getEngineShortLabel(engine: AIEngine): string {
 export function isAIEngine(value: unknown): value is AIEngine {
   return (
     value === 'claude' ||
-    value === 'gemini-pro' ||
-    value === 'gemini-flash' ||
-    value === 'perceptron'
+    value === 'pro31' ||
+    value === 'flash35' ||
+    value === 'flash30'
   );
 }
 
 /**
  * Migrate engine id เก่า → ใหม่
- *  - 'anthropic-opus' (รวมเข้า claude)             → 'claude'
- *  - 'qwen'           (เลิกใช้)                     → 'claude'
- *  - 'gemini'         (เดิมเป็น Flash)              → 'gemini-flash'
- *  - GPT ทุกตัว (gpt4o/gpt41/gpt54 — ถอดออก)       → 'claude'
- *  - GPT mini ทุกตัว (gpt5mini/gpt41mini — ถอดออก) → 'gemini-flash'
+ *  - 'gemini-flash' / 'gemini' / 'gemini-3-flash'   → 'flash30' (daily, default)
+ *  - 'gemini-pro' / 'gemini-2.5-pro'                → 'flash35' (QA)
+ *  - 'perceptron' / 'anthropic-opus' / 'qwen'       → 'claude'
+ *  - GPT ทุกตัว (gpt4o/gpt41/gpt54/gpt5mini/gpt41mini — ถอดออก) → 'claude'
  *  คืน null ถ้า value ไม่ใช่ id เก่าที่ต้อง migrate
  */
 export function migrateLegacyEngineId(value: unknown): AIEngine | null {
-  if (value === 'anthropic-opus') return 'claude';
-  if (value === 'qwen') return 'claude';
-  if (value === 'gemini') return 'gemini-flash';
-  if (value === 'gpt4o' || value === 'gpt41' || value === 'gpt54') return 'claude';
-  if (value === 'gpt5mini' || value === 'gpt41mini') return 'gemini-flash';
+  if (
+    value === 'gemini-flash' ||
+    value === 'gemini' ||
+    value === 'gemini-3-flash'
+  )
+    return 'flash30';
+  if (value === 'gemini-pro' || value === 'gemini-2.5-pro') return 'flash35';
+  if (value === 'perceptron' || value === 'anthropic-opus' || value === 'qwen')
+    return 'claude';
+  if (value === 'gpt4o' || value === 'gpt41' || value === 'gpt54')
+    return 'claude';
+  if (value === 'gpt5mini' || value === 'gpt41mini') return 'claude';
   return null;
 }

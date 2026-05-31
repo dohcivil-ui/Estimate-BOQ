@@ -494,10 +494,11 @@ export function buildAnalyzeMessages(
     image_url: { url: targetImageDataUrl },
   });
 
+  const totalImages = references.length + 1;
   const finalText =
     baseUserText +
     (references.length > 0
-      ? '\n\n⚠️ สำคัญ: ใช้ข้อมูลจากหน้าอ้างอิง (รายการวัสดุ/สัญลักษณ์) ที่ส่งมาด้านบน อย่าเดาชนิดวัสดุเอง — ถ้าสัญลักษณ์ไหนไม่มีในรายการอ้างอิง ให้ใส่ใน unreadable[] พร้อมระบุว่า "ไม่พบในรายการอ้างอิง — ต้องยืนยัน"'
+      ? `\n\n⚠️ สำคัญ — ลำดับภาพที่แนบมา (${totalImages} ใบ): ภาพที่ 1–${references.length} = "หน้าอ้างอิง/Detail" (เช่น Footing Schedule, Column Schedule, รายการวัสดุ) · ภาพสุดท้าย (ใบที่ ${totalImages}) = "หน้าหลักที่ต้องวิเคราะห์". อ่านมิติ/เหล็ก/สัญลักษณ์จากหน้าอ้างอิงมาประกอบ — มี Detail ครบในภาพอ้างอิงแล้ว อย่าตอบว่า "ไม่มี Detail". ถ้าสัญลักษณ์ไหนไม่มีในรายการอ้างอิงจริง ให้ใส่ใน unreadable[] พร้อมระบุว่า "ไม่พบในรายการอ้างอิง — ต้องยืนยัน"`
       : '');
   userContent.push({ type: 'text', text: finalText });
 
@@ -589,6 +590,11 @@ export async function callAI(
   if (images.length === 0) {
     throw new Error('ไม่มีภาพแบบส่งไป AI');
   }
+
+  // ── ยืนยันก่อนส่ง edge: ภาพทั้งหมด = N (อ้างอิงมาก่อน + หน้าหลักท้ายสุด) ──
+  console.info(
+    `[ai] → ${config.provider}/${config.model} | images=${images.length} | system=${system.length}ch | prompt=${prompt.length}ch`,
+  );
 
   options.onProgress?.('🤖 กำลังส่งให้ AI…');
 

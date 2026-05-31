@@ -1,0 +1,58 @@
+/**
+ * consumables.ts — วัสดุสิ้นเปลืองที่ผูกกับปริมาณงานหลัก (deterministic)
+ * --------------------------------------------------------------------------
+ * core compute (footing/beam/slab) คิดเฉพาะปริมาณหลัก (คอนกรีต/เหล็ก/ไม้แบบ/ดิน)
+ * โมดูลนี้เติม "ของพ่วง" ที่อิงปริมาณหลัก:
+ *   - ลวดผูกเหล็ก  ∝ น้ำหนักเหล็ก
+ *   - ตะปู         ∝ พื้นที่ไม้แบบ
+ *   - ไม้คร่า/ตงยึดแบบ (waler) ∝ พื้นที่ไม้แบบ
+ *
+ * อัตราส่วนทั้งหมดอยู่ใน CONSUMABLE_RATIOS ที่เดียว (กฎ centralized — แก้ที่เดียว)
+ * pure module: ไม่มี dependency กับ store/supabase/react
+ */
+
+/** อัตราส่วนวัสดุสิ้นเปลือง — config เดียว แก้ที่เดียว (ค่าโดยประมาณ — estimated) */
+export interface ConsumableRatios {
+  /** ลวดผูก = น้ำหนักเหล็ก × tieWirePct (1% โดยประมาณ) */
+  tieWirePct: number;
+  /** ตะปู = พื้นที่ไม้แบบ × nailsPerM2 (กก./ตร.ม.) */
+  nailsPerM2: number;
+  /** ไม้คร่า/ตงยึดแบบ = พื้นที่ไม้แบบ × walerFactor (ม./ตร.ม.) — ตั้งค่าได้ */
+  walerFactor: number;
+}
+
+export const CONSUMABLE_RATIOS: ConsumableRatios = {
+  tieWirePct: 0.01,
+  nailsPerM2: 0.3,
+  walerFactor: 0.5,
+};
+
+/** ปริมาณหลักที่ใช้ derive ของสิ้นเปลือง */
+export interface ConsumableTotals {
+  rebar_kg: number;
+  formwork_m2: number;
+}
+
+export interface ConsumableQty {
+  tieWire_kg: number; // ลวดผูกเหล็ก (กก.)
+  nails_kg: number; // ตะปู (กก.)
+  waler_m: number; // ไม้คร่า/ตงยึดแบบ (ม.)
+}
+
+const round1 = (x: number): number => +x.toFixed(1);
+
+/**
+ * คำนวณวัสดุสิ้นเปลืองจากปริมาณหลัก
+ * @param totals  ปริมาณเหล็ก/ไม้แบบรวม
+ * @param ratios  อัตราส่วน (default = CONSUMABLE_RATIOS)
+ */
+export function computeConsumables(
+  totals: ConsumableTotals,
+  ratios: ConsumableRatios = CONSUMABLE_RATIOS,
+): ConsumableQty {
+  return {
+    tieWire_kg: round1(totals.rebar_kg * ratios.tieWirePct),
+    nails_kg: round1(totals.formwork_m2 * ratios.nailsPerM2),
+    waler_m: round1(totals.formwork_m2 * ratios.walerFactor),
+  };
+}

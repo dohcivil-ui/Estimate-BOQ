@@ -3,7 +3,7 @@
  */
 import { create } from 'zustand';
 
-export type SidePanelTab = 'measure' | 'ai' | 'boq' | 'tools';
+export type SidePanelTab = 'measure' | 'ai' | 'boq' | 'paint' | 'tools';
 
 interface UIState {
   sidePanelTab: SidePanelTab;

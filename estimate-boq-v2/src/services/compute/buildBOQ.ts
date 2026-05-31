@@ -1,0 +1,318 @@
+/**
+ * buildBOQ.ts — ประกอบ BOQ rows (deterministic) จากผล AI extract
+ * --------------------------------------------------------------------------
+ * pipeline:  AI extract (items[])
+ *              → boqAdapter.buildSpecs  → FootingSpec[] / BeamSpec[] / SlabSpec[]
+ *              → footingCompute/beamCompute/computeSlab  (ปริมาณ deterministic)
+ *              → AIItem[] (sub_items = วัสดุ+ค่าแรง) → importItemsToBoq
+ *
+ * หลักการ (Golden Rule): "ตัวเลขใน BOQ มาจาก compute layer ไม่ใช่ AI"
+ *   - AI ให้แค่ count + มิติ + เหล็ก (ผ่าน boqAdapter)
+ *   - ปริมาตร/พื้นที่/น้ำหนักเหล็ก/งานดิน คำนวณที่นี่ → reproduce ได้
+ *
+ * วัสดุสิ้นเปลือง (consumables) ที่ core ไม่ได้คิด เติมในชั้นนี้:
+ *   - ลวดผูกเหล็ก ≈ 1.5% ของน้ำหนักเหล็ก (โดยประมาณ — estimated)
+ *   - ตะปู ≈ 0.20 กก./ตร.ม. ไม้แบบ (โดยประมาณ — estimated)
+ *
+ * pure module: ไม่มี dependency กับ store/supabase/react
+ */
+import type { AIItem, AIMaterial } from '@/types/ai';
+import { buildSpecs } from './boqAdapter.ts';
+import {
+  computeFooting,
+  type FootingQty,
+  type PriceKey,
+  type UnitPrice,
+} from './footingCompute.ts';
+import { computeBeam, computeSlab, type BeamQty, type SlabQty } from './beamCompute.ts';
+import { computeConsumables } from './consumables.ts';
+import { splitMarks, categoryForMark } from '../markParse.ts';
+
+/** RFI flags — ข้อสมมุติที่ต้องให้คนยืนยัน (ติดมากับทุก build) */
+const FIXED_RFI: string[] = [
+  '⚠️ ตอม่อ: สมมุติปลอก RB6 — ถ้าแบบระบุ RB9 ต้องแก้ (S2-04)',
+  '⚠️ พื้น: แยก GS (slab on grade) vs PS (post-tension/แขวน) ยังไม่ชัด — ยืนยันชนิด',
+  '⚠️ ทรายรองพื้น: ใช้ค่า default 0.05 ม. — ถ้าแบบระบุ 0.10 ม. ต้องแก้',
+  '⚠️ เหล็กยืนตอม่อ: เผื่อทาบ/ฝัง (dowel-lap) default 0.40 ม. (~40db) ถ้า S2-04 ไม่ระบุ lap',
+];
+
+// ─────────────────────────────────────────────────────────────
+// helper สร้าง sub_item (1 บรรทัดวัสดุ/ค่าแรง)
+// ─────────────────────────────────────────────────────────────
+function sub(
+  name: string,
+  qty: number,
+  unit: string,
+  kind: 'material' | 'labor',
+  unitPrice = 0,
+): AIMaterial {
+  return {
+    name,
+    qty,
+    total_qty: qty,
+    unit,
+    unit_price: unitPrice,
+    kind,
+  };
+}
+
+/** ดึงราคาวัสดุ/ค่าแรงจากตาราง (ถ้ามี) */
+function rate(
+  prices: Partial<Record<PriceKey, UnitPrice>> | undefined,
+  key: PriceKey,
+): UnitPrice {
+  return prices?.[key] ?? { material: 0, labor: 0 };
+}
+
+// ─────────────────────────────────────────────────────────────
+// ฐานราก: FootingQty → AIItem (sub_items ครบ)
+// ─────────────────────────────────────────────────────────────
+function footingToItem(
+  q: FootingQty,
+  prices: Partial<Record<PriceKey, UnitPrice>> | undefined,
+): AIItem {
+  const subs: AIMaterial[] = [];
+
+  const concrete = rate(prices, 'concrete_m3');
+  const sand = rate(prices, 'sand_m3');
+  const lean = rate(prices, 'lean_m3');
+  const formwork = rate(prices, 'formwork_m2');
+  const rebar = rate(prices, 'rebar_kg');
+  const excav = rate(prices, 'excavation_m3');
+  const backfill = rate(prices, 'backfill_m3');
+
+  // คอนกรีตฐาน (วัสดุ + ค่าเท)
+  if (q.concrete_m3 > 0) {
+    subs.push(sub('คอนกรีตฐานราก', q.concrete_m3, 'ลบ.ม.', 'material', concrete.material));
+    if (concrete.labor > 0)
+      subs.push(sub('ค่าเทคอนกรีตฐาน', q.concrete_m3, 'ลบ.ม.', 'labor', concrete.labor));
+  }
+  // คอนกรีตตอม่อ
+  if (q.ped_concrete_m3 > 0) {
+    subs.push(
+      sub('คอนกรีตตอม่อ', q.ped_concrete_m3, 'ลบ.ม.', 'material', concrete.material),
+    );
+    if (concrete.labor > 0)
+      subs.push(sub('ค่าเทคอนกรีตตอม่อ', q.ped_concrete_m3, 'ลบ.ม.', 'labor', concrete.labor));
+  }
+  // ทรายรองพื้น
+  if (q.sand_m3 > 0)
+    subs.push(sub('ทรายหยาบรองพื้น', q.sand_m3, 'ลบ.ม.', 'material', sand.material));
+  // คอนกรีตหยาบ (lean)
+  if (q.lean_m3 > 0)
+    subs.push(sub('คอนกรีตหยาบรองก้นหลุม', q.lean_m3, 'ลบ.ม.', 'material', lean.material));
+  // ไม้แบบ (ฐาน + ตอม่อ)
+  const formwork_m2 = q.formwork_m2 + q.ped_formwork_m2;
+  if (formwork_m2 > 0) {
+    subs.push(sub('ไม้แบบหล่อคอนกรีต', formwork_m2, 'ตร.ม.', 'material', formwork.material));
+    if (formwork.labor > 0)
+      subs.push(sub('ค่าประกอบไม้แบบ', formwork_m2, 'ตร.ม.', 'labor', formwork.labor));
+  }
+  // เหล็กเสริม — แยกตามขนาด (สั่งของ/ตัดเหล็ก)
+  for (const [size, kg] of Object.entries(q.rebar_breakdown)) {
+    if (kg > 0)
+      subs.push(sub(`เหล็กเสริม ${size}`, kg, 'กก.', 'material', rebar.material));
+  }
+  if (rebar.labor > 0 && q.rebar_kg > 0)
+    subs.push(sub('ค่าผูก/ตัด/ดัดเหล็ก', q.rebar_kg, 'กก.', 'labor', rebar.labor));
+  // งานดิน (ค่าแรง)
+  if (q.excavation_m3 > 0)
+    subs.push(sub('ดินขุดหลุมฐานราก', q.excavation_m3, 'ลบ.ม.', 'labor', excav.labor));
+  if (q.backfill_m3 > 0)
+    subs.push(sub('ดินถมกลับ', q.backfill_m3, 'ลบ.ม.', 'labor', backfill.labor));
+
+  // ── consumables (estimated — อัตราส่วนจาก CONSUMABLE_RATIOS) ──
+  const con = computeConsumables({ rebar_kg: q.rebar_kg, formwork_m2 });
+  if (con.tieWire_kg > 0)
+    subs.push(sub('ลวดผูกเหล็ก', con.tieWire_kg, 'กก.', 'material'));
+  if (con.nails_kg > 0) subs.push(sub('ตะปู', con.nails_kg, 'กก.', 'material'));
+  if (con.waler_m > 0)
+    subs.push(sub('ไม้คร่า/ตงยึดไม้แบบ', con.waler_m, 'ม.', 'material'));
+
+  return {
+    category: 'ฐานราก',
+    name: `${q.type} ฐานราก (${q.count} ฐาน)`,
+    quantity: q.count,
+    unit: 'ฐาน',
+    source: 'คำนวณ',
+    confidence: 'calculated',
+    sub_items: subs,
+    notes: q.warnings.length > 0 ? q.warnings.join(' · ') : undefined,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────
+// คาน: BeamQty → AIItem
+// ─────────────────────────────────────────────────────────────
+function beamToItem(
+  q: BeamQty,
+  prices: Partial<Record<PriceKey, UnitPrice>> | undefined,
+): AIItem {
+  const subs: AIMaterial[] = [];
+  const concrete = rate(prices, 'concrete_m3');
+  const formwork = rate(prices, 'formwork_m2');
+  const rebar = rate(prices, 'rebar_kg');
+
+  if (q.concrete_m3 > 0)
+    subs.push(sub('คอนกรีตคาน', q.concrete_m3, 'ลบ.ม.', 'material', concrete.material));
+  if (q.formwork_m2 > 0)
+    subs.push(sub('ไม้แบบคาน', q.formwork_m2, 'ตร.ม.', 'material', formwork.material));
+  for (const [size, kg] of Object.entries(q.rebar_breakdown)) {
+    if (kg > 0)
+      subs.push(sub(`เหล็กเสริม ${size}`, kg, 'กก.', 'material', rebar.material));
+  }
+  const con = computeConsumables({ rebar_kg: q.rebar_kg, formwork_m2: q.formwork_m2 });
+  if (con.tieWire_kg > 0)
+    subs.push(sub('ลวดผูกเหล็ก', con.tieWire_kg, 'กก.', 'material'));
+  if (con.nails_kg > 0) subs.push(sub('ตะปู', con.nails_kg, 'กก.', 'material'));
+  if (con.waler_m > 0)
+    subs.push(sub('ไม้คร่า/ตงยึดไม้แบบ', con.waler_m, 'ม.', 'material'));
+
+  return {
+    category: 'งานคาน',
+    name: `${q.type} คาน (${q.pieces_total} ตัว · ${q.length_total_m} ม.)`,
+    quantity: q.pieces_total,
+    unit: 'ตัว',
+    source: 'คำนวณ',
+    confidence: 'calculated',
+    sub_items: subs,
+    notes: q.warnings.length > 0 ? q.warnings.join(' · ') : undefined,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────
+// พื้น: SlabQty → AIItem
+// ─────────────────────────────────────────────────────────────
+function slabToItem(
+  q: SlabQty,
+  prices: Partial<Record<PriceKey, UnitPrice>> | undefined,
+): AIItem {
+  const subs: AIMaterial[] = [];
+  const concrete = rate(prices, 'concrete_m3');
+  const sand = rate(prices, 'sand_m3');
+  const rebar = rate(prices, 'rebar_kg');
+
+  if (q.concrete_m3 > 0)
+    subs.push(sub('คอนกรีตพื้น', q.concrete_m3, 'ลบ.ม.', 'material', concrete.material));
+  if (q.sand_m3 > 0)
+    subs.push(sub('ทรายหยาบรองพื้น', q.sand_m3, 'ลบ.ม.', 'material', sand.material));
+  if (q.mesh_kg > 0)
+    subs.push(sub('ตะแกรงเหล็ก (wire mesh)', q.mesh_kg, 'กก.', 'material', rebar.material));
+
+  return {
+    category: 'งานพื้น',
+    name: `${q.name} พื้น`,
+    quantity: 1,
+    unit: 'รายการ',
+    source: 'คำนวณ',
+    confidence: 'calculated',
+    sub_items: subs,
+    notes: q.warnings.length > 0 ? q.warnings.join(' · ') : undefined,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────
+// MAIN
+// ─────────────────────────────────────────────────────────────
+/** member ที่ติดป้าย/ยืนยันบน canvas — ใช้ override จำนวนฐานตาม mark (structural subset) */
+export interface MemberCountInput {
+  /** รหัส — อาจประกอบ "F2,C2" (split เป็น token นับฐาน/เสาแยก) */
+  mark: string;
+  status: 'draft' | 'confirmed';
+}
+
+export interface BuildBOQOptions {
+  /** ผล AI extract (analysis.result.items) */
+  extract: AIItem[];
+  /**
+   * ตารางราคา (optional) — unit_price เป็น "ราคาดิบ" (วัสดุ/ค่าแรง) ก่อน Factor F
+   * ⚠️ ห้าม bake Factor F ลง row ที่นี่ — Factor F คิดครั้งเดียวที่ยอดรวม BOQ
+   *    ผ่าน effectiveFactorF() (core/boqCalc) เพื่อกัน double-apply (ห้าม hardcode)
+   * ถ้าไม่ส่ง prices → unit_price = 0 (ปริมาณยังถูกต้อง เติมราคาทีหลังได้)
+   */
+  prices?: Partial<Record<PriceKey, UnitPrice>>;
+  /**
+   * ชิ้นงานที่ระบายบน canvas (optional) — ถ้าส่งมา:
+   *   - จำนวนฐานต่อ mark = นับจาก member (override count จาก AI extract)
+   *   - member ที่ยัง draft → warning "ยังไม่ตรวจ N ชิ้น"
+   */
+  members?: MemberCountInput[];
+}
+
+/**
+ * นับ member ต่อ mark — ฐาน/เสานับแยก category (กัน mark ชนกันข้ามหมวด)
+ *  + จำนวน draft รวมทุกหมวด (ไว้เตือน "ยังไม่ยืนยัน")
+ */
+function tallyMembers(members: MemberCountInput[]): {
+  footingByMark: Map<string, number>;
+  columnByMark: Map<string, number>;
+  draftTotal: number;
+} {
+  const footingByMark = new Map<string, number>();
+  const columnByMark = new Map<string, number>();
+  let draftTotal = 0;
+  for (const m of members) {
+    // รหัสประกอบ "F2,C2" → นับ F2 เป็นฐาน + C2 เป็นเสา แยก token
+    for (const token of splitMarks(m.mark)) {
+      const cat = categoryForMark(token);
+      if (cat === 'footing') {
+        footingByMark.set(token, (footingByMark.get(token) ?? 0) + 1);
+      } else if (cat === 'column') {
+        columnByMark.set(token, (columnByMark.get(token) ?? 0) + 1);
+      }
+    }
+    if (m.status === 'draft') draftTotal += 1;
+  }
+  return { footingByMark, columnByMark, draftTotal };
+}
+
+export interface BuildBOQResult {
+  /** AIItem[] พร้อม import เข้า BOQ (sub_items = วัสดุ+ค่าแรง) */
+  items: AIItem[];
+  /** ❓/⚠️ ที่ต้องให้คนยืนยัน (adapter + compute + RFI) */
+  warnings: string[];
+}
+
+export function buildBOQ(opts: BuildBOQOptions): BuildBOQResult {
+  const specs = buildSpecs({ extract: opts.extract ?? [] });
+  const warnings: string[] = [...specs.warnings];
+  const items: AIItem[] = [];
+
+  // override จำนวนฐานตามที่ระบาย/ยืนยันบน canvas (ถ้ามี)
+  const tally = opts.members ? tallyMembers(opts.members) : null;
+
+  for (const f of specs.footings) {
+    const marked = tally?.footingByMark.get(f.type.trim().toUpperCase());
+    const spec =
+      marked != null && marked > 0 && marked !== f.count
+        ? { ...f, count: marked }
+        : f;
+    if (marked != null && marked > 0 && marked !== f.count) {
+      warnings.push(
+        `ℹ️ ${f.type}: ใช้จำนวนจากการระบายบนแบบ (${marked} ฐาน) แทนค่า AI (${f.count})`,
+      );
+    }
+    const q = computeFooting(spec);
+    warnings.push(...q.warnings);
+    items.push(footingToItem(q, opts.prices));
+  }
+  for (const b of specs.beams) {
+    const q = computeBeam(b);
+    warnings.push(...q.warnings);
+    items.push(beamToItem(q, opts.prices));
+  }
+  for (const s of specs.slabs) {
+    const q = computeSlab(s);
+    warnings.push(...q.warnings);
+    items.push(slabToItem(q, opts.prices));
+  }
+
+  if (tally && tally.draftTotal > 0) {
+    warnings.push(
+      `❓ ยังไม่ตรวจ ${tally.draftTotal} ชิ้น (ระบายบนแบบแล้วแต่ยังไม่ยืนยัน) — ยืนยันก่อนสรุป BOQ`,
+    );
+  }
+
+  warnings.push(...FIXED_RFI);
+  return { items, warnings };
+}

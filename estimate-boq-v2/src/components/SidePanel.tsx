@@ -8,11 +8,14 @@ import { RotateControls } from './RotateControls';
 import { SnapControls } from './SnapControls';
 import { BOQPanel } from './boq/BOQPanel';
 import { AIPanel } from './ai/AIPanel';
+import { PaintPanel } from './PaintPanel';
+import { DevPdfProbe } from './DevPdfProbe';
 
 const TABS: { id: SidePanelTab; label: string }[] = [
   { id: 'measure', label: '📋 วัด' },
   { id: 'ai', label: '🤖 AI' },
   { id: 'boq', label: '💰 BOQ' },
+  { id: 'paint', label: '🎨 ระบาย' },
   { id: 'tools', label: '🛠️ tools' },
 ];
 
@@ -43,11 +46,15 @@ export function SidePanel() {
         {tab === 'measure' && <MeasurementsTable />}
         {tab === 'ai' && <AIPanel />}
         {tab === 'boq' && <BOQPanel />}
+        {tab === 'paint' && <PaintPanel />}
         {tab === 'tools' && (
           <div className="space-y-5">
             <RotateControls />
             <div className="border-t border-bg-border pt-3">
               <SnapControls />
+            </div>
+            <div className="border-t border-bg-border pt-3">
+              <DevPdfProbe />
             </div>
             <div className="border-t border-bg-border pt-3 text-[11px] text-ink-muted">
               <p className="mb-1 font-semibold text-ink-secondary">⌨️ คีย์ลัด</p>

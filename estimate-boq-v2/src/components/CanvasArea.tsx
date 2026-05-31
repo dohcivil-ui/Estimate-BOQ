@@ -103,6 +103,7 @@ export function CanvasArea() {
       scale: 'crosshair',
       length: 'crosshair',
       area: 'crosshair',
+      paint: 'crosshair',
     };
     c.style.cursor = CURSORS[activeTool] ?? 'default';
   }, [activeTool, page]);
@@ -133,6 +134,7 @@ export function CanvasArea() {
             spacingPage={gridSpacingPage}
           />
           <MeasurementsLayer measurements={measurements} transform={transform} />
+          <DetectionLayer pageId={page.id} transform={transform} />
           <DraftLayer
             tool={activeTool}
             draftPoints={draftPoints}
@@ -140,7 +142,6 @@ export function CanvasArea() {
             transform={transform}
             unitPerPixel={scale?.unitPerPixel ?? null}
           />
-          <DetectionLayer transform={transform} />
           <SnapHud
             snap={interaction.currentSnap}
             transform={transform}

@@ -28,7 +28,7 @@ function loadEngine(): AIEngine {
   if (typeof window === 'undefined') return getDefaultEngine();
   const raw = window.localStorage.getItem(ENGINE_STORAGE_KEY);
   if (isAIEngine(raw)) return raw;
-  // migrate id เก่า เช่น 'gemini' → 'gemini-flash'
+  // migrate id เก่า เช่น 'gemini-flash' → 'flash30'
   const migrated = migrateLegacyEngineId(raw);
   if (migrated) {
     try {

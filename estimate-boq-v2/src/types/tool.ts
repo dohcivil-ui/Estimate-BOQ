@@ -5,7 +5,8 @@ export type Tool =
   | 'scale'    // ตั้งสเกล (คลิก 2 จุด)
   | 'length'   // วัดความยาว (polyline)
   | 'area'     // วัดพื้นที่ (polygon)
-  | 'count';   // นับจำนวน (marker)
+  | 'count'    // นับจำนวน (marker)
+  | 'paint';   // ระบายหมวดงาน (ไฮไลต์ชิ้นงาน BOQ บนแบบ)
 
 /** เครื่องมือที่ "วาด" — ต้องการ scale ตั้งก่อน */
 export const DRAWING_TOOLS: ReadonlyArray<Tool> = [
@@ -25,6 +26,7 @@ export const TOOL_LABELS: Record<Tool, string> = {
   length: '📏 ความยาว',
   area: '⬡ พื้นที่',
   count: '🔢 นับจำนวน',
+  paint: '🎨 ระบายงาน',
 };
 
 export const TOOL_HOTKEYS: Record<Tool, string> = {
@@ -34,4 +36,5 @@ export const TOOL_HOTKEYS: Record<Tool, string> = {
   length: 'L',
   area: 'A',
   count: 'C',
+  paint: 'G',
 };
