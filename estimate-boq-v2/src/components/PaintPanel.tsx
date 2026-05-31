@@ -14,13 +14,13 @@ import { useActivePage } from '@/stores/drawingStore';
 import {
   useDetectionStore,
   useMembersForPage,
-  categoryForMark,
   splitMarks,
   type Member,
 } from '@/stores/detectionStore';
 import { useToolStore } from '@/stores/toolStore';
 import { useLatestAnalysisForPage } from '@/stores/aiStore';
 import { getMarkColor } from '@/services/markColors';
+import { ocrAt, parseMarks, isOcrReady } from '@/services/labelOcr';
 import type { AIItem } from '@/types/ai';
 
 const PRESET_MARKS = ['F2', 'F1', 'C2', 'C3', 'GB1', 'GB2', 'GS'];
@@ -56,9 +56,10 @@ function groupByToken(members: Member[]): MarkGroup[] {
     for (const token of splitMarks(m.mark)) {
       let g = map.get(token);
       if (!g) {
+        // สี swatch = สีของ member ตัวแรกในกลุ่มนี้ (สีอิสระจากชื่อ)
         g = {
           mark: token,
-          color: getMarkColor(token),
+          color: m.color,
           total: 0,
           confirmed: 0,
           ids: [],
@@ -88,29 +89,15 @@ function deriveExpected(items: AIItem[] | undefined): Record<string, number> {
   return out;
 }
 
-function catLabel(mark: string): string {
-  switch (categoryForMark(mark)) {
-    case 'footing':
-      return 'ฐาน (วงแหวน)';
-    case 'column':
-      return 'เสา';
-    case 'beam':
-      return 'คาน';
-    case 'slab':
-      return 'พื้น';
-    default:
-      return 'อื่น ๆ';
-  }
-}
-
 export function PaintPanel() {
   const page = useActivePage();
   const pageId = page?.id ?? null;
   const members = useMembersForPage(pageId);
 
-  const paintMark = useDetectionStore((s) => s.paintMark);
+  const paintColor = useDetectionStore((s) => s.paintColor);
+  const setPaintColor = useDetectionStore((s) => s.setPaintColor);
   const paintError = useDetectionStore((s) => s.paintError);
-  const setPaintMark = useDetectionStore((s) => s.setPaintMark);
+  const setPaintError = useDetectionStore((s) => s.setPaintError);
   const selectedIds = useDetectionStore((s) => s.selectedIds);
   const renameMark = useDetectionStore((s) => s.renameMark);
   const setColor = useDetectionStore((s) => s.setColor);
@@ -128,6 +115,10 @@ export function PaintPanel() {
   const setExpected = useDetectionStore((s) => s.setExpected);
   const ocrBusy = useDetectionStore((s) => s.ocrBusy);
   const ocrStatus = useDetectionStore((s) => s.ocrStatus);
+  const setOcr = useDetectionStore((s) => s.setOcr);
+  const stamp = useDetectionStore((s) => s.stamp);
+  const startStamp = useDetectionStore((s) => s.startStamp);
+  const stopStamp = useDetectionStore((s) => s.stopStamp);
 
   const setActiveTool = useToolStore((s) => s.setActiveTool);
   const activeTool = useToolStore((s) => s.activeTool);
@@ -135,19 +126,24 @@ export function PaintPanel() {
 
   const latest = useLatestAnalysisForPage(pageId);
 
-  const [markInput, setMarkInput] = useState('');
   const [renameInput, setRenameInput] = useState('');
 
   const groups = useMemo(() => groupByToken(members), [members]);
   const hidden = new Set(hiddenMarks);
 
-  // เลือกชิ้นเดียว → prefill ช่องชื่อด้วยรหัสปัจจุบัน (เช่นผล OCR) ให้แก้ได้
+  // เข้าแท็บ "ระบาย" → เริ่มที่โหมดติดป้าย (paint) ทันที ไม่ต้องสลับเอง
   useEffect(() => {
-    if (selectedIds.length === 1) {
-      const m = members.find((x) => x.id === selectedIds[0]);
-      setRenameInput(m?.mark ?? '');
-    }
-  }, [selectedIds, members]);
+    setActiveTool('paint');
+  }, [setActiveTool]);
+
+  // prefill ช่องชื่อ "เฉพาะตอนตัวที่เลือกเปลี่ยน" — ห้ามผูก members (ref ใหม่ทุก
+  //   render จาก .filter()) ไม่งั้น effect จะรีเซ็ตช่องทุก keystroke = พิมพ์ไม่เข้า
+  const selId = selectedIds.length === 1 ? selectedIds[0]! : null;
+  useEffect(() => {
+    if (selId == null) return;
+    const m = useDetectionStore.getState().members.find((x) => x.id === selId);
+    setRenameInput(m?.mark ?? '');
+  }, [selId]);
 
   if (!page) {
     return <p className="text-xs text-ink-muted">เปิดแบบก่อนจึงจะระบายได้</p>;
@@ -157,20 +153,44 @@ export function PaintPanel() {
     setExpected(deriveExpected(latest?.result?.items));
   };
 
-  const applyMarkInput = () => {
-    const v = markInput.trim().toUpperCase();
-    if (v) {
-      setPaintMark(v);
-      setMarkInput('');
-    }
-  };
-
   const cancelAll = () => {
     clearSelection();
     clearDraft();
   };
 
+  // ล้าง marker ทั้งหมดของหน้านี้ (รวม draft ที่ OCR เดาผิด) — undo ได้
+  const handleClearPage = () => {
+    const ids = members.map((m) => m.id);
+    if (ids.length > 0) deleteMembers(ids);
+  };
+
+  // OCR เสริม (ไม่อัตโนมัติ) — อ่านป้ายรอบ marker ที่เลือก → เติมเป็นข้อเสนอในช่องชื่อ
+  const handleTryOcr = async () => {
+    if (selectedIds.length !== 1 || !page?.bitmap) return;
+    const m = members.find((x) => x.id === selectedIds[0]);
+    if (!m?.geometry) return;
+    const center = {
+      x: m.geometry.x + m.geometry.w / 2,
+      y: m.geometry.y + m.geometry.h / 2,
+    };
+    setOcr(true, isOcrReady() ? 'กำลังอ่านป้าย…' : 'กำลังโหลดตัวอ่านป้าย…');
+    try {
+      const raw = await ocrAt(page.bitmap, center, {
+        pageWidth: page.pageWidth,
+        pageHeight: page.pageHeight,
+      });
+      setRenameInput(parseMarks(raw).join(','));
+    } catch (err) {
+      console.error('[labelOcr] error:', err);
+    } finally {
+      setOcr(false, null);
+    }
+  };
+
   const paintedPieces = members.filter((m) => m.geometry != null).length;
+  const unnamed = members.filter(
+    (m) => m.geometry != null && splitMarks(m.mark).length === 0,
+  ).length;
 
   return (
     <div className="space-y-4">
@@ -178,7 +198,10 @@ export function PaintPanel() {
       <div className="grid grid-cols-3 gap-1">
         <button
           type="button"
-          onClick={() => setActiveTool('paint')}
+          onClick={() => {
+            setActiveTool('paint');
+            setPaintError(null);
+          }}
           className={`rounded px-2 py-2 text-xs font-medium transition-colors ${
             activeTool === 'paint'
               ? 'bg-accent text-ink-inverse'
@@ -207,8 +230,19 @@ export function PaintPanel() {
         </button>
       </div>
       <p className="-mt-2 text-[11px] text-ink-muted">
-        โหมดติดป้าย: <b>คลิกที่ป้ายรหัส</b> = OCR อ่านชื่อให้ · <b>ลากกรอบ</b> =
-        วาดเอง
+        {stamp ? (
+          <span className="text-accent">
+            📋 คัดลอกวาง: <b>คลิกบนแบบ</b> = วางสำเนา (ชื่อ/สี/ขนาดเดิม) · กดรัว ๆ
+            ได้ · <b>Esc</b> ออก
+          </span>
+        ) : activeTool === 'select' ? (
+          <>โหมดแก้: คลิกหมุดเพื่อเลือก · <b>ลากหมุดที่เลือก = ย้าย</b> · Delete = ลบ</>
+        ) : (
+          <>
+            เลือกสี → <b>คลิกบนแบบ</b> = ปักหมุด → ตั้งชื่อในแผงที่เด้งขึ้น (พิมพ์
+            หรือกดชิป)
+          </>
+        )}
       </p>
       {ocrBusy && (
         <p className="-mt-2 flex items-center gap-1.5 text-[11px] text-accent">
@@ -217,45 +251,25 @@ export function PaintPanel() {
         </p>
       )}
 
-      {/* ── มาร์กที่จะระบาย ──────────────────────────────── */}
+      {/* ── ขั้น 1: สีที่จะใช้ (อิสระจากชื่อ) ─────────────── */}
       <div>
         <p className="mb-1 text-[11px] font-semibold text-ink-secondary">
-          มาร์กที่จะระบาย
-          {paintMark && (
-            <span className="ml-1 font-normal text-ink-muted">
-              — {catLabel(paintMark)}
-            </span>
-          )}
+          สีที่จะใช้ (สำหรับหมุดใหม่)
         </p>
-        <div className="mb-2 flex gap-1">
-          <input
-            value={markInput}
-            onChange={(e) => setMarkInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && applyMarkInput()}
-            placeholder="ตั้งชื่อเอง เช่น F3, GB3"
-            className="flex-1 rounded border border-bg-border bg-bg-base px-2 py-1 text-xs text-ink-primary outline-none focus:border-accent"
-          />
-          <button
-            type="button"
-            onClick={applyMarkInput}
-            className="rounded bg-bg-raised px-2 py-1 text-xs text-ink-secondary hover:bg-bg-hover"
-          >
-            ตั้ง
-          </button>
-        </div>
         <div className="flex flex-wrap gap-1">
-          {PRESET_MARKS.map((mk) => (
+          {SWATCHES.map((hex) => (
             <button
-              key={mk}
+              key={hex}
               type="button"
-              onClick={() => setPaintMark(mk)}
-              className={`rounded px-2 py-0.5 text-[11px] font-medium ${
-                paintMark === mk ? 'ring-2 ring-white' : ''
+              onClick={() => setPaintColor(hex)}
+              className={`h-6 w-6 rounded ${
+                paintColor === hex
+                  ? 'ring-2 ring-white'
+                  : 'ring-1 ring-bg-border'
               }`}
-              style={{ background: getMarkColor(mk), color: '#fff' }}
-            >
-              {mk}
-            </button>
+              style={{ background: hex }}
+              aria-label={`เลือกสี ${hex}`}
+            />
           ))}
         </div>
         {paintError && (
@@ -266,9 +280,19 @@ export function PaintPanel() {
       {/* ── แก้ชิ้นที่เลือก ──────────────────────────────── */}
       {selectedIds.length > 0 && (
         <div className="space-y-2 rounded border border-accent/40 bg-bg-raised/50 p-2">
-          <p className="text-[11px] font-semibold text-ink-secondary">
-            แก้ชิ้นที่เลือก ({selectedIds.length})
-          </p>
+          <div className="flex items-center justify-between">
+            <p className="text-[11px] font-semibold text-ink-secondary">
+              แก้ชิ้นที่เลือก ({selectedIds.length})
+            </p>
+            <button
+              type="button"
+              onClick={clearSelection}
+              title="ยกเลิกการเลือก"
+              className="rounded px-1.5 text-xs text-ink-muted hover:bg-bg-hover"
+            >
+              ✕
+            </button>
+          </div>
           <div className="flex gap-1">
             <input
               value={renameInput}
@@ -299,6 +323,46 @@ export function PaintPanel() {
               ตั้งชื่อ
             </button>
           </div>
+          {/* OCR เสริม + ล้างชื่อ */}
+          <div className="flex gap-1">
+            <button
+              type="button"
+              onClick={handleTryOcr}
+              disabled={selectedIds.length !== 1 || ocrBusy}
+              title="ลองให้ OCR อ่านป้ายรอบหมุดที่เลือก แล้วเติมเป็นข้อเสนอในช่องชื่อ (แก้ได้)"
+              className="flex-1 rounded bg-bg-raised px-2 py-1 text-[11px] text-ink-secondary hover:bg-bg-hover disabled:opacity-40"
+            >
+              🔤 ลองอ่านป้าย (OCR)
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                renameMark(selectedIds, '');
+                setRenameInput('');
+              }}
+              title="ล้างชื่อชิ้นที่เลือก"
+              className="rounded bg-bg-raised px-2 py-1 text-[11px] text-ink-muted hover:bg-bg-hover"
+            >
+              ล้างชื่อ
+            </button>
+          </div>
+          {/* คลิกชิป = เปลี่ยนชื่อชิ้นที่เลือกทันที (แก้ junk จาก OCR เร็ว ๆ) */}
+          <div className="flex flex-wrap gap-1">
+            {PRESET_MARKS.map((mk) => (
+              <button
+                key={mk}
+                type="button"
+                onClick={() => {
+                  renameMark(selectedIds, mk);
+                  setRenameInput(mk);
+                }}
+                className="rounded px-2 py-0.5 text-[11px] font-medium text-white"
+                style={{ background: getMarkColor(mk) }}
+              >
+                {mk}
+              </button>
+            ))}
+          </div>
           <div className="flex flex-wrap gap-1">
             {SWATCHES.map((hex) => (
               <button
@@ -311,27 +375,34 @@ export function PaintPanel() {
               />
             ))}
           </div>
+          {/* ── การกระทำหลัก: คัดลอก · ลบ · ยืนยัน (แถวเดียว) ─────────── */}
           <div className="flex gap-1">
+            <button
+              type="button"
+              onClick={() => (stamp ? stopStamp() : startStamp(selectedIds[0]!))}
+              disabled={selectedIds.length !== 1}
+              title="คัดลอก marker นี้แล้วคลิกบนแบบเพื่อวางสำเนา (ชื่อ/สี/ขนาดเดิม) · Esc=ออก"
+              className={`flex-1 rounded px-2 py-1.5 text-xs font-medium transition-colors disabled:opacity-40 ${
+                stamp
+                  ? 'bg-accent text-ink-inverse'
+                  : 'bg-bg-raised text-ink-secondary hover:bg-bg-hover'
+              }`}
+            >
+              {stamp ? '📋 วางอยู่…' : '📋 คัดลอก'}
+            </button>
+            <button
+              type="button"
+              onClick={() => deleteMembers(selectedIds)}
+              className="flex-1 rounded bg-danger/20 px-2 py-1.5 text-xs text-danger hover:bg-danger/30"
+            >
+              🗑️ ลบ
+            </button>
             <button
               type="button"
               onClick={() => confirm(selectedIds)}
               className="flex-1 rounded bg-success/20 px-2 py-1.5 text-xs text-success hover:bg-success/30"
             >
               ✓ ยืนยัน
-            </button>
-            <button
-              type="button"
-              onClick={() => deleteMembers(selectedIds)}
-              className="rounded bg-danger/20 px-2 py-1.5 text-xs text-danger hover:bg-danger/30"
-            >
-              🗑️ ลบ
-            </button>
-            <button
-              type="button"
-              onClick={clearSelection}
-              className="rounded bg-bg-raised px-2 py-1.5 text-xs text-ink-muted hover:bg-bg-hover"
-            >
-              ✕
             </button>
           </div>
         </div>
@@ -363,19 +434,35 @@ export function PaintPanel() {
           <p className="text-[11px] font-semibold text-ink-secondary">
             Legend — ติดป้ายแล้ว {paintedPieces} ชิ้น
           </p>
-          <button
-            type="button"
-            onClick={handlePullExpected}
-            disabled={!latest?.result?.items?.length}
-            title="ดึงจำนวนคาดต่อรหัสจากผลวิเคราะห์ AI ล่าสุด (กฎ 11 grid-first) มาเทียบกับที่ยืนยัน"
-            className="rounded bg-bg-raised px-2 py-0.5 text-[10px] text-ink-secondary hover:bg-bg-hover disabled:opacity-40"
-          >
-            ↻ ดึงจำนวนคาดจาก AI
-          </button>
+          <div className="flex gap-1">
+            <button
+              type="button"
+              onClick={handlePullExpected}
+              disabled={!latest?.result?.items?.length}
+              title="ดึงจำนวนคาดต่อรหัสจากผลวิเคราะห์ AI ล่าสุด (กฎ 11 grid-first) มาเทียบกับที่ยืนยัน"
+              className="rounded bg-bg-raised px-2 py-0.5 text-[10px] text-ink-secondary hover:bg-bg-hover disabled:opacity-40"
+            >
+              ↻ ดึงจำนวนคาดจาก AI
+            </button>
+            <button
+              type="button"
+              onClick={handleClearPage}
+              disabled={paintedPieces === 0}
+              title="ลบ marker ทั้งหมดในหน้านี้ (เช่น ล้างป้ายขยะจาก OCR)"
+              className="rounded bg-danger/15 px-2 py-0.5 text-[10px] text-danger hover:bg-danger/25 disabled:opacity-40"
+            >
+              🗑️ ล้างทั้งหน้า
+            </button>
+          </div>
         </div>
+        {unnamed > 0 && (
+          <p className="mb-1 text-[11px] text-warning">
+            ⚠️ ยังไม่ตั้งชื่อ {unnamed} ตัว (ยังไม่เข้านับ) — เลือกแล้วตั้งชื่อ
+          </p>
+        )}
         {groups.length === 0 ? (
           <p className="text-[11px] text-ink-muted">
-            ยังไม่มีชิ้นงาน — คลิกที่ป้ายรหัสบนแบบเพื่อให้ OCR อ่านชื่อ
+            ยังไม่มีชิ้นงาน — เลือกสีแล้วคลิกบนแบบเพื่อปักหมุด
           </p>
         ) : (
           <ul className="space-y-1">

@@ -123,12 +123,24 @@ function levenshtein(a: string, b: string): number {
   return prev[n]!;
 }
 
-/** จับ token เดียวเข้า KNOWN_MARKS — exact → ใกล้สุด (dist ≤1) → คืน token ดิบ */
+/** รหัสที่ "มีรูปทรงถูกต้อง" — ตัวอักษร 1-3 ตัว ตามด้วยเลข 1-3 หลัก (F1, C2, GB1, …) */
+const MARK_SHAPE = /^[A-Z]{1,3}\d{1,3}$/;
+
+/**
+ * จับ token เดียวเข้า KNOWN_MARKS — เข้มขึ้นเพื่อกัน junk (IY/NOZ/NZ/ST):
+ *   1. exact match KNOWN_MARKS → คืนเลย (รองรับ GS/PS ที่ไม่มีเลข)
+ *   2. รูปทรงถูกต้อง (ตัวอักษร+เลข เช่น F1/F3/GB2) → เชื่อตามที่อ่าน (รหัสใหม่ก็ผ่าน)
+ *   3. token ตัวอักษรล้วน/ผิดรูป → fuzzy เข้า KNOWN เฉพาะ dist ≤1 · ไม่ถึง → คืน '' (ทิ้ง)
+ *
+ *   ⚠️ ไม่ fuzzy รหัสที่มีเลข เพื่อกัน F3→F2 (ต่างกันแค่หลักเดียวแต่เป็นคนละชิ้น)
+ */
 function matchMark(token: string): string {
   const t = token.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
   if (!t) return '';
   if (KNOWN_MARKS.includes(t)) return t;
+  if (MARK_SHAPE.test(t)) return t;
 
+  // token ตัวอักษรล้วน/ผิดรูป — ยอมรับเฉพาะที่ใกล้ KNOWN มาก (อ่านเพี้ยน 1 ตัว)
   let best: string | null = null;
   let bestDist = Infinity;
   for (const known of KNOWN_MARKS) {
@@ -138,8 +150,7 @@ function matchMark(token: string): string {
       best = known;
     }
   }
-  // ยอมรับเฉพาะที่ใกล้มาก (พิมพ์/อ่านเพี้ยน 1 ตัว) — ไกลกว่านั้นคืนดิบให้ user แก้
-  return best != null && bestDist <= 1 ? best : t;
+  return best != null && bestDist <= 1 ? best : '';
 }
 
 /**

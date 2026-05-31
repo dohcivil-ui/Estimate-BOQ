@@ -11,7 +11,6 @@
  *   — history เก็บเฉพาะ members[] (ไม่รวม selection — selection เป็น transient)
  */
 import { create } from 'zustand';
-import { getMarkColor } from '@/services/markColors';
 import {
   categoryForMark,
   splitMarks,
@@ -42,10 +41,17 @@ export interface Member {
   /** null = seed counts-only (ยังไม่ระบายตำแหน่ง) */
   geometry: MemberGeometry | null;
   color: string;
-  /** true = ผู้ใช้ตั้งสีเอง → rename ไม่ทับสี */
-  colorLocked?: boolean;
   source: MemberSource;
   status: MemberStatus;
+}
+
+/** ต้นแบบสำหรับ copy-stamp — เก็บ ชื่อ+สี+ขนาด ของ marker ที่จะคัดลอกวาง */
+export interface StampTemplate {
+  mark: string;
+  category: MemberCategory;
+  color: string;
+  w: number;
+  h: number;
 }
 
 const HISTORY_LIMIT = 50;
@@ -57,19 +63,36 @@ function pushHistory(past: Member[][], current: Member[]): Member[][] {
   return next;
 }
 
-/** หา member ตัวบนสุดที่ bbox (page-px) คลุมจุด p — null ถ้าไม่โดน */
+/**
+ * หา member ที่ bbox (page-px) คลุมจุด p — null ถ้าไม่โดน
+ *   smallest-first: ถ้าจุดอยู่ในหลายกล่อง (เช่น เสาเล็กซ้อนในฐานใหญ่) คืน "ตัวพื้นที่
+ *   เล็กสุด" (ไม่ใช่ตัวบนสุดตาม draw order) — ให้คลิก/ชี้กลางเสาโดนเสา ไม่โดนฐาน
+ * @param padPage เผื่อขอบกล่อง (page-px) ให้คลิกโดนง่ายขึ้น — marker เล็ก ๆ คลิกยาก
+ */
 export function findMemberAt(
   members: Member[],
   p: { x: number; y: number },
+  padPage = 0,
 ): Member | null {
-  for (let i = members.length - 1; i >= 0; i--) {
-    const g = members[i]!.geometry;
+  let best: Member | null = null;
+  let bestArea = Infinity;
+  for (const m of members) {
+    const g = m.geometry;
     if (!g) continue;
-    if (p.x >= g.x && p.x <= g.x + g.w && p.y >= g.y && p.y <= g.y + g.h) {
-      return members[i]!;
+    if (
+      p.x >= g.x - padPage &&
+      p.x <= g.x + g.w + padPage &&
+      p.y >= g.y - padPage &&
+      p.y <= g.y + g.h + padPage
+    ) {
+      const area = g.w * g.h;
+      if (area < bestArea) {
+        bestArea = area;
+        best = m;
+      }
     }
   }
-  return null;
+  return best;
 }
 
 interface DetectionState {
@@ -82,10 +105,14 @@ interface DetectionState {
   hiddenMarks: string[];
   /** mark ที่จะใช้ตอน "ระบาย" กล่องใหม่ (transient) — '' = ยังไม่เลือก */
   paintMark: string;
+  /** สี active สำหรับ marker ใหม่ (transient) — สีอิสระจากชื่อ */
+  paintColor: string;
   /** ข้อความเตือนชั่วคราว (เช่น ระบายโดยยังไม่เลือกชื่อ) */
   paintError: string | null;
   /** จำนวนที่ AI grid-first คาดต่อ mark (transient) — cross-check กฎ 11 */
   expectedByMark: Record<string, number>;
+  /** ต้นแบบ copy-stamp (transient) — null = ไม่อยู่ในโหมดคัดลอกวาง */
+  stamp: StampTemplate | null;
   /** กำลังอ่านป้าย OCR อยู่ (transient) */
   ocrBusy: boolean;
   /** ข้อความสถานะ OCR (เช่น กำลังโหลดตัวอ่านป้าย…) */
@@ -94,14 +121,17 @@ interface DetectionState {
   future: Member[][];
 
   // ── mutations (push history) ───────────────────────────────
-  /** เปลี่ยนชื่อ mark — อัปเดต category + (ถ้า !colorLocked) สีตาม mark */
+  /** เปลี่ยนชื่อ mark — อัปเดต category เท่านั้น (สีอิสระจากชื่อ ไม่ทับ) */
   renameMark: (ids: string[], mark: string) => void;
-  /** ตั้งสีเอง → ล็อกสี (rename จะไม่ทับ) */
+  /** ตั้งสีของชิ้นที่เลือก */
   setColor: (ids: string[], hex: string) => void;
-  /** เพิ่ม member เอง (จากการระบายกล่อง หรือเพิ่มมือ) → confirmed */
+  /** ย้ายตำแหน่ง member (เปลี่ยนแค่ x,y) — pushHist=true เฉพาะจังหวะแรกของการลาก
+   *  เพื่อให้ทั้ง drag เป็น undo เดียว (ไม่ push ทุก mousemove) */
+  moveMember: (id: string, x: number, y: number, pushHist: boolean) => void;
+  /** เพิ่ม member เอง — color ไม่ส่งมา = ใช้ paintColor ปัจจุบัน */
   addMember: (
     m: Omit<Member, 'id' | 'color' | 'status'> &
-      Partial<Pick<Member, 'status'>>,
+      Partial<Pick<Member, 'status' | 'color'>>,
   ) => string;
   deleteMembers: (ids: string[]) => void;
   /** draft → confirmed */
@@ -114,7 +144,15 @@ interface DetectionState {
   setHovered: (id: string | null) => void;
   toggleHiddenMark: (mark: string) => void;
   setPaintMark: (mark: string) => void;
+  /** ตั้งสี active สำหรับ marker ใหม่ */
+  setPaintColor: (hex: string) => void;
   setPaintError: (msg: string | null) => void;
+
+  // ── copy-stamp (transient) ─────────────────────────────────
+  /** เข้าโหมดคัดลอกวาง โดยใช้ member id เป็นต้นแบบ (ต้องมี geometry) */
+  startStamp: (id: string) => void;
+  /** ออกจากโหมดคัดลอกวาง */
+  stopStamp: () => void;
 
   // ── cross-check + OCR (transient) ──────────────────────────
   /** ตั้งจำนวนคาดต่อ mark (จากผล AI extract) — ใช้เทียบกับที่ยืนยัน */
@@ -140,7 +178,9 @@ export const useDetectionStore = create<DetectionState>((set, get) => ({
   hoveredId: null,
   hiddenMarks: [],
   paintMark: '',
+  paintColor: '#ef4444',
   paintError: null,
+  stamp: null,
   expectedByMark: {},
   ocrBusy: false,
   ocrStatus: null,
@@ -152,16 +192,9 @@ export const useDetectionStore = create<DetectionState>((set, get) => ({
       if (ids.length === 0) return s;
       const idset = new Set(ids);
       const category = categoryForMark(mark);
-      const autoColor = getMarkColor(mark);
+      // สีอิสระจากชื่อ — rename อัปเดตแค่ mark + category ไม่แตะ color
       const next = s.members.map((m) =>
-        idset.has(m.id)
-          ? {
-              ...m,
-              mark,
-              category,
-              color: m.colorLocked ? m.color : autoColor,
-            }
-          : m,
+        idset.has(m.id) ? { ...m, mark, category } : m,
       );
       return {
         past: pushHistory(s.past, s.members),
@@ -175,13 +208,29 @@ export const useDetectionStore = create<DetectionState>((set, get) => ({
       if (ids.length === 0) return s;
       const idset = new Set(ids);
       const next = s.members.map((m) =>
-        idset.has(m.id) ? { ...m, color: hex, colorLocked: true } : m,
+        idset.has(m.id) ? { ...m, color: hex } : m,
       );
       return {
         past: pushHistory(s.past, s.members),
         future: [],
         members: next,
       };
+    }),
+
+  moveMember: (id, x, y, pushHist) =>
+    set((s) => {
+      let changed = false;
+      const next = s.members.map((m) => {
+        if (m.id === id && m.geometry) {
+          changed = true;
+          return { ...m, geometry: { ...m.geometry, x, y } };
+        }
+        return m;
+      });
+      if (!changed) return s;
+      return pushHist
+        ? { past: pushHistory(s.past, s.members), future: [], members: next }
+        : { members: next };
     }),
 
   addMember: (m) => {
@@ -194,7 +243,7 @@ export const useDetectionStore = create<DetectionState>((set, get) => ({
         {
           ...m,
           id,
-          color: getMarkColor(m.mark),
+          color: m.color ?? s.paintColor,
           status: m.status ?? 'confirmed',
         },
       ],
@@ -253,7 +302,24 @@ export const useDetectionStore = create<DetectionState>((set, get) => ({
         : [...s.hiddenMarks, mark],
     })),
   setPaintMark: (mark) => set({ paintMark: mark, paintError: null }),
+  setPaintColor: (hex) => set({ paintColor: hex }),
   setPaintError: (msg) => set({ paintError: msg }),
+
+  startStamp: (id) =>
+    set((s) => {
+      const m = s.members.find((x) => x.id === id);
+      if (!m || !m.geometry) return s;
+      return {
+        stamp: {
+          mark: m.mark,
+          category: m.category,
+          color: m.color,
+          w: m.geometry.w,
+          h: m.geometry.h,
+        },
+      };
+    }),
+  stopStamp: () => set({ stamp: null }),
 
   setExpected: (map) => set({ expectedByMark: map }),
   setOcr: (busy, status) =>

@@ -38,6 +38,12 @@ interface ScreenBox {
   h: number;
 }
 
+/** พื้นที่กล่อง page-px (member ไม่มี geometry = 0) — ใช้จัดลำดับวาด */
+function area(m: Member): number {
+  const g = m.geometry;
+  return g ? g.w * g.h : 0;
+}
+
 /** #rrggbb → rgba(...) ด้วย alpha ที่กำหนด (สำหรับ fill โปร่ง) */
 function withAlpha(hex: string, alpha: number): string {
   const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
@@ -92,7 +98,22 @@ export function DetectionLayer({ pageId, transform }: Props) {
   const activeTool = useToolStore((s) => s.activeTool);
   const draftPoints = useToolStore((s) => s.draftPoints);
   const cursorPoint = useToolStore((s) => s.cursorPagePoint);
+  const stamp = useDetectionStore((s) => s.stamp);
   const sel = new Set(selectedIds);
+
+  // ghost ของ copy-stamp ที่จะวาง ณ cursor (page-px → screen, center ที่ cursor)
+  const ghost =
+    stamp && cursorPoint
+      ? toScreen(
+          {
+            x: cursorPoint.x - stamp.w / 2,
+            y: cursorPoint.y - stamp.h / 2,
+            w: stamp.w,
+            h: stamp.h,
+          },
+          transform,
+        )
+      : null;
 
   const showPreview =
     activeTool === 'paint' && draftPoints.length > 0 && cursorPoint != null;
@@ -100,9 +121,13 @@ export function DetectionLayer({ pageId, transform }: Props) {
     ? rectScreen(draftPoints[0]!, cursorPoint, transform)
     : null;
 
+  // วาดตัวพื้นที่ใหญ่ก่อน (ล่าง) เล็กทีหลัง (บน) → กล่องเล็กไม่ถูกกล่องใหญ่บัง
+  //   sort ตอน map เท่านั้น — ห้าม moveToTop (กฎผู้ใช้)
+  const ordered = [...members].sort((a, b) => area(b) - area(a));
+
   return (
     <Layer listening={false}>
-      {members.map((m) => {
+      {ordered.map((m) => {
         const g = m.geometry;
         if (!g) return null;
         if (hidden.has(m.mark)) return null;
@@ -193,6 +218,35 @@ export function DetectionLayer({ pageId, transform }: Props) {
           dash={[8, 4]}
           fill="rgba(255,255,255,0.08)"
         />
+      )}
+      {ghost && stamp && (
+        <Group>
+          <Rect
+            x={ghost.x}
+            y={ghost.y}
+            width={ghost.w}
+            height={ghost.h}
+            cornerRadius={8}
+            fill={withAlpha(stamp.color, 0.18)}
+            stroke={stamp.color}
+            strokeWidth={2}
+            dash={[6, 4]}
+            opacity={0.7}
+          />
+          {stamp.mark && (
+            <Label x={ghost.x} y={ghost.y - 26}>
+              <Tag fill={stamp.color} cornerRadius={6} opacity={0.85} />
+              <Text
+                text={stamp.mark}
+                fontFamily="Sarabun"
+                fontSize={12}
+                fontStyle="700"
+                fill={contrastText(stamp.color)}
+                padding={4}
+              />
+            </Label>
+          )}
+        </Group>
       )}
     </Layer>
   );

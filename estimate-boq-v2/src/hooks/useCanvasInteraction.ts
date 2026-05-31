@@ -25,7 +25,6 @@ import {
   categoryForMark,
   findMemberAt,
 } from '@/stores/detectionStore';
-import { ocrAt, parseMarks, isOcrReady } from '@/services/labelOcr';
 import { useSnapCandidates } from './useSnapCandidates';
 import {
   commitDraft,
@@ -84,6 +83,13 @@ export function useCanvasInteraction(
   const dragState = useRef<{ x: number; y: number } | null>(null);
   /** จุดเริ่มลากกล่อง paint (page-px) — null = ไม่ได้กำลังระบาย */
   const paintDrag = useRef<Point2D | null>(null);
+  /** ลากย้าย member ที่เลือก — เก็บ id + offset(จุดจับ→มุมกล่อง) + firstMove(สำหรับ history) */
+  const moveDrag = useRef<{
+    id: string;
+    dx: number;
+    dy: number;
+    firstMove: boolean;
+  } | null>(null);
   const [currentSnap, setCurrentSnap] = useState<SnapPoint | null>(null);
   const [scaleDialog, setScaleDialog] = useState<{
     p1: Point2D;
@@ -224,15 +230,47 @@ export function useCanvasInteraction(
         return;
       }
 
+      // ─── copy-stamp — มีต้นแบบ + คลิกซ้าย = วางสำเนาที่จุด (snap ถ้าเปิด) ──
+      //   คลิกรัว ๆ ได้หลายจุด · สำเนา confirmed สืบ ชื่อ/สี/ขนาด จากต้นแบบ
+      const stampState = useDetectionStore.getState();
+      if (stampState.stamp && isLeft) {
+        const { final } = processCursor(raw);
+        const t = stampState.stamp;
+        stampState.addMember({
+          pageId: page.id,
+          mark: t.mark,
+          category: t.category,
+          geometry: { x: final.x - t.w / 2, y: final.y - t.h / 2, w: t.w, h: t.h },
+          color: t.color,
+          source: 'manual',
+          status: 'confirmed',
+        });
+        return;
+      }
+
       // select tool — left click = hit test
       if (activeTool === 'select' && isLeft) {
-        // priority: member ที่ระบายไว้ก่อน → toggleSelect
+        // priority: member ที่ระบายไว้ก่อน → toggleSelect (เผื่อ hit pad ~10 screen px)
         const det = useDetectionStore.getState();
-        const memberHit = findMemberAt(det.getForPage(page.id), raw);
+        const hitPad = 10 / transformZoom;
+        const memberHit = findMemberAt(det.getForPage(page.id), raw, hitPad);
         if (memberHit) {
-          det.toggleSelect(memberHit.id);
+          // ตัวที่ "เลือกอยู่แล้ว" + คลิกค้าง = เริ่มลากย้าย · ตัวอื่น = เลือก
+          if (det.selectedIds.includes(memberHit.id) && memberHit.geometry) {
+            moveDrag.current = {
+              id: memberHit.id,
+              dx: raw.x - memberHit.geometry.x,
+              dy: raw.y - memberHit.geometry.y,
+              firstMove: true,
+            };
+          } else {
+            det.toggleSelect(memberHit.id);
+          }
           return;
         }
+        // ไม่โดน member → ล้าง selection + บอกวิธีปักหมุดใหม่ แล้ว fallback measurement
+        det.clearSelection();
+        det.setPaintError('กด "ติดป้าย" เพื่อปักหมุดใหม่');
         const measurements = useMeasurementStore
           .getState()
           .getForPage(page.id);
@@ -337,24 +375,47 @@ export function useCanvasInteraction(
 
       useCursorStore.getState().setPagePos(raw.x, raw.y);
 
-      // hover member (paint/select) → pill ขึ้นเฉพาะตัวที่ชี้
-      if (activeTool === 'paint' || activeTool === 'select') {
-        const det = useDetectionStore.getState();
-        const hover = findMemberAt(det.getForPage(page.id), raw);
-        if (det.hoveredId !== (hover?.id ?? null)) {
-          det.setHovered(hover?.id ?? null);
-        }
-      }
-
       // process snap+ortho เฉพาะตอนวาด หรือ snap ตลอดเวลา? — ทำตลอด เพื่อให้ผู้ใช้เห็น HUD
       const { final, snap } = processCursor(raw);
       setCurrentSnap(snap);
       useToolStore.getState().setCursorPagePoint(final);
+
+      // ลากย้าย member ที่เลือก → วางตามจุด snap (final) ลบ offset จุดจับ
+      if (moveDrag.current) {
+        const md = moveDrag.current;
+        useDetectionStore
+          .getState()
+          .moveMember(md.id, final.x - md.dx, final.y - md.dy, md.firstMove);
+        md.firstMove = false;
+        return;
+      }
+
+      // hover member (paint/select) → pill ขึ้นเฉพาะตัวที่ชี้
+      if (activeTool === 'paint' || activeTool === 'select') {
+        const det = useDetectionStore.getState();
+        const hover = findMemberAt(
+          det.getForPage(page.id),
+          raw,
+          10 / transformZoom,
+        );
+        if (det.hoveredId !== (hover?.id ?? null)) {
+          det.setHovered(hover?.id ?? null);
+        }
+      }
     },
-    [page, activeTool, pointerToPage, processCursor],
+    [page, activeTool, pointerToPage, processCursor, transformZoom],
   );
 
   const handleMouseUp = useCallback(() => {
+    // ─── จบการลากย้าย member ───────────────────────────────────────────
+    if (moveDrag.current) {
+      moveDrag.current = null;
+      if (stageRef.current) {
+        stageRef.current.container().style.cursor = 'default';
+      }
+      return;
+    }
+
     // ─── paint tool — จบการลากกล่อง: ลากใหญ่พอ = สร้าง member, ไม่งั้น = คลิกเลือก ─
     if (paintDrag.current && page) {
       const start = paintDrag.current;
@@ -366,77 +427,53 @@ export function useCanvasInteraction(
       const h = Math.abs(end.y - start.y);
       const dragMinPage = 6 / transformZoom; // ~6 screen px
       const det = useDetectionStore.getState();
+      det.setPaintError(null); // เคลียร์ hint จากโหมดแก้
 
       if (w >= dragMinPage && h >= dragMinPage) {
-        if (det.paintMark.trim() === '') {
-          det.setPaintError('เลือกชื่อ/หมวดก่อนระบาย');
-        } else {
-          det.addMember({
-            pageId: page.id,
-            mark: det.paintMark,
-            category: categoryForMark(det.paintMark),
-            geometry: {
-              x: Math.min(start.x, end.x),
-              y: Math.min(start.y, end.y),
-              w,
-              h,
-            },
-            source: 'drag',
-          });
-        }
+        // ลากกรอบ → สร้าง member ใช้สี paintColor · ชื่อตั้งทีหลังในแผงแก้
+        const mk = det.paintMark;
+        const id = det.addMember({
+          pageId: page.id,
+          mark: mk,
+          category: categoryForMark(mk),
+          geometry: {
+            x: Math.min(start.x, end.x),
+            y: Math.min(start.y, end.y),
+            w,
+            h,
+          },
+          color: det.paintColor,
+          source: 'drag',
+          status: 'draft',
+        });
+        det.setSelection([id]);
       } else {
-        // คลิก (ไม่ลาก): โดน member เดิม → toggle · ว่าง → OCR อ่านป้าย
-        const hit = findMemberAt(det.getForPage(page.id), end);
+        // คลิก (ไม่ลาก): โดน member เดิม → toggle · ว่าง → ปัก pin (ไม่ OCR อัตโนมัติ)
+        const hit = findMemberAt(
+          det.getForPage(page.id),
+          end,
+          10 / transformZoom,
+        );
         if (hit) {
           det.toggleSelect(hit.id);
         } else {
-          const bitmap = page.bitmap;
-          if (!bitmap) {
-            det.setPaintError('ยังไม่มี bitmap ของหน้านี้');
-          } else {
-            // marker เล็กที่จุดคลิก (~28 screen px) — เก็บเป็น page-px
-            const sizePage = 28 / transformZoom;
-            const geom = {
+          // pin เล็กที่จุดคลิก (~28 screen px) — สี = paintColor, ชื่อว่าง, draft, เลือกไว้
+          const sizePage = 28 / transformZoom;
+          const id = det.addMember({
+            pageId: page.id,
+            mark: '',
+            category: 'other',
+            geometry: {
               x: end.x - sizePage / 2,
               y: end.y - sizePage / 2,
               w: sizePage,
               h: sizePage,
-            };
-            const pageW = page.pageWidth;
-            const pageH = page.pageHeight;
-            const pid = page.id;
-            void (async () => {
-              det.setOcr(
-                true,
-                isOcrReady() ? 'กำลังอ่านป้าย…' : 'กำลังโหลดตัวอ่านป้าย…',
-              );
-              try {
-                const raw = await ocrAt(bitmap, end, {
-                  pageWidth: pageW,
-                  pageHeight: pageH,
-                });
-                const marks = parseMarks(raw);
-                const mk = marks.join(',');
-                const id = det.addMember({
-                  pageId: pid,
-                  mark: mk,
-                  category: categoryForMark(mk),
-                  geometry: geom,
-                  source: 'pick',
-                  status: 'draft',
-                });
-                det.setSelection([id]);
-                if (mk === '') {
-                  det.setPaintError('อ่านป้ายไม่ออก — พิมพ์รหัสเองในช่องชื่อ');
-                }
-              } catch (err) {
-                console.error('[labelOcr] error:', err);
-                det.setPaintError('อ่านป้ายไม่สำเร็จ — ดู console');
-              } finally {
-                det.setOcr(false, null);
-              }
-            })();
-          }
+            },
+            color: det.paintColor,
+            source: 'pick',
+            status: 'draft',
+          });
+          det.setSelection([id]);
         }
       }
     }
@@ -450,6 +487,7 @@ export function useCanvasInteraction(
   const handleMouseLeave = useCallback(() => {
     dragState.current = null;
     paintDrag.current = null;
+    moveDrag.current = null;
     setCurrentSnap(null);
     useCursorStore.getState().clear();
     useDetectionStore.getState().setHovered(null);

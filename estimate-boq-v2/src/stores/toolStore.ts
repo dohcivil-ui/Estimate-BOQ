@@ -5,6 +5,7 @@
 import { create } from 'zustand';
 import type { Tool } from '@/types/tool';
 import type { Point2D } from '@/types/viewport';
+import { useDetectionStore } from './detectionStore';
 
 interface ToolState {
   activeTool: Tool;
@@ -26,8 +27,11 @@ export const useToolStore = create<ToolState>((set) => ({
   draftPoints: [],
   cursorPagePoint: null,
 
-  setActiveTool: (tool) =>
-    set({ activeTool: tool, draftPoints: [], cursorPagePoint: null }),
+  setActiveTool: (tool) => {
+    // เปลี่ยน tool = ออกจากโหมดคัดลอกวาง (copy-stamp) เสมอ
+    useDetectionStore.getState().stopStamp();
+    set({ activeTool: tool, draftPoints: [], cursorPagePoint: null });
+  },
 
   addDraftPoint: (p) =>
     set((s) => ({ draftPoints: [...s.draftPoints, p] })),

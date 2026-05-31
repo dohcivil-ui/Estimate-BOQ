@@ -74,9 +74,14 @@ export function useKeyboardShortcuts(opts: {
         return;
       }
 
-      // Esc — cancel draft / deselect
+      // Esc — ออกจาก copy-stamp ก่อน · ไม่งั้น cancel draft / deselect
       if (e.key === 'Escape') {
         e.preventDefault();
+        const det = useDetectionStore.getState();
+        if (det.stamp) {
+          det.stopStamp();
+          return;
+        }
         const tool = useToolStore.getState();
         if (tool.draftPoints.length > 0) {
           onCancelDraft();
@@ -93,14 +98,14 @@ export function useKeyboardShortcuts(opts: {
         return;
       }
 
-      // Backspace — pop draft point
+      // Backspace — ตอนวาด = ถอยจุด · ไม่งั้นตกไปเป็น "ลบ marker ที่เลือก" ด้านล่าง
       if (e.key === 'Backspace') {
         const tool = useToolStore.getState();
         if (tool.draftPoints.length > 0) {
           e.preventDefault();
           tool.popDraftPoint();
+          return;
         }
-        return;
       }
 
       // paint tool active → undo/redo/delete ทำกับ detectionStore
@@ -124,20 +129,30 @@ export function useKeyboardShortcuts(opts: {
         return;
       }
 
-      // Delete — remove selected
-      if (e.key === 'Delete') {
-        if (paintActive) {
-          const ids = useDetectionStore.getState().selectedIds;
-          if (ids.length > 0) {
-            e.preventDefault();
-            useDetectionStore.getState().deleteMembers(ids);
-          }
+      // Ctrl+C — คัดลอก marker ที่เลือก (1 ตัว) เข้าโหมดคัดลอกวาง
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'c') {
+        const ids = useDetectionStore.getState().selectedIds;
+        if (ids.length === 1) {
+          e.preventDefault();
+          useDetectionStore.getState().startStamp(ids[0]!);
+        }
+        return;
+      }
+
+      // Delete / Backspace — ลบ marker ที่เลือก (ทุก tool) · ไม่งั้นลบ measurement
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        const detIds = useDetectionStore.getState().selectedIds;
+        if (detIds.length > 0) {
+          e.preventDefault();
+          useDetectionStore.getState().deleteMembers(detIds);
           return;
         }
-        const selId = useMeasurementStore.getState().selectedId;
-        if (selId) {
-          e.preventDefault();
-          useMeasurementStore.getState().remove(selId);
+        if (e.key === 'Delete') {
+          const selId = useMeasurementStore.getState().selectedId;
+          if (selId) {
+            e.preventDefault();
+            useMeasurementStore.getState().remove(selId);
+          }
         }
         return;
       }
