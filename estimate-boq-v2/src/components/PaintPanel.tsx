@@ -27,6 +27,7 @@ import { buildBOQ } from '@/services/compute/buildBOQ';
 import { importItemsToBoq } from '@/services/aiImportToBoq';
 import { analyzeDimensions, buildReferenceImage } from '@/services/aiAnalyze';
 import { MarkDimsDialog } from '@/components/MarkDimsDialog';
+import { PEDESTAL_OF } from '@/services/compute/boqAdapter';
 import type { AIItem, AIReferenceImage } from '@/types/ai';
 
 /** ชื่อหน้าแบบสำหรับ trace ใน BOQ (mirror AIPanel.pageNameOf) */
@@ -289,7 +290,7 @@ export function PaintPanel() {
         marks: dimMarks,
         references: referenceImages,
         engine,
-        hd: false,
+        hd: true,
         onProgress: (m) => setDimsMsg(m),
       });
       const readMarks = Object.keys(out.dims);
@@ -787,16 +788,24 @@ export function PaintPanel() {
         </div>
       )}
 
-      {dimsForMark && (
-        <MarkDimsDialog
-          mark={dimsForMark}
-          existing={markDims[dimsForMark]}
-          source={markDimsSource[dimsForMark]}
-          onSave={(dims) => setMarkDim(dimsForMark, dims)}
-          onClear={() => clearMarkDim(dimsForMark)}
-          onClose={() => setDimsForMark(null)}
-        />
-      )}
+      {dimsForMark &&
+        (() => {
+          // สูงตอม่อคู่ของฐานนี้ (เช่น F2→C2) — ส่งให้ dialog โชว์ก้นหลุม auto
+          const pedMark = PEDESTAL_OF[dimsForMark.toUpperCase()];
+          const ped = pedMark ? markDims[pedMark] : undefined;
+          const pedestalH = ped?.kind === 'column' ? ped.H : undefined;
+          return (
+            <MarkDimsDialog
+              mark={dimsForMark}
+              existing={markDims[dimsForMark]}
+              source={markDimsSource[dimsForMark]}
+              pedestalH={pedestalH}
+              onSave={(dims) => setMarkDim(dimsForMark, dims)}
+              onClear={() => clearMarkDim(dimsForMark)}
+              onClose={() => setDimsForMark(null)}
+            />
+          );
+        })()}
     </div>
   );
 }

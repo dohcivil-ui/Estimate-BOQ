@@ -114,6 +114,17 @@ function footingToItem(
     if (kg > 0)
       subs.push(sub(`เหล็กเสริม ${size}`, kg, 'กก.', 'material', rebar.material));
   }
+  // เหล็กรัดรอบฐาน (provisional — แยกจากตะแกรง · รอวิศวกรยืนยันสูตร)
+  if (q.tie_rebar_kg > 0)
+    subs.push(
+      sub(
+        `เหล็กรัดรอบฐาน ${q.tie_rebar_size ?? ''} (provisional)`.trim(),
+        q.tie_rebar_kg,
+        'กก.',
+        'material',
+        rebar.material,
+      ),
+    );
   if (rebar.labor > 0 && q.rebar_kg > 0)
     subs.push(sub('ค่าผูก/ตัด/ดัดเหล็ก', q.rebar_kg, 'กก.', 'labor', rebar.labor));
   // งานดิน (ค่าแรง)

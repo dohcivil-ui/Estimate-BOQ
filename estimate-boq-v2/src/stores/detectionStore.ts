@@ -57,8 +57,11 @@ export type MarkDims =
       W: number;
       L: number;
       T: number;
-      depth: number;
+      /** ก้นหลุม/ลึกขุด — optional: ว่าง = footingCompute คำนวณเอง (สูงตอม่อ+หนาฐาน+lean+sand) */
+      depth?: number;
       rebar: string;
+      /** เหล็กรัดรอบฐาน (เช่น "RB9@0.20") — แยกจากตะแกรง · optional */
+      tieRebar?: string;
     }
   | {
       kind: 'column';

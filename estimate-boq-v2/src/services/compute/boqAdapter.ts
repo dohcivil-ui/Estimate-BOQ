@@ -20,7 +20,7 @@ import type { MarkDims } from '@/stores/detectionStore';
 // ─────────────────────────────────────────────────────────────
 // คู่ ฐาน ↔ ตอม่อ (กฎผู้ใช้: F2↔C2, F1↔C3) — ตอม่ออ่านจาก Column Schedule
 // ─────────────────────────────────────────────────────────────
-const PEDESTAL_OF: Record<string, string> = {
+export const PEDESTAL_OF: Record<string, string> = {
   F2: 'C2',
   F1: 'C3',
 };
@@ -159,11 +159,7 @@ function buildFooting(
       `❓ ${code}: อ่านมิติ W/L/T ไม่ครบจาก "${item.dimensions ?? item.name}" — ต้องแนบ detail sheet (Footing Schedule S2-02) แล้ววิเคราะห์ใหม่`,
     );
   }
-  if (depth == null) {
-    warnings.push(
-      `❓ ${code}: ไม่พบระดับก้นหลุม (depth) — งานขุด/ถมยังคำนวณไม่ได้ (depth=0)`,
-    );
-  }
+  // depth ว่างได้ — footingCompute คำนวณก้นหลุมจาก สูงตอม่อ+หนาฐาน+lean+sand เอง
 
   const rebar = parseFootingRebar(item.rebar, item.description, item.notes);
   if (rebar.length === 0) {
@@ -315,6 +311,17 @@ export function specsFromMarks(input: MarksSpecInput): AdapterResult {
       warnings.push(`❓ ${mark}: อ่านเหล็กตะแกรงฐานไม่ออกจาก "${d.rebar || '—'}"`);
     }
 
+    // เหล็กรัดรอบฐาน (RB9) — optional · parse จาก string เช่น "RB9@0.20"
+    let tieRebar: { size: string; spacing: number } | undefined;
+    if (d.tieRebar && d.tieRebar.trim()) {
+      const parsed = parseTie(d.tieRebar);
+      if (parsed) tieRebar = parsed;
+      else
+        warnings.push(
+          `❓ ${mark}: อ่านเหล็กรัดรอบไม่ออกจาก "${d.tieRebar}" — ข้าม (รูปแบบ เช่น RB9@0.20)`,
+        );
+    }
+
     // ตอม่อ (คู่ตาม PEDESTAL_OF — มิติจาก markDims[pedMark] kind=column)
     let pedestal: PedestalSpec | undefined;
     const pedMark = PEDESTAL_OF[mark];
@@ -342,9 +349,10 @@ export function specsFromMarks(input: MarksSpecInput): AdapterResult {
       W: d.W,
       L: d.L,
       T: d.T,
-      depth: d.depth,
+      depth: d.depth ?? 0, // 0 = ให้ footingCompute คำนวณก้นหลุมเอง
       count,
       rebar: rebar.length > 0 ? rebar : undefined,
+      tieRebar,
       pedestal,
       refSheet: 'S2-02',
     });

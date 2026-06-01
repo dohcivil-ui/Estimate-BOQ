@@ -34,6 +34,22 @@ export function barWeightPerM(size: string): number {
   return (d * d) / 162;
 }
 
+/**
+ * ระดับก้นหลุม (ลึกขุด) = สูงตอม่อ + หนาฐาน + คอนกรีตหยาบ + ทรายรองพื้น
+ *   ก้นหลุมเป็น "ผลบวกของมิติ" ไม่ใช่เลขในแบบ → คำนวณที่นี่ (AI อ่านไม่ได้)
+ *   ไม่มีตอม่อคู่ → pedestalH = 0
+ */
+export function autoExcavDepth(opts: {
+  T: number;
+  pedestalH?: number;
+  leanThk?: number;
+  sandThk?: number;
+}): number {
+  const lean = opts.leanThk ?? CONST.LEAN_THK;
+  const sand = opts.sandThk ?? CONST.SAND_THK;
+  return (opts.pedestalH ?? 0) + opts.T + lean + sand;
+}
+
 // ─────────────────────────────────────────────────────────────
 // 2) Types
 // ─────────────────────────────────────────────────────────────
@@ -79,6 +95,8 @@ export interface FootingSpec {
   pedestal?: PedestalSpec;
   /** (legacy) ปริมาตรตอม่อ ลบ.ม./ฐาน — ใช้เมื่อไม่ได้ระบุ pedestal เต็ม */
   pedestalVol?: number;
+  /** เหล็กรัดรอบฐาน (RB9) — แยกจากตะแกรง · provisional (รอวิศวกรยืนยันสูตร) */
+  tieRebar?: { size: string; spacing: number };
   gridPositions?: string[]; // เช่น ["1A","2A",...] (กฎ 12) — pass-through ไป BOQ
   refSheet?: string;     // "S2-02"
 }
@@ -96,6 +114,9 @@ export interface FootingQty {
   ped_formwork_m2: number;   // ไม้แบบตอม่อ
   rebar_kg: number;      // เหล็กรวม (ตะแกรงฐาน + เหล็กยืนตอม่อ + ปลอก)
   rebar_breakdown: Record<string, number>; // kg แยกตามขนาด (สั่งของ/ตัดเหล็ก)
+  /** เหล็กรัดรอบฐาน (provisional) — แยกจากตะแกรง/ปลอก */
+  tie_rebar_kg: number;
+  tie_rebar_size?: string;   // ขนาด (สำหรับ label BOQ)
   warnings: string[];
 }
 
@@ -103,21 +124,27 @@ export interface FootingQty {
 // 3) สูตรหลัก (ข้อ 7) — ต่อ "ชนิดฐาน" 1 รายการ
 // ─────────────────────────────────────────────────────────────
 export function computeFooting(f: FootingSpec): FootingQty {
-  const { W, L, T, depth: D, count: N } = f;
+  const { W, L, T, count: N } = f;
   const cover = f.cover ?? 0.075;
   const warnings: string[] = [];
 
-  if ([W, L, T, D].some((v) => !v || v <= 0))
+  if ([W, L, T].some((v) => !v || v <= 0))
     warnings.push(`❓ ${f.type}: มีมิติ ≤ 0 หรือยังไม่ระบุ (ต้องได้จาก S2-02)`);
+
+  const sandThk = f.sandThk ?? CONST.SAND_THK;
+  const leanThk = f.leanThk ?? CONST.LEAN_THK;
+  const ped = f.pedestal;
+  // ก้นหลุม: ผลบวกของมิติ (สูงตอม่อ+หนาฐาน+lean+sand) — override ได้ผ่าน f.depth (>0)
+  const D =
+    f.depth && f.depth > 0
+      ? f.depth
+      : autoExcavDepth({ T, pedestalH: ped?.H, leanThk, sandThk });
 
   // ปริมาตร/พื้นที่ (×N)
   const concrete_m3 = W * L * T * N;
-  const sandThk = f.sandThk ?? CONST.SAND_THK;
-  const leanThk = f.leanThk ?? CONST.LEAN_THK;
   const sand_m3 = W * L * sandThk * N;
   const lean_m3 = W * L * leanThk * N;
   const excavation_m3 = (W + 2 * CONST.EXCAV_SIDE) * (L + 2 * CONST.EXCAV_SIDE) * D * N;
-  const ped = f.pedestal;
   const pedVolPer = ped ? ped.W * ped.L * ped.H : (f.pedestalVol ?? 0);
   const pedestalVol = pedVolPer * N;
   const backfill_m3 = excavation_m3 - concrete_m3 - sand_m3 - lean_m3 - pedestalVol;
@@ -171,6 +198,29 @@ export function computeFooting(f: FootingSpec): FootingQty {
     rebar_kg += tKg;
   }
 
+  // ── เหล็กรัดรอบฐาน (RB9) — แยกจากตะแกรง · provisional ──
+  //   จำนวน ≈ ceil(สูงตอม่อ / ระยะ) · ยาว/ตัว ≈ 2(Wped+Lped) + งอปลาย
+  //   ⚠️ วิธีคิด = engineering judgment → flag ❓ รอวิศวกรยืนยัน
+  let tie_rebar_kg = 0;
+  let tie_rebar_size: string | undefined;
+  if (f.tieRebar) {
+    if (ped) {
+      const { size, spacing } = f.tieRebar;
+      const nTie = Math.ceil(ped.H / spacing);
+      const tieLen = 2 * (ped.W + ped.L) + 2 * 0.05; // เส้นรอบรูป + งอปลาย
+      tie_rebar_kg = nTie * tieLen * barWeightPerM(size) * N;
+      tie_rebar_size = size;
+      warnings.push(
+        `❓ ${f.type}: เหล็กรัดรอบ ${size} วิธีคิด provisional ` +
+          `(n≈ceil(${ped.H}/${spacing})=${nTie}, ยาว≈2(${ped.W}+${ped.L})+งอ) — รอวิศวกรยืนยันสูตร`,
+      );
+    } else {
+      warnings.push(
+        `❓ ${f.type}: ระบุเหล็กรัดรอบ ${f.tieRebar.size} แต่ไม่มีตอม่อคู่ — คิดปริมาณไม่ได้`,
+      );
+    }
+  }
+
   const round = (x: number, p = 3) => +x.toFixed(p);
   return {
     type: f.type,
@@ -187,6 +237,8 @@ export function computeFooting(f: FootingSpec): FootingQty {
     rebar_breakdown: Object.fromEntries(
       Object.entries(rebar_breakdown).map(([k, v]) => [k, round(v, 1)])
     ),
+    tie_rebar_kg: round(tie_rebar_kg, 1),
+    tie_rebar_size,
     warnings,
   };
 }

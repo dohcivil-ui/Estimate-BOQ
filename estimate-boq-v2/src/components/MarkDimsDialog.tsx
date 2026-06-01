@@ -13,6 +13,7 @@ import {
   type MarkDimsSource,
   type MemberCategory,
 } from '@/stores/detectionStore';
+import { autoExcavDepth } from '@/services/compute/footingCompute';
 
 type DimsKind = 'footing' | 'column' | 'beam' | 'slab';
 
@@ -42,6 +43,8 @@ interface Props {
   existing: MarkDims | undefined;
   /** ที่มาของมิติเดิม — 'ai' แสดงป้าย "AI อ่าน" ให้ตรวจก่อนใช้ */
   source?: MarkDimsSource;
+  /** สูงตอม่อคู่ (ม.) — ใช้โชว์ก้นหลุมที่คำนวณเองในฟอร์มฐาน (0/undefined = ไม่มีคู่) */
+  pedestalH?: number;
   onSave: (dims: MarkDims) => void;
   onClear: () => void;
   onClose: () => void;
@@ -51,6 +54,7 @@ export function MarkDimsDialog({
   mark,
   existing,
   source,
+  pedestalH,
   onSave,
   onClear,
   onClose,
@@ -62,8 +66,15 @@ export function MarkDimsDialog({
   const [fW, setFW] = useState(ef ? String(ef.W) : '');
   const [fL, setFL] = useState(ef ? String(ef.L) : '');
   const [fT, setFT] = useState(ef ? String(ef.T) : '');
-  const [fDepth, setFDepth] = useState(ef ? String(ef.depth) : '');
+  const [fDepth, setFDepth] = useState(ef && ef.depth != null ? String(ef.depth) : '');
   const [fRebar, setFRebar] = useState(ef?.rebar ?? '');
+  const [fTie, setFTie] = useState(ef?.tieRebar ?? '');
+
+  // ก้นหลุมที่โค้ดคำนวณเอง (โชว์เป็น placeholder — ว่าง = ใช้ค่านี้)
+  const fTnum = numField(fT);
+  const autoDepth = Number.isFinite(fTnum)
+    ? autoExcavDepth({ T: fTnum, pedestalH })
+    : null;
 
   // ── ตอม่อ/เสา ──
   const ec = existing?.kind === 'column' ? existing : null;
@@ -104,8 +115,9 @@ export function MarkDimsDialog({
           W: numField(fW),
           L: numField(fL),
           T: numField(fT),
-          depth: numField(fDepth),
+          ...(fDepth.trim() === '' ? {} : { depth: numField(fDepth) }),
           rebar: fRebar.trim(),
+          ...(fTie.trim() === '' ? {} : { tieRebar: fTie.trim() }),
         };
         break;
       case 'column':
@@ -195,16 +207,30 @@ export function MarkDimsDialog({
               <NumIn label="หนา T (ม.)" value={fT} onChange={setFT} bad={bad(numField(fT))} />
             </div>
             <NumIn
-              label="ระดับก้นหลุม/ลึก (ม.)"
+              label="ก้นหลุม/ลึก (ม.) — ว่าง = โปรแกรมคำนวณเอง"
               value={fDepth}
               onChange={setFDepth}
-              bad={bad(numField(fDepth))}
+              bad={false}
+              placeholder={
+                autoDepth != null ? `auto ${autoDepth.toFixed(2)}` : 'auto'
+              }
             />
+            {fDepth.trim() === '' && autoDepth != null && (
+              <p className="-mt-1 text-[10px] text-ink-muted">
+                โปรแกรมจะใช้ {autoDepth.toFixed(2)} ม. (สูงตอม่อ {(pedestalH ?? 0).toFixed(2)} + หนาฐาน + lean + ทราย)
+              </p>
+            )}
             <TxtIn
               label='เหล็กตะแกรง (เช่น "16-DB12" หรือ "DB12@0.15")'
               value={fRebar}
               onChange={setFRebar}
               bad={fRebar.trim() === ''}
+            />
+            <TxtIn
+              label='เหล็กรัดรอบฐาน (เช่น "RB9@0.20") — ถ้ามี'
+              value={fTie}
+              onChange={setFTie}
+              bad={false}
             />
           </div>
         ) : kind === 'column' ? (
@@ -378,11 +404,13 @@ function NumIn({
   value,
   onChange,
   bad,
+  placeholder,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   bad: boolean;
+  placeholder?: string;
 }) {
   return (
     <label className="block">
@@ -391,6 +419,7 @@ function NumIn({
         inputMode="decimal"
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
         className={`w-full rounded border bg-bg-base px-2 py-1 text-xs text-ink-primary outline-none focus:border-accent ${
           bad ? 'border-danger' : 'border-bg-border'
         }`}
