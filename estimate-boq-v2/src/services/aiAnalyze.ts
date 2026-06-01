@@ -703,6 +703,8 @@ function coerceMarkDims(
     const T = num(o.T);
     const rebar = text(o.rebar);
     const tieRebar = text(o.tieRebar);
+    const sandThk = num(o.sandThk);
+    const leanThk = num(o.leanThk);
     // depth (ก้นหลุม) ไม่ขอจาก AI — เป็นผลบวกของมิติ โค้ดคำนวณเอง
     if (W == null || L == null || T == null || !rebar) {
       return { reason: 'มิติฐานรากไม่ครบ (ต้องมี W,L,T,rebar)' };
@@ -715,6 +717,8 @@ function coerceMarkDims(
         T,
         rebar,
         ...(tieRebar ? { tieRebar } : {}),
+        ...(sandThk != null ? { sandThk } : {}),
+        ...(leanThk != null ? { leanThk } : {}),
       },
     };
   }
@@ -807,12 +811,12 @@ export async function analyzeDimensions(opts: {
   const userText = `mark ที่ต้องอ่านมิติ: ${marks.join(', ')}
 
 คืน JSON object: key = ชื่อ mark, value = ออบเจกต์มิติตาม shape ของหมวดนั้น
-  footing → {"kind":"footing","W":number,"L":number,"T":number,"rebar":"เช่น 16-DB12","tieRebar":"เช่น RB9@0.20 ถ้ามี"}
+  footing → {"kind":"footing","W":number,"L":number,"T":number,"rebar":"เช่น 16-DB12","tieRebar":"เช่น 1-RB9 รัดรอบ ถ้ามี","sandThk":"ม. ถ้าเห็นในแบบ","leanThk":"ม. ถ้าเห็นในแบบ"}
   column  → {"kind":"column","W":number,"L":number,"H":number,"vBars":"เช่น 4-DB12","tie":"เช่น RB9@0.15"}
   beam    → {"kind":"beam","W":number,"H":number,"pieces":[{"length":number,"count":number}],"mainBars":"...","stirrup":"..."}
   slab    → {"kind":"slab","areaSqm":number,"thickness":number,"meshWireMM":number,"meshSpacing":number,"sandThk":number}
 
-⚠️ ฐานราก: อย่าอ่าน/อย่าคืน "ระดับก้นหลุม/depth" — โปรแกรมคำนวณเอง · tieRebar (เหล็กรัดรอบ) ใส่เฉพาะถ้ามีในแบบ ไม่มีก็ข้าม
+⚠️ ฐานราก: อย่าอ่าน/อย่าคืน "ระดับก้นหลุม/depth" — โปรแกรมคำนวณเอง · tieRebar (เหล็กรัดรอบ) ใส่เฉพาะถ้ามีในแบบ ไม่มีก็ข้าม · sandThk/leanThk (ทราย/คอนกรีตหยาบ) ใส่เฉพาะถ้าระบุในแบบ ไม่มีก็ข้าม (โปรแกรมมีค่า default)
 mark ที่อ่านไม่ชัด/ไม่พบในแบบ → ใส่ใน "unreadable": [{"mark":"...","reason":"..."}] อย่าเดา
 
 ตัวอย่างรูปแบบคำตอบ:

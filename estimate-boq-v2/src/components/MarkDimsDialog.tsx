@@ -13,7 +13,7 @@ import {
   type MarkDimsSource,
   type MemberCategory,
 } from '@/stores/detectionStore';
-import { autoExcavDepth } from '@/services/compute/footingCompute';
+import { autoExcavDepth, CONST } from '@/services/compute/footingCompute';
 
 type DimsKind = 'footing' | 'column' | 'beam' | 'slab';
 
@@ -69,11 +69,20 @@ export function MarkDimsDialog({
   const [fDepth, setFDepth] = useState(ef && ef.depth != null ? String(ef.depth) : '');
   const [fRebar, setFRebar] = useState(ef?.rebar ?? '');
   const [fTie, setFTie] = useState(ef?.tieRebar ?? '');
+  const [fSand, setFSand] = useState(ef?.sandThk != null ? String(ef.sandThk) : '');
+  const [fLean, setFLean] = useState(ef?.leanThk != null ? String(ef.leanThk) : '');
 
   // ก้นหลุมที่โค้ดคำนวณเอง (โชว์เป็น placeholder — ว่าง = ใช้ค่านี้)
   const fTnum = numField(fT);
+  const fSandNum = numField(fSand);
+  const fLeanNum = numField(fLean);
   const autoDepth = Number.isFinite(fTnum)
-    ? autoExcavDepth({ T: fTnum, pedestalH })
+    ? autoExcavDepth({
+        T: fTnum,
+        pedestalH,
+        sandThk: Number.isFinite(fSandNum) ? fSandNum : undefined,
+        leanThk: Number.isFinite(fLeanNum) ? fLeanNum : undefined,
+      })
     : null;
 
   // ── ตอม่อ/เสา ──
@@ -118,6 +127,8 @@ export function MarkDimsDialog({
           ...(fDepth.trim() === '' ? {} : { depth: numField(fDepth) }),
           rebar: fRebar.trim(),
           ...(fTie.trim() === '' ? {} : { tieRebar: fTie.trim() }),
+          ...(fSand.trim() === '' ? {} : { sandThk: numField(fSand) }),
+          ...(fLean.trim() === '' ? {} : { leanThk: numField(fLean) }),
         };
         break;
       case 'column':
@@ -227,11 +238,27 @@ export function MarkDimsDialog({
               bad={fRebar.trim() === ''}
             />
             <TxtIn
-              label='เหล็กรัดรอบฐาน (เช่น "RB9@0.20") — ถ้ามี'
+              label='เหล็กรัดรอบฐาน (เช่น "1-RB9 รัดรอบ") — ถ้ามี'
               value={fTie}
               onChange={setFTie}
               bad={false}
             />
+            <div className="grid grid-cols-2 gap-2">
+              <NumIn
+                label="ทรายรอง (ม.) — เว้นว่าง=default"
+                value={fSand}
+                onChange={setFSand}
+                bad={false}
+                placeholder={`default ${CONST.SAND_THK}`}
+              />
+              <NumIn
+                label="lean หยาบ (ม.) — เว้นว่าง=default"
+                value={fLean}
+                onChange={setFLean}
+                bad={false}
+                placeholder={`default ${CONST.LEAN_THK}`}
+              />
+            </div>
           </div>
         ) : kind === 'column' ? (
           <div className="space-y-2">

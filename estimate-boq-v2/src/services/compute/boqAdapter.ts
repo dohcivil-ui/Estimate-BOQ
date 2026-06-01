@@ -81,16 +81,14 @@ function parseFootingRebar(...texts: Array<string | undefined>): RebarLayer[] {
     out.push({
       size: `${m[1]!.toUpperCase()}${m[2]}`,
       spacing: toMeterSpacing(parseFloat(m[3]!)),
-      bothWays: true,
     });
   }
   if (out.length > 0) return out;
-  // โหมดจำนวนเส้น: n-(DB|RB)d  หรือ  n (DB|RB)d
+  // โหมดจำนวนเส้น: n-(DB|RB)d  หรือ  n (DB|RB)d (n = จำนวนรวมทั้ง 2 ทิศ)
   for (const m of joined.matchAll(/\b(\d+)\s*[-xX×]?\s*(DB|RB)\s?(\d+)/gi)) {
     out.push({
       size: `${m[2]!.toUpperCase()}${m[3]}`,
       bars: parseInt(m[1]!, 10),
-      bothWays: true,
     });
   }
   return out;
@@ -116,6 +114,19 @@ function parseTie(
   return {
     size: `${m[1]!.toUpperCase()}${m[2]}`,
     spacing: toMeterSpacing(parseFloat(m[3]!)),
+  };
+}
+
+/** parse เหล็กรัดรอบฐาน count-size เช่น "1-RB9 รัดรอบ" / "RB9 รัดรอบ" / "2-RB9" → {size,count} (ไม่มี count = 1) */
+function parseTieRebar(
+  text: string | undefined,
+): { size: string; count: number } | null {
+  if (!text) return null;
+  const m = text.match(/(?:(\d+)\s*[-xX×]?\s*)?(DB|RB)\s?(\d+)/i);
+  if (!m) return null;
+  return {
+    size: `${m[2]!.toUpperCase()}${m[3]}`,
+    count: m[1] ? parseInt(m[1], 10) : 1,
   };
 }
 
@@ -179,7 +190,7 @@ function buildFooting(
       const vBars = parseVBars(pItem.rebar ?? pItem.description);
       const tie = parseTie(pItem.rebar ?? pItem.description);
       if (pW && pL && pH && vBars && tie) {
-        pedestal = { W: pW, L: pL, H: pH, vBars, tie };
+        pedestal = { type: pedCode, W: pW, L: pL, H: pH, vBars, tie };
       } else {
         warnings.push(
           `❓ ${code}/${pedCode}: ตอม่ออ่านมิติ/เหล็กไม่ครบ — คิดเฉพาะฐาน (ไม่รวมตอม่อ)`,
@@ -311,14 +322,14 @@ export function specsFromMarks(input: MarksSpecInput): AdapterResult {
       warnings.push(`❓ ${mark}: อ่านเหล็กตะแกรงฐานไม่ออกจาก "${d.rebar || '—'}"`);
     }
 
-    // เหล็กรัดรอบฐาน (RB9) — optional · parse จาก string เช่น "RB9@0.20"
-    let tieRebar: { size: string; spacing: number } | undefined;
+    // เหล็กรัดรอบฐาน (RB9) — optional · parse count-size เช่น "1-RB9 รัดรอบ"
+    let tieRebar: { size: string; count: number } | undefined;
     if (d.tieRebar && d.tieRebar.trim()) {
-      const parsed = parseTie(d.tieRebar);
+      const parsed = parseTieRebar(d.tieRebar);
       if (parsed) tieRebar = parsed;
       else
         warnings.push(
-          `❓ ${mark}: อ่านเหล็กรัดรอบไม่ออกจาก "${d.tieRebar}" — ข้าม (รูปแบบ เช่น RB9@0.20)`,
+          `❓ ${mark}: อ่านเหล็กรัดรอบไม่ออกจาก "${d.tieRebar}" — ข้าม (รูปแบบ เช่น 1-RB9 รัดรอบ)`,
         );
     }
 
@@ -331,7 +342,7 @@ export function specsFromMarks(input: MarksSpecInput): AdapterResult {
         const vBars = parseVBars(pd.vBars);
         const tie = parseTie(pd.tie);
         if (pd.W && pd.L && pd.H && vBars && tie) {
-          pedestal = { W: pd.W, L: pd.L, H: pd.H, vBars, tie };
+          pedestal = { type: pedMark, W: pd.W, L: pd.L, H: pd.H, vBars, tie };
         } else {
           warnings.push(
             `❓ ${mark}/${pedMark}: ตอม่ออ่านมิติ/เหล็กไม่ครบ — คิดเฉพาะฐาน`,
@@ -351,6 +362,8 @@ export function specsFromMarks(input: MarksSpecInput): AdapterResult {
       T: d.T,
       depth: d.depth ?? 0, // 0 = ให้ footingCompute คำนวณก้นหลุมเอง
       count,
+      sandThk: d.sandThk, // เว้นว่าง = footingCompute ใช้ CONST default
+      leanThk: d.leanThk,
       rebar: rebar.length > 0 ? rebar : undefined,
       tieRebar,
       pedestal,

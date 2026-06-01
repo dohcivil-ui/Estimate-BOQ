@@ -53,22 +53,18 @@ export function autoExcavDepth(opts: {
 // ─────────────────────────────────────────────────────────────
 // 2) Types
 // ─────────────────────────────────────────────────────────────
-/** เหล็กตะแกรงฐาน 1 ชั้น/ทิศ — ระบุได้ 2 โหมด: ตามระยะเรียง หรือ ระบุจำนวนเส้นตรง ๆ */
+/** เหล็กตะแกรงฐาน (วาง 2 ทิศสานกัน) — ระบุได้ 2 โหมด: ตามระยะเรียง หรือ จำนวนรวม */
 export interface RebarLayer {
   size: string;          // "DB12", "RB9" ...
-  /** โหมด A: ระยะเรียง (ม.) → คำนวณจำนวนเส้นจากความกว้างฐาน */
+  /** โหมด A: ระยะเรียง (ม.) → ความยาวรวม = Σ(จำนวน/ทิศ × ขนาดฐานทิศนั้น) ทั้ง 2 ทิศ */
   spacing?: number;
-  /** โหมด B: ระบุจำนวนเส้นตรง ๆ (ถ้าใส่ จะ override spacing) */
+  /** โหมด B: จำนวนเส้น "รวมทั้ง 2 ทิศ" (ไม่ใช่ต่อทิศ) — ยาว/เส้น = max(W,L) */
   bars?: number;
-  /** ทิศ: ตะแกรงล่างปกติมี 2 ทิศ (X,Y). ใส่ true = คิดทั้ง 2 ทิศ (default true) */
-  bothWays?: boolean;
-  /** ความยาวเส้นกำหนดเอง (ม.) ถ้าไม่ใส่ = มิติฐาน − 2·cover (+ hook) */
-  barLengthOverride?: number;
-  hook?: number;         // งอปลายต่อข้าง (ม.) default 0
 }
 
 /** ตอม่อ (short column) — S2-04 Column Schedule */
 export interface PedestalSpec {
+  type?: string;         // รหัสตอม่อ เช่น "C2" — ใช้ใน note breakdown
   W: number;             // หน้าตัด กว้าง (ม.)
   L: number;             // หน้าตัด ยาว (ม.)
   H: number;             // ความสูง (ม.) — คิด 1.00 ตามแบบ
@@ -95,8 +91,8 @@ export interface FootingSpec {
   pedestal?: PedestalSpec;
   /** (legacy) ปริมาตรตอม่อ ลบ.ม./ฐาน — ใช้เมื่อไม่ได้ระบุ pedestal เต็ม */
   pedestalVol?: number;
-  /** เหล็กรัดรอบฐาน (RB9) — แยกจากตะแกรง · provisional (รอวิศวกรยืนยันสูตร) */
-  tieRebar?: { size: string; spacing: number };
+  /** เหล็กรัดรอบฐาน (RB9) — แยกจากตะแกรง · count = จำนวนเส้น (รัดรอบรูปฐาน) */
+  tieRebar?: { size: string; count: number };
   gridPositions?: string[]; // เช่น ["1A","2A",...] (กฎ 12) — pass-through ไป BOQ
   refSheet?: string;     // "S2-02"
 }
@@ -114,7 +110,9 @@ export interface FootingQty {
   ped_formwork_m2: number;   // ไม้แบบตอม่อ
   rebar_kg: number;      // เหล็กรวม (ตะแกรงฐาน + เหล็กยืนตอม่อ + ปลอก)
   rebar_breakdown: Record<string, number>; // kg แยกตามขนาด (สั่งของ/ตัดเหล็ก)
-  /** เหล็กรัดรอบฐาน (provisional) — แยกจากตะแกรง/ปลอก */
+  /** breakdown รายชิ้นต่อขนาด (เฉพาะขนาดที่รวมหลายชิ้น) เช่น DB12: "ตะแกรงฐาน 21.3 + ยืนตอม่อ C2 9.9 = 31.3" */
+  rebar_notes: Record<string, string>;
+  /** เหล็กรัดรอบฐาน RB9 — แยกจากตะแกรง/ปลอก */
   tie_rebar_kg: number;
   tie_rebar_size?: string;   // ขนาด (สำหรับ label BOQ)
   warnings: string[];
@@ -125,7 +123,6 @@ export interface FootingQty {
 // ─────────────────────────────────────────────────────────────
 export function computeFooting(f: FootingSpec): FootingQty {
   const { W, L, T, count: N } = f;
-  const cover = f.cover ?? 0.075;
   const warnings: string[] = [];
 
   if ([W, L, T].some((v) => !v || v <= 0))
@@ -153,75 +150,93 @@ export function computeFooting(f: FootingSpec): FootingQty {
   if (backfill_m3 < 0)
     warnings.push(`❓ ${f.type}: ดินถมกลับติดลบ — ตรวจ depth/มิติ`);
 
-  // เหล็ก
+  // เหล็กตะแกรงฐาน — วาง 2 ทิศสานกัน · ยาว/เส้น = ขนาดฐานเต็ม (ไม่หัก cover/hook)
+  //   ⚠️ ห้ามคูณ 2 ซ้ำ: A คิด 2 ทิศในสูตร, B รับ bars เป็นยอดรวมแล้ว
   const rebar_breakdown: Record<string, number> = {};
+  // breakdown รายชิ้นต่อขนาด (กก.) — สำหรับ note เมื่อขนาดเดียวมาจากหลายชิ้น
+  const rebar_parts: Record<string, { grid: number; pedV: number; pedTie: number }> = {};
+  const partOf = (size: string) =>
+    (rebar_parts[size] ??= { grid: 0, pedV: 0, pedTie: 0 });
   let rebar_kg = 0;
   for (const r of f.rebar ?? []) {
-    const both = r.bothWays ?? true;
-    const dirs = both ? 2 : 1;
-    // จำนวนเส้นต่อทิศ
-    let nBars: number;
-    if (r.bars != null) nBars = r.bars;
-    else if (r.spacing) {
-      const clear = Math.min(W, L) - 2 * cover; // เรียงตามด้านสั้น (ประมาณการ)
-      nBars = Math.floor(clear / r.spacing) + 1;
+    let total_len: number; // ความยาวรวมทุกเส้น (ม.) — รวม 2 ทิศแล้ว
+    if (r.spacing) {
+      // A: เส้นพาด W เรียงตาม L (ceil(L/s)) + เส้นพาด L เรียงตาม W (ceil(W/s))
+      const nAlongL = Math.ceil(L / r.spacing);
+      const nAlongW = Math.ceil(W / r.spacing);
+      total_len = nAlongL * W + nAlongW * L;
+    } else if (r.bars != null) {
+      // B: จำนวนรวมทั้ง 2 ทิศ × ยาว/เส้น (= ขนาดฐาน max(W,L) เป๊ะ ๆ ไม่บวก hook)
+      total_len = r.bars * Math.max(W, L);
     } else {
       warnings.push(`❓ ${f.type}: เหล็ก ${r.size} ไม่ระบุ spacing/bars`);
       continue;
     }
-    // ความยาวต่อเส้น
-    const span = Math.max(W, L); // เส้นพาดด้านยาว (ประมาณการ symmetric)
-    const barLen = r.barLengthOverride ?? span - 2 * cover + 2 * (r.hook ?? 0);
-    const kg = nBars * barLen * barWeightPerM(r.size) * dirs * N;
+    const kg = total_len * barWeightPerM(r.size) * N;
     rebar_breakdown[r.size] = (rebar_breakdown[r.size] ?? 0) + kg;
+    partOf(r.size).grid += kg;
     rebar_kg += kg;
   }
 
   // ── ตอม่อ (S2-04) ──
   let ped_concrete_m3 = 0, ped_formwork_m2 = 0;
+  let dowelUsed = 0;          // เผื่อฝัง/ทาบเหล็กยืน (ม.) — สำหรับ note
+  let dowelDefault = false;   // true = ใช้ค่า default (แบบไม่ระบุ)
   if (ped) {
     const pcover = ped.cover ?? 0.04;
     ped_concrete_m3 = ped.W * ped.L * ped.H * N;
     ped_formwork_m2 = 2 * (ped.W + ped.L) * ped.H * N; // 4 ด้าน
     // เหล็กยืน
     const dowel = ped.dowel ?? 0.40;
+    dowelUsed = dowel;
+    dowelDefault = ped.dowel == null;
     if (ped.dowel == null)
       warnings.push(`❓ ${f.type}: เผื่อฝัง/ทาบเหล็กยืนตอม่อใช้ค่า default 0.40m (S2-04 ไม่ระบุ lap)`);
     const vKg = ped.vBars.count * (ped.H + dowel) * barWeightPerM(ped.vBars.size) * N;
     rebar_breakdown[ped.vBars.size] = (rebar_breakdown[ped.vBars.size] ?? 0) + vKg;
+    partOf(ped.vBars.size).pedV += vKg;
     rebar_kg += vKg;
     // ปลอก
     const nTie = Math.floor(ped.H / ped.tie.spacing) + 1;
     const tieLen = 2 * ((ped.W - 2 * pcover) + (ped.L - 2 * pcover)) + 2 * 0.05; // +งอ
     const tKg = nTie * tieLen * barWeightPerM(ped.tie.size) * N;
     rebar_breakdown[ped.tie.size] = (rebar_breakdown[ped.tie.size] ?? 0) + tKg;
+    partOf(ped.tie.size).pedTie += tKg;
     rebar_kg += tKg;
   }
 
-  // ── เหล็กรัดรอบฐาน (RB9) — แยกจากตะแกรง · provisional ──
-  //   จำนวน ≈ ceil(สูงตอม่อ / ระยะ) · ยาว/ตัว ≈ 2(Wped+Lped) + งอปลาย
-  //   ⚠️ วิธีคิด = engineering judgment → flag ❓ รอวิศวกรยืนยัน
+  // ── เหล็กรัดรอบฐาน (RB9) — แยกจากตะแกรง (สูตรวิศวกรยืนยันแล้ว) ──
+  //   จำนวน = count (จากฟิลด์) · ยาว/เส้น = 2(W+L) + ทาบ (เส้นรอบรูปฐาน)
+  const TIE_LAP = 0.4; // ทาบ default (ม.) — ปรับได้
   let tie_rebar_kg = 0;
   let tie_rebar_size: string | undefined;
   if (f.tieRebar) {
-    if (ped) {
-      const { size, spacing } = f.tieRebar;
-      const nTie = Math.ceil(ped.H / spacing);
-      const tieLen = 2 * (ped.W + ped.L) + 2 * 0.05; // เส้นรอบรูป + งอปลาย
-      tie_rebar_kg = nTie * tieLen * barWeightPerM(size) * N;
-      tie_rebar_size = size;
-      warnings.push(
-        `❓ ${f.type}: เหล็กรัดรอบ ${size} วิธีคิด provisional ` +
-          `(n≈ceil(${ped.H}/${spacing})=${nTie}, ยาว≈2(${ped.W}+${ped.L})+งอ) — รอวิศวกรยืนยันสูตร`,
-      );
-    } else {
-      warnings.push(
-        `❓ ${f.type}: ระบุเหล็กรัดรอบ ${f.tieRebar.size} แต่ไม่มีตอม่อคู่ — คิดปริมาณไม่ได้`,
-      );
-    }
+    const { size, count } = f.tieRebar;
+    const tieLen = 2 * (W + L) + TIE_LAP; // เส้นรอบรูปฐาน + ทาบ
+    tie_rebar_kg = count * tieLen * barWeightPerM(size) * N;
+    tie_rebar_size = size;
+    warnings.push(
+      `ℹ️ ${f.type}: เหล็กรัดรอบ ${count}-${size} — ทาบ (lap) default ${TIE_LAP} ม. ปรับได้`,
+    );
   }
 
   const round = (x: number, p = 3) => +x.toFixed(p);
+
+  // note breakdown รายชิ้น — เฉพาะขนาดที่มาจากหลายชิ้น (รวมตามขนาดตามหลัก QS)
+  const pedName = ped?.type ?? 'ตอม่อ';
+  const rebar_notes: Record<string, string> = {};
+  for (const [size, p] of Object.entries(rebar_parts)) {
+    const segs: string[] = [];
+    if (p.grid > 0) segs.push(`ตะแกรงฐาน ${round(p.grid, 1)}`);
+    if (p.pedV > 0) segs.push(`ยืนตอม่อ ${pedName} ${round(p.pedV, 1)}`);
+    if (p.pedTie > 0) segs.push(`ปลอกตอม่อ ${pedName} ${round(p.pedTie, 1)}`);
+    if (segs.length < 2) continue; // ชิ้นเดียว — ไม่ต้องมี note
+    let note = `${segs.join(' + ')} = ${round(p.grid + p.pedV + p.pedTie, 1)} กก.`;
+    if (p.pedV > 0 && dowelDefault)
+      note += ` · ❓ dowel ${dowelUsed} (default, S2-04 ไม่ระบุ lap)`;
+    rebar_notes[size] = note;
+  }
+
   return {
     type: f.type,
     count: N,
@@ -237,6 +252,7 @@ export function computeFooting(f: FootingSpec): FootingQty {
     rebar_breakdown: Object.fromEntries(
       Object.entries(rebar_breakdown).map(([k, v]) => [k, round(v, 1)])
     ),
+    rebar_notes,
     tie_rebar_kg: round(tie_rebar_kg, 1),
     tie_rebar_size,
     warnings,

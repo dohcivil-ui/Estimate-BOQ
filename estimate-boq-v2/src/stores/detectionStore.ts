@@ -60,8 +60,12 @@ export type MarkDims =
       /** ก้นหลุม/ลึกขุด — optional: ว่าง = footingCompute คำนวณเอง (สูงตอม่อ+หนาฐาน+lean+sand) */
       depth?: number;
       rebar: string;
-      /** เหล็กรัดรอบฐาน (เช่น "RB9@0.20") — แยกจากตะแกรง · optional */
+      /** เหล็กรัดรอบฐาน (เช่น "1-RB9 รัดรอบ") — แยกจากตะแกรง · optional */
       tieRebar?: string;
+      /** ทรายรองพื้น (ม.) — optional: เว้นว่าง = ใช้ CONST.SAND_THK */
+      sandThk?: number;
+      /** คอนกรีตหยาบ lean (ม.) — optional: เว้นว่าง = ใช้ CONST.LEAN_THK */
+      leanThk?: number;
     }
   | {
       kind: 'column';

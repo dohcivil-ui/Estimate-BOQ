@@ -46,6 +46,7 @@ function sub(
   unit: string,
   kind: 'material' | 'labor',
   unitPrice = 0,
+  note?: string,
 ): AIMaterial {
   return {
     name,
@@ -54,6 +55,7 @@ function sub(
     unit,
     unit_price: unitPrice,
     kind,
+    ...(note ? { note } : {}),
   };
 }
 
@@ -109,16 +111,18 @@ function footingToItem(
     if (formwork.labor > 0)
       subs.push(sub('ค่าประกอบไม้แบบ', formwork_m2, 'ตร.ม.', 'labor', formwork.labor));
   }
-  // เหล็กเสริม — แยกตามขนาด (สั่งของ/ตัดเหล็ก)
+  // เหล็กเสริม — แยกตามขนาด (สั่งของ/ตัดเหล็ก) · เก็บ breakdown รายชิ้นใน note
   for (const [size, kg] of Object.entries(q.rebar_breakdown)) {
     if (kg > 0)
-      subs.push(sub(`เหล็กเสริม ${size}`, kg, 'กก.', 'material', rebar.material));
+      subs.push(
+        sub(`เหล็กเสริม ${size}`, kg, 'กก.', 'material', rebar.material, q.rebar_notes[size]),
+      );
   }
-  // เหล็กรัดรอบฐาน (provisional — แยกจากตะแกรง · รอวิศวกรยืนยันสูตร)
+  // เหล็กรัดรอบฐาน RB9 (แยกจากตะแกรง)
   if (q.tie_rebar_kg > 0)
     subs.push(
       sub(
-        `เหล็กรัดรอบฐาน ${q.tie_rebar_size ?? ''} (provisional)`.trim(),
+        `เหล็กรัดรอบฐาน ${q.tie_rebar_size ?? ''}`.trim(),
         q.tie_rebar_kg,
         'กก.',
         'material',
