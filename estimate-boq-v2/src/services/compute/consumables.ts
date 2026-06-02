@@ -13,7 +13,8 @@
 
 /** อัตราส่วนวัสดุสิ้นเปลือง — config เดียว แก้ที่เดียว (ค่าโดยประมาณ — estimated) */
 export interface ConsumableRatios {
-  /** ลวดผูก = น้ำหนักเหล็ก × tieWirePct (1% โดยประมาณ) */
+  // ลวดผูก 3% (30 กก./ตัน) — ราคากลาง+เผื่อราชการ; ดู docs/cgd-constants.md §A1; ยืนยันเลขหน้า กบก. ภายหลัง
+  // AI prompt mirror ค่านี้ที่ aiPrompts.ts:94,654 — ต้อง sync ด้วยมือ (SoT ของเลขสุดท้าย = ค่าใน CONSUMABLE_RATIOS นี้)
   tieWirePct: number;
   /** ตะปู = พื้นที่ไม้แบบ × nailsPerM2 (กก./ตร.ม.) */
   nailsPerM2: number;
@@ -22,7 +23,7 @@ export interface ConsumableRatios {
 }
 
 export const CONSUMABLE_RATIOS: ConsumableRatios = {
-  tieWirePct: 0.01,
+  tieWirePct: 0.03,
   nailsPerM2: 0.3,
   walerFactor: 0.5,
 };

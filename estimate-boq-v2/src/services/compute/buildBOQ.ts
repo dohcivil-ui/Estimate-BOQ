@@ -11,7 +11,7 @@
  *   - ปริมาตร/พื้นที่/น้ำหนักเหล็ก/งานดิน คำนวณที่นี่ → reproduce ได้
  *
  * วัสดุสิ้นเปลือง (consumables) ที่ core ไม่ได้คิด เติมในชั้นนี้:
- *   - ลวดผูกเหล็ก ≈ 1.5% ของน้ำหนักเหล็ก (โดยประมาณ — estimated)
+ *   - ลวดผูกเหล็ก: อัตราจาก CONSUMABLE_RATIOS.tieWirePct (consumables.ts) — อย่า hardcode ค่าซ้ำที่นี่
  *   - ตะปู ≈ 0.20 กก./ตร.ม. ไม้แบบ (โดยประมาณ — estimated)
  *
  * pure module: ไม่มี dependency กับ store/supabase/react
