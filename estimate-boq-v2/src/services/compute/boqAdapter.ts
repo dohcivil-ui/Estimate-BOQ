@@ -14,6 +14,7 @@
 import type { AIItem } from '@/types/ai';
 import type { FootingSpec, RebarLayer, PedestalSpec } from './footingCompute.ts';
 import type { BeamSpec, BeamBar, SlabSpec } from './beamCompute.ts';
+import { parseBeamBars } from './parseBeamBars';
 // type-only — ไม่ดึง zustand เข้า pure module (erased ตอน compile)
 import type { MarkDims } from '@/stores/detectionStore';
 
@@ -378,11 +379,8 @@ export function specsFromMarks(input: MarksSpecInput): AdapterResult {
       warnings.push(`❓ ยังไม่เติมมิติ ${mark} (คาน) — กดปุ่ม ✏️ เพื่อเติม`);
       continue;
     }
-    const main = parseVBars(d.mainBars);
-    const mainBars: BeamBar[] = main
-      ? [{ size: main.size, count: main.count }]
-      : [];
-    if (!main) {
+    const mainBars: BeamBar[] = parseBeamBars(d.mainBars);
+    if (mainBars.length === 0) {
       warnings.push(`❓ ${mark}: อ่านเหล็กยืนหลักไม่ออกจาก "${d.mainBars || '—'}"`);
     }
     const stirrup = parseTie(d.stirrup) ?? { size: 'RB6', spacing: 0.15 };
