@@ -336,13 +336,24 @@ export function buildBOQ(opts: BuildBOQOptions): BuildBOQResult {
   //   ไม่แตะ count — แค่ติดธง 🚩 ให้คนตรวจ + mark provisional ฐานที่ต่าง
   const flaggedFootingMarks = new Set<string>();
   if (opts.grid && tally) {
-    const rec = reconcileGridCount(enumerateGrid(opts.grid).byMark, tally.footingByMark);
-    for (const d of rec.diffs) {
-      if (d.ok) continue;
-      flaggedFootingMarks.add(d.mark.trim().toUpperCase());
+    // กันแครช: GridDef ใช้ไม่ได้ enumerateGrid จะ throw → ห่อไว้ ไม่ให้ทะลุไปทำ PaintPanel จอขาว
+    let enumerated: ReturnType<typeof enumerateGrid> | null = null;
+    try {
+      enumerated = enumerateGrid(opts.grid);
+    } catch (e) {
       warnings.push(
-        `🚩 ${d.mark}: grid นับได้ ${d.enumerated} ฐาน แต่ระบายบนแบบ ${d.tagged} ฐาน (ต่าง ${d.diff > 0 ? '+' : ''}${d.diff}) — ตรวจซ้ำ`,
+        `⚠️ grid ฐานรากไม่สมเหตุผล — ข้ามการเทียบ (${e instanceof Error ? e.message : 'ไม่ทราบสาเหตุ'})`,
       );
+    }
+    if (enumerated) {
+      const rec = reconcileGridCount(enumerated.byMark, tally.footingByMark);
+      for (const d of rec.diffs) {
+        if (d.ok) continue;
+        flaggedFootingMarks.add(d.mark.trim().toUpperCase());
+        warnings.push(
+          `🚩 ${d.mark}: grid นับได้ ${d.enumerated} ฐาน แต่ระบายบนแบบ ${d.tagged} ฐาน (ต่าง ${d.diff > 0 ? '+' : ''}${d.diff}) — ตรวจซ้ำ`,
+        );
+      }
     }
   }
 

@@ -46,3 +46,11 @@ test('grid แต่ไม่มี members → ไม่มี 🚩', () => {
   const r = buildBOQ({ extract: [], grid: page17 });
   expect(r.warnings.some((w) => w.startsWith('🚩'))).toBe(false);
 });
+
+// grid invalid (longAxis ว่าง → enumerateGrid throw) → ⚠️ ข้าม ไม่แครช ไม่มี 🚩
+test('grid invalid → ⚠️ ข้ามการเทียบ ไม่ throw + ไม่มี 🚩', () => {
+  const badGrid: GridDef = { ...page17, longAxis: [] };
+  const r = buildBOQ({ extract: [], members: members({ F2: 12, F1: 2 }), grid: badGrid });
+  expect(r.warnings.some((w) => w.startsWith('⚠️'))).toBe(true);
+  expect(r.warnings.some((w) => w.startsWith('🚩'))).toBe(false);
+});
