@@ -31,6 +31,7 @@
 
 ### A1. ลวดผูกเหล็ก (tie wire) — consumable ✅ ตัดสินแล้ว
 - **TIE_WIRE_RATIO = 0.03 (3% = 30 กก./ตัน)** — ล็อกฝั่ง gov (handoff)
+- ✅ committed 3aac472 — runtime-verified (vitest: 3.0 + e2e ratio 0.03)
 - ⚠ ไม่อยู่ในตำราเล่มนี้ · ที่มาทางการ % = "หลักเกณฑ์ถอดแบบหาปริมาณวัสดุ" กบก. → STEP 0 ยังต้องยืนยันเลขหน้า
 
 | ที่ | ค่า | สถานะ | action |
@@ -43,14 +44,12 @@
 > **2 คอนเซ็ปต์ห้ามปน:** `ลวดผูก/tieWire` (consumable, ตัวนี้) ≠ `tieRebar/ปลอก/stirrup` (เหล็กจริง ใน footingCompute:200-221 — ห้ามแตะ)
 > ลวดผูกคิดเฉพาะฐานราก+คาน (`buildBOQ:141,180`). Deferred: ฐานฐานรากไม่รวม `tie_rebar_kg`
 
-### A2. ตะปู (nails) ⚠ พบใหม่ — inconsistency 3 ทาง
-| ที่ | ค่า |
-|---|---|
-| `consumables.ts:26` | `nailsPerM2: 0.3` (code ใช้จริง) |
-| `buildBOQ.ts:15` | comment 0.20 กก./ตร.ม. (ผิด) |
-| ตำรา น.15 | **0.25 กก./ตร.ม.** (CGD, เนื้อที่เต็ม) |
-
-> **decision:** แนะนำ align 0.25 (CGD) — เป็น math change เล็ก ต้อง browser-test + commit แยก · ห้ามบันเดิลกับ P3-1
+### A2. ตะปู (nails) — consumable ✅ ตัดสินแล้ว (แก้แล้ว)
+| ที่ | ค่า | สถานะ |
+|---|---|---|
+| `consumables.ts:26` | `nailsPerM2: 0.25` | ✅ committed (CGD ตำรา น.15) |
+| `buildBOQ.ts:15` | comment → ชี้ const | ✅ |
+| ตำรา น.15 | **0.25 กก./ตร.ม.** (CGD, เนื้อที่เต็ม) | source |
 
 ---
 

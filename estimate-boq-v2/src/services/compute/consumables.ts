@@ -16,7 +16,7 @@ export interface ConsumableRatios {
   // ลวดผูก 3% (30 กก./ตัน) — ราคากลาง+เผื่อราชการ; ดู docs/cgd-constants.md §A1; ยืนยันเลขหน้า กบก. ภายหลัง
   // AI prompt mirror ค่านี้ที่ aiPrompts.ts:94,654 — ต้อง sync ด้วยมือ (SoT ของเลขสุดท้าย = ค่าใน CONSUMABLE_RATIOS นี้)
   tieWirePct: number;
-  /** ตะปู = พื้นที่ไม้แบบ × nailsPerM2 (กก./ตร.ม.) */
+  // ตะปู 0.25 กก./ตร.ม. — กบก. (ตำรา น.15); ดู docs/cgd-constants.md A2
   nailsPerM2: number;
   /** ไม้คร่า/ตงยึดแบบ = พื้นที่ไม้แบบ × walerFactor (ม./ตร.ม.) — ตั้งค่าได้ */
   walerFactor: number;
@@ -24,7 +24,7 @@ export interface ConsumableRatios {
 
 export const CONSUMABLE_RATIOS: ConsumableRatios = {
   tieWirePct: 0.03,
-  nailsPerM2: 0.3,
+  nailsPerM2: 0.25,
   walerFactor: 0.5,
 };
 
