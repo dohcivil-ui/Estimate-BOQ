@@ -213,6 +213,7 @@ function buildFooting(
     count,
     rebar: rebar.length > 0 ? rebar : undefined,
     pedestal,
+    provisional: !W || !L || !T || count <= 0,
     refSheet: 'S2-02',
   };
 }
@@ -234,6 +235,7 @@ function buildBeams(extract: AIItem[], warnings: string[]): BeamSpec[] {
       pieces: [], // ❗ ยังไม่รู้ความยาว/จำนวนช่วง — ไม่เดา
       mainBars: [],
       stirrup: { size: 'RB6', spacing: 0.15 },
+      provisional: true,
     });
     warnings.push(
       `❓ คาน ${it.name}: ยังไม่มีความยาว/จำนวนช่วง (ต้องอ่าน S2-01) — ขึ้นเป็น provisional`,

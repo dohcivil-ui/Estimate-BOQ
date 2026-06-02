@@ -94,6 +94,8 @@ export interface FootingSpec {
   /** เหล็กรัดรอบฐาน (RB9) — แยกจากตะแกรง · count = จำนวนเส้น (รัดรอบรูปฐาน) */
   tieRebar?: { size: string; count: number };
   gridPositions?: string[]; // เช่น ["1A","2A",...] (กฎ 12) — pass-through ไป BOQ
+  /** true = ร่างจาก AI ยังไม่ยืนยัน (mirror SlabSpec) */
+  provisional?: boolean;
   refSheet?: string;     // "S2-02"
 }
 

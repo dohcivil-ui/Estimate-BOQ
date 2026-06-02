@@ -36,6 +36,8 @@ export interface BeamSpec {
   stirrup: { size: string; spacing: number }; // ปลอก เช่น RB6@0.15
   lapFactor?: number;    // เผื่อต่อทาบเหล็กหลัก เช่น 1.05 (default 1.0)
   hook?: number;         // งอปลายปลอกต่อข้าง (ม.) default 0.05
+  /** true = ร่างจาก AI ยังไม่ยืนยัน (mirror SlabSpec) */
+  provisional?: boolean;
   refSheet?: string;
 }
 
