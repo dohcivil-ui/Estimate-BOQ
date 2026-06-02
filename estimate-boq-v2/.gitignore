@@ -28,3 +28,6 @@ supabase/.temp/
 
 # cursor prompt instruction files
 CURSOR-PROMPT-*.md
+
+# personal strategy note - local only
+docs/*2027*.md
