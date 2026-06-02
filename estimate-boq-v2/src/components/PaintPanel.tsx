@@ -27,6 +27,7 @@ import { buildBOQ } from '@/services/compute/buildBOQ';
 import { importItemsToBoq } from '@/services/aiImportToBoq';
 import { analyzeDimensions, buildReferenceImage } from '@/services/aiAnalyze';
 import { MarkDimsDialog } from '@/components/MarkDimsDialog';
+import { GridDialog } from '@/components/GridDialog';
 import { PEDESTAL_OF } from '@/services/compute/boqAdapter';
 import type { AIItem, AIReferenceImage } from '@/types/ai';
 
@@ -145,6 +146,7 @@ export function PaintPanel() {
   const setMarkDim = useDetectionStore((s) => s.setMarkDim);
   const clearMarkDim = useDetectionStore((s) => s.clearMarkDim);
   const grid = useDetectionStore((s) => s.grid);
+  const setGrid = useDetectionStore((s) => s.setGrid);
 
   const setActiveTool = useToolStore((s) => s.setActiveTool);
   const activeTool = useToolStore((s) => s.activeTool);
@@ -161,6 +163,8 @@ export function PaintPanel() {
   const [renameInput, setRenameInput] = useState('');
   /** mark ที่กำลังเปิด popup เติมมิติ — null = ปิด */
   const [dimsForMark, setDimsForMark] = useState<string | null>(null);
+  /** เปิด popup นิยาม grid ฐานราก */
+  const [gridOpen, setGridOpen] = useState(false);
   // สถานะ "AI อ่านมิติ"
   const [dimsBusy, setDimsBusy] = useState(false);
   const [dimsMsg, setDimsMsg] = useState<string | null>(null);
@@ -585,6 +589,18 @@ export function PaintPanel() {
           <div className="flex gap-1">
             <button
               type="button"
+              onClick={() => setGridOpen(true)}
+              title="นิยาม grid ฐานราก (กฎ 11 grid-first) — โค้ดนับจุดตัดแล้วเทียบกับที่ระบายบนแบบ ติดธง 🚩 ถ้าต่าง"
+              className={`rounded px-2 py-0.5 text-[10px] hover:bg-bg-hover ${
+                grid
+                  ? 'bg-accent/20 text-accent'
+                  : 'bg-bg-raised text-ink-secondary'
+              }`}
+            >
+              ▦ grid ฐานราก{grid ? ' ✓' : ''}
+            </button>
+            <button
+              type="button"
               onClick={handlePullExpected}
               disabled={!latest?.result?.items?.length}
               title="ดึงจำนวนคาดต่อรหัสจากผลวิเคราะห์ AI ล่าสุด (กฎ 11 grid-first) มาเทียบกับที่ยืนยัน"
@@ -807,6 +823,15 @@ export function PaintPanel() {
             />
           );
         })()}
+
+      {gridOpen && (
+        <GridDialog
+          existing={grid}
+          onSave={(g) => setGrid(g)}
+          onClear={() => setGrid(null)}
+          onClose={() => setGridOpen(false)}
+        />
+      )}
     </div>
   );
 }
