@@ -256,12 +256,12 @@ function buildSlabs(extract: AIItem[], warnings: string[]): SlabSpec[] {
       name: typeCode(it.name) ?? it.name ?? 'พื้น',
       area_m2: area,
       thickness: thk,
+      provisional: true,
     });
-    if (!area || !thk) {
-      warnings.push(
-        `❓ พื้น ${it.name}: พื้นที่/ความหนายังไม่ครบ — ขึ้นเป็น provisional`,
-      );
-    }
+    warnings.push(
+      `📝 พื้น ${it.name}: เป็นร่างจาก AI — ต้องเติมมิติ/ยืนยันพื้นที่+ความหนาก่อนใช้จริง` +
+        (!area || !thk ? ' · พื้นที่/ความหนายังไม่ครบ' : ''),
+    );
   }
   return out;
 }
@@ -405,11 +405,19 @@ export function specsFromMarks(input: MarksSpecInput): AdapterResult {
   }
 
   // ── พื้น ──
-  for (const [mark] of tally.slabAreaByMark) {
+  for (const [mark, tagSum] of tally.slabAreaByMark) {
     const d = markDims[mark];
     if (!d || d.kind !== 'slab') {
       warnings.push(`❓ ยังไม่เติมมิติ ${mark} (พื้น) — กดปุ่ม ✏️ เพื่อเติม`);
       continue;
+    }
+    if (tagSum > 0 && d.areaSqm > 0) {
+      const diffPct = Math.abs(tagSum - d.areaSqm) / tagSum;
+      if (diffPct > 0.05) {
+        warnings.push(
+          `⚠️ ${mark}: พื้นที่ที่กรอก (${d.areaSqm} ตร.ม.) ต่างจาก tag รวม (${tagSum} ตร.ม.) เกิน 5% (${(diffPct * 100).toFixed(1)}%) — ตรวจซ้ำ`,
+        );
+      }
     }
     slabs.push({
       name: mark,

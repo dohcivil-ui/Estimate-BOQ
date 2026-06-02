@@ -110,6 +110,8 @@ export interface SlabSpec {
   /** wire mesh: ขนาดลวด (มม.) + ระยะ (ม.) 2 ทาง */
   mesh?: { wireMM: number; spacing: number };
   sandThk?: number;      // ทรายรองพื้น (ม.) ถ้ามี
+  /** true = ร่างจาก AI (พื้นที่/ความหนายังไม่ยืนยัน — ต้องเติมมิติก่อนใช้จริง) */
+  provisional?: boolean;
   refSheet?: string;
 }
 export interface SlabQty {
