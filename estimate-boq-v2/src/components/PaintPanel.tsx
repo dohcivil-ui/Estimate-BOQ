@@ -144,6 +144,7 @@ export function PaintPanel() {
   const markDimsSource = useDetectionStore((s) => s.markDimsSource);
   const setMarkDim = useDetectionStore((s) => s.setMarkDim);
   const clearMarkDim = useDetectionStore((s) => s.clearMarkDim);
+  const grid = useDetectionStore((s) => s.grid);
 
   const setActiveTool = useToolStore((s) => s.setActiveTool);
   const activeTool = useToolStore((s) => s.activeTool);
@@ -186,9 +187,9 @@ export function PaintPanel() {
   const computed = useMemo(
     () =>
       memberInputs.length > 0 && Object.keys(markDims).length > 0
-        ? buildBOQ({ extract: [], members: memberInputs, markDims })
+        ? buildBOQ({ extract: [], members: memberInputs, markDims, ...(grid ? { grid } : {}) })
         : null,
-    [memberInputs, markDims],
+    [memberInputs, markDims, grid],
   );
 
   // หน้าอ้างอิง (แบบขยาย/schedule) — ชุดเดียวกับที่เลือกใน AIPanel
