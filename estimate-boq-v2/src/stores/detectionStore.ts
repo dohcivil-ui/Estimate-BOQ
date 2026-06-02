@@ -16,6 +16,7 @@ import {
   splitMarks,
   type MemberCategory,
 } from '@/services/markParse';
+import type { GridDef } from '@/services/compute/gridModel';
 
 // re-export เพื่อ backward-compat (ผู้เรียกเดิม import จาก store นี้)
 export { categoryForMark, splitMarks };
@@ -171,6 +172,8 @@ interface DetectionState {
   markDims: Record<string, MarkDims>;
   /** ที่มาของมิติต่อ mark (key = UPPERCASE) — คู่กับ markDims */
   markDimsSource: Record<string, MarkDimsSource>;
+  /** นิยาม grid ฐานราก (กฎ 11 grid-first) — null = ยังไม่ได้กรอก */
+  grid: GridDef | null;
   past: Member[][];
   future: Member[][];
 
@@ -219,6 +222,8 @@ interface DetectionState {
   setMarkDim: (mark: string, dims: MarkDims, source?: MarkDimsSource) => void;
   /** ลบมิติของ mark (ลบทั้ง dims + source) */
   clearMarkDim: (mark: string) => void;
+  /** ตั้ง/ล้างนิยาม grid ฐานราก (null = ล้าง) */
+  setGrid: (grid: GridDef | null) => void;
 
   // ── persistence (Phase 2 — โหลด/ล้าง detection ทั้งก้อน) ────
   /** เติม state ทั้งก้อนตอน loadProject (members + markDims + source) */
@@ -226,6 +231,7 @@ interface DetectionState {
     members?: Member[];
     markDims?: Record<string, MarkDims>;
     markDimsSource?: Record<string, MarkDimsSource>;
+    grid?: GridDef | null;
   }) => void;
   /** ล้าง detection ทั้งก้อน (ใช้ใน resetAllStores) */
   clearDetection: () => void;
@@ -256,6 +262,7 @@ export const useDetectionStore = create<DetectionState>((set, get) => ({
   ocrStatus: null,
   markDims: {},
   markDimsSource: {},
+  grid: null,
   past: [],
   future: [],
 
@@ -416,14 +423,17 @@ export const useDetectionStore = create<DetectionState>((set, get) => ({
       return { markDims: next, markDimsSource: nextSrc };
     }),
 
-  hydrateDetection: ({ members, markDims, markDimsSource }) =>
+  setGrid: (grid) => set({ grid }),
+
+  hydrateDetection: ({ members, markDims, markDimsSource, grid }) =>
     set({
       members: members ?? [],
       markDims: markDims ?? {},
       markDimsSource: markDimsSource ?? {},
+      grid: grid ?? null,
     }),
   clearDetection: () =>
-    set({ members: [], markDims: {}, markDimsSource: {} }),
+    set({ members: [], markDims: {}, markDimsSource: {}, grid: null }),
 
   undo: () =>
     set((s) => {

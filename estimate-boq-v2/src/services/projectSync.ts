@@ -32,6 +32,7 @@ import type {
   MarkDims,
   MarkDimsSource,
 } from '@/stores/detectionStore';
+import type { GridDef } from '@/services/compute/gridModel';
 import { loadDrawingFile } from './loadDrawing';
 import type { Measurement } from '@/types/measurement';
 import type { BOQItem, Discipline, DisciplineGroup } from '@/types/boq';
@@ -382,12 +383,12 @@ export async function saveProject(): Promise<string> {
 
   // ─── 6.5 upsert detection_state (members + markDims — ทาง A) ──────────
   {
-    const { members, markDims, markDimsSource } =
+    const { members, markDims, markDimsSource, grid } =
       useDetectionStore.getState();
     const { error } = await client.from('detection_state').upsert(
       {
         project_id: projectId,
-        state_json: { members, markDims, markDimsSource },
+        state_json: { members, markDims, markDimsSource, grid },
         updated_at: new Date().toISOString(),
       },
       { onConflict: 'project_id' },
@@ -564,11 +565,13 @@ export async function loadProject(
       members?: Member[];
       markDims?: Record<string, MarkDims>;
       markDimsSource?: Record<string, MarkDimsSource>;
+      grid?: GridDef | null;
     };
     useDetectionStore.getState().hydrateDetection({
       members: s.members,
       markDims: s.markDims,
       markDimsSource: s.markDimsSource,
+      grid: s.grid ?? null,
     });
   }
 
