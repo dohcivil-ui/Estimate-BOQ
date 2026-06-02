@@ -27,6 +27,8 @@ import {
 } from './footingCompute.ts';
 import { computeBeam, computeSlab, type BeamQty, type SlabQty } from './beamCompute.ts';
 import { computeConsumables } from './consumables.ts';
+import { enumerateGrid, type GridDef } from './gridModel.ts';
+import { reconcileGridCount } from './gridReconcile.ts';
 import { splitMarks, categoryForMark } from '../markParse.ts';
 
 /** RFI flags — ข้อสมมุติที่ต้องให้คนยืนยัน (ติดมากับทุก build) */
@@ -260,6 +262,12 @@ export interface BuildBOQOptions {
    *   ใช้ specsFromMarks(tally, markDims) แทน buildSpecs(extract) (compute โดยไม่พึ่ง AI)
    */
   markDims?: Record<string, MarkDims>;
+  /**
+   * นิยาม grid ฐานราก (optional, กฎ 11) — ถ้าส่งมาพร้อม members:
+   *   enumerateGrid → byMark(grid-first) → reconcile กับ tally.footingByMark
+   *   ต่าง → push 🚩 warning + ติดธง provisional ฐานนั้น (ไม่แตะ count — คนตัดสิน)
+   */
+  grid?: GridDef;
 }
 
 /**
@@ -324,6 +332,20 @@ export function buildBOQ(opts: BuildBOQOptions): BuildBOQResult {
   const warnings: string[] = [...specs.warnings];
   const items: AIItem[] = [];
 
+  // grid-first reconcile (กฎ 11): เทียบจำนวนที่ grid นับได้ กับที่ระบายบนแบบ (tally)
+  //   ไม่แตะ count — แค่ติดธง 🚩 ให้คนตรวจ + mark provisional ฐานที่ต่าง
+  const flaggedFootingMarks = new Set<string>();
+  if (opts.grid && tally) {
+    const rec = reconcileGridCount(enumerateGrid(opts.grid).byMark, tally.footingByMark);
+    for (const d of rec.diffs) {
+      if (d.ok) continue;
+      flaggedFootingMarks.add(d.mark.trim().toUpperCase());
+      warnings.push(
+        `🚩 ${d.mark}: grid นับได้ ${d.enumerated} ฐาน แต่ระบายบนแบบ ${d.tagged} ฐาน (ต่าง ${d.diff > 0 ? '+' : ''}${d.diff}) — ตรวจซ้ำ`,
+      );
+    }
+  }
+
   for (const f of specs.footings) {
     // เส้น AI extract: override จำนวนฐานตามที่ระบายบนแบบ (เส้น marks count = ถูกอยู่แล้ว)
     let spec = f;
@@ -335,6 +357,9 @@ export function buildBOQ(opts: BuildBOQOptions): BuildBOQResult {
           `ℹ️ ${f.type}: ใช้จำนวนจากการระบายบนแบบ (${marked} ฐาน) แทนค่า AI (${f.count})`,
         );
       }
+    }
+    if (flaggedFootingMarks.has(spec.type.trim().toUpperCase())) {
+      spec = { ...spec, provisional: true };
     }
     const q = computeFooting(spec);
     warnings.push(...q.warnings);
