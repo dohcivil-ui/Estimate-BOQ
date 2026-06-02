@@ -220,6 +220,16 @@ interface DetectionState {
   /** ลบมิติของ mark (ลบทั้ง dims + source) */
   clearMarkDim: (mark: string) => void;
 
+  // ── persistence (Phase 2 — โหลด/ล้าง detection ทั้งก้อน) ────
+  /** เติม state ทั้งก้อนตอน loadProject (members + markDims + source) */
+  hydrateDetection: (payload: {
+    members?: Member[];
+    markDims?: Record<string, MarkDims>;
+    markDimsSource?: Record<string, MarkDimsSource>;
+  }) => void;
+  /** ล้าง detection ทั้งก้อน (ใช้ใน resetAllStores) */
+  clearDetection: () => void;
+
   // ── history ────────────────────────────────────────────────
   undo: () => void;
   redo: () => void;
@@ -405,6 +415,15 @@ export const useDetectionStore = create<DetectionState>((set, get) => ({
       delete nextSrc[key];
       return { markDims: next, markDimsSource: nextSrc };
     }),
+
+  hydrateDetection: ({ members, markDims, markDimsSource }) =>
+    set({
+      members: members ?? [],
+      markDims: markDims ?? {},
+      markDimsSource: markDimsSource ?? {},
+    }),
+  clearDetection: () =>
+    set({ members: [], markDims: {}, markDimsSource: {} }),
 
   undo: () =>
     set((s) => {

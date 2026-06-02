@@ -26,6 +26,12 @@ import { useBOQStore } from '@/stores/boqStore';
 import { useRawFileStore } from '@/stores/rawFileStore';
 import { useViewportStore } from '@/stores/viewportStore';
 import { useAIStore } from '@/stores/aiStore';
+import { useDetectionStore } from '@/stores/detectionStore';
+import type {
+  Member,
+  MarkDims,
+  MarkDimsSource,
+} from '@/stores/detectionStore';
 import { loadDrawingFile } from './loadDrawing';
 import type { Measurement } from '@/types/measurement';
 import type { BOQItem, Discipline, DisciplineGroup } from '@/types/boq';
@@ -374,6 +380,21 @@ export async function saveProject(): Promise<string> {
     }
   }
 
+  // ─── 6.5 upsert detection_state (members + markDims — ทาง A) ──────────
+  {
+    const { members, markDims, markDimsSource } =
+      useDetectionStore.getState();
+    const { error } = await client.from('detection_state').upsert(
+      {
+        project_id: projectId,
+        state_json: { members, markDims, markDimsSource },
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'project_id' },
+    );
+    if (error) throw wrapDbError(error, 'detection_state', 'บันทึก');
+  }
+
   // ─── 7. update store state ────────────────────────────────────────────
   current.setProjectId(projectId);
   current.setLastSavedAt(new Date().toISOString());
@@ -532,6 +553,25 @@ export async function loadProject(
     useBOQStore.getState().setGroups(groups);
   }
 
+  // ─── 7.5 populate detection_state (members + markDims — ทาง A) ────────
+  {
+    const { data: det } = await client
+      .from('detection_state')
+      .select('state_json')
+      .eq('project_id', projectId)
+      .maybeSingle();
+    const s = (det?.state_json ?? {}) as {
+      members?: Member[];
+      markDims?: Record<string, MarkDims>;
+      markDimsSource?: Record<string, MarkDimsSource>;
+    };
+    useDetectionStore.getState().hydrateDetection({
+      members: s.members,
+      markDims: s.markDims,
+      markDimsSource: s.markDimsSource,
+    });
+  }
+
   // ─── 8. update current project + mark saved ──────────────────────────
   useCurrentProject.getState().setProjectId(projectId);
   useCurrentProject.getState().setLastSavedAt(project.updated_at);
@@ -608,6 +648,7 @@ function resetAllStores(): void {
   useRotationStore.setState({ byPageId: {} });
   useViewportStore.setState({ byPageId: {} });
   useAIStore.getState().clearAll();
+  useDetectionStore.getState().clearDetection();
 }
 
 function storagePathFor(projectId: string, file: DrawingFile): string {
