@@ -4,6 +4,7 @@
  */
 import { useMemo } from 'react';
 import { useMeasurementsForPage } from '@/stores/measurementStore';
+import { useToolStore } from '@/stores/toolStore';
 import type { SnapSegment } from '@/core/snap';
 import type { Point2D } from '@/types/viewport';
 
@@ -12,6 +13,10 @@ export function useSnapCandidates(pageId: string | null): {
   nodes: Point2D[];
 } {
   const measurements = useMeasurementsForPage(pageId);
+  // เส้น grid ที่วาดแล้ว (global, ไม่ผูก pageId) — feed เข้า snap เฉพาะตอนวาด grid
+  const gridLines = useToolStore((s) => s.gridLines);
+  // เครื่องมือปัจจุบัน — ใช้ gate ให้ feed เฉพาะตอน activeTool==='grid'
+  const activeTool = useToolStore((s) => s.activeTool);
 
   return useMemo(() => {
     const segments: SnapSegment[] = [];
@@ -34,6 +39,15 @@ export function useSnapCandidates(pageId: string | null): {
       }
     }
 
+    // feed เส้น grid เข้า candidate เฉพาะตอนใช้เครื่องมือ grid (แยกจาก length/area/scale)
+    if (activeTool === 'grid') {
+      for (const ln of gridLines) {
+        // ทุกเส้น grid
+        segments.push({ a: ln.a, b: ln.b }); // ตัวเส้น → snap "ตามแนว" (project)
+        nodes.push(ln.a, ln.b); // ปลายเส้น 2 จุด → snap เข้ามุม
+      }
+    }
+
     return { segments, nodes };
-  }, [measurements]);
+  }, [measurements, gridLines, activeTool]);
 }
