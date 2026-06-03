@@ -19,3 +19,17 @@ export function applyOrthoLock(from: Pt, to: Pt): Pt {
     y: from.y + Math.sin(snapped) * len,
   };
 }
+
+/** applyHVLock — ล็อกปลายเส้นเป็นแนวนอน/แนวตั้งล้วน (ฉาก) เทียบจุดเริ่ม
+ *  ใช้กับเครื่องมือ grid: เลือกแกนที่ระยะมากกว่าเป็นตัวล็อก แล้ว "ยืดปลายตามเคอร์เซอร์"
+ *  ต่างจาก applyOrthoLock (snap 45° + คงความยาว) — ตัวนี้ project ไป H หรือ V เท่านั้น */
+export function applyHVLock(from: Pt, to: Pt): Pt {
+  const dx = to.x - from.x; // ระยะแกน x จากจุดเริ่มถึงเคอร์เซอร์
+  const dy = to.y - from.y; // ระยะแกน y จากจุดเริ่มถึงเคอร์เซอร์
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    // x เด่น (หรือเท่ากัน) → ล็อกแนวนอน: คง y จุดเริ่ม, ยืด x ตามเคอร์เซอร์
+    return { x: to.x, y: from.y };
+  }
+  // y เด่น → ล็อกแนวตั้ง: คง x จุดเริ่ม, ยืด y ตามเคอร์เซอร์
+  return { x: from.x, y: to.y };
+}

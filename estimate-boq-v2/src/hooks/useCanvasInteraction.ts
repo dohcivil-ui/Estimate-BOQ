@@ -9,7 +9,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import type Konva from 'konva';
 import { screenToPage } from '@/core/coords';
-import { applyOrthoLock } from '@/core/orthoLock';
+import { applyOrthoLock, applyHVLock } from '@/core/orthoLock';
 import { findSnap, type SnapPoint } from '@/core/snap';
 import { findDarkPixelNear } from '@/core/imageEdges';
 import { distancePointToSegment } from '@/core/geometry';
@@ -80,6 +80,8 @@ export function useCanvasInteraction(
   const orthoActive = useOrthoStore((s) => s.enabled || s.shiftDown);
   const activeTool = useToolStore((s) => s.activeTool);
   const draftPoints = useToolStore((s) => s.draftPoints);
+  // จุดเริ่มเส้น grid (reactive) — ใช้เป็น anchor ของ H/V lock ใน processCursor (preview ต้องอัปเดตตามจุดเริ่ม)
+  const gridPendingStart = useToolStore((s) => s.gridPendingStart);
 
   const dragState = useRef<{ x: number; y: number } | null>(null);
   /** จุดเริ่มลากกล่อง paint (page-px) — null = ไม่ได้กำลังระบาย */
@@ -177,6 +179,13 @@ export function useCanvasInteraction(
         final = applyOrthoLock(draftPoints[draftPoints.length - 1]!, raw);
       }
 
+      // ── grid: ล็อกฉาก H/V เทียบ gridPendingStart ──
+      // คนละ anchor กับ length/area/scale (พวกนั้นใช้ draftPoints) จึงเป็น branch แยก
+      // เงื่อนไข: ไม่มี snap (snap ชนะ ortho) · ortho เปิด · เครื่องมือ grid · มีจุดเริ่มค้าง
+      if (!snap && orthoActive && activeTool === 'grid' && gridPendingStart) {
+        final = applyHVLock(gridPendingStart, final); // project ปลายไป H หรือ V ล้วน
+      }
+
       return { final, snap };
     },
     [
@@ -195,6 +204,7 @@ export function useCanvasInteraction(
       ensureImageData,
       orthoActive,
       activeTool,
+      gridPendingStart,
     ],
   );
 
