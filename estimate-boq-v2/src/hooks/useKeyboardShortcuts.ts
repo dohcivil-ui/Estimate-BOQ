@@ -10,7 +10,7 @@
  *   Ctrl+Shift+Z / Ctrl+Y = redo
  *   Delete = remove selected
  *   0 / F = fit page
- *   V/H/K/L/A/C = tool select
+ *   V/H/K/L/A/C/D/R = tool select
  */
 import { useEffect } from 'react';
 import { useSnapStore } from '@/stores/snapStore';
@@ -31,6 +31,8 @@ const TOOL_KEYS: Record<string, Tool> = {
   a: 'area',
   c: 'count',
   g: 'paint',
+  d: 'grid',
+  r: 'dimension',
 };
 
 function isTypingTarget(target: EventTarget | null): boolean {

@@ -6,7 +6,9 @@ export type Tool =
   | 'length'   // วัดความยาว (polyline)
   | 'area'     // วัดพื้นที่ (polygon)
   | 'count'    // นับจำนวน (marker)
-  | 'paint';   // ระบายหมวดงาน (ไฮไลต์ชิ้นงาน BOQ บนแบบ)
+  | 'paint'      // ระบายหมวดงาน (ไฮไลต์ชิ้นงาน BOQ บนแบบ)
+  | 'grid'       // วาดเส้นแกน (gridline) ทาบบนแบบ แล้วนับเส้น เป็น GridDef
+  | 'dimension'; // วาดเส้นบอกระยะ แล้วพิมพ์ระยะจริง (pixel เป็นแค่สายตา)
 
 /** เครื่องมือที่ "วาด" — ต้องการ scale ตั้งก่อน */
 export const DRAWING_TOOLS: ReadonlyArray<Tool> = [
@@ -27,6 +29,8 @@ export const TOOL_LABELS: Record<Tool, string> = {
   area: '⬡ พื้นที่',
   count: '🔢 นับจำนวน',
   paint: '🎨 ระบายงาน',
+  grid: '▦ ร่างกริด',
+  dimension: '↔ ระยะจริง',
 };
 
 export const TOOL_HOTKEYS: Record<Tool, string> = {
@@ -37,4 +41,6 @@ export const TOOL_HOTKEYS: Record<Tool, string> = {
   area: 'A',
   count: 'C',
   paint: 'G',
+  grid: 'D',
+  dimension: 'R',
 };
