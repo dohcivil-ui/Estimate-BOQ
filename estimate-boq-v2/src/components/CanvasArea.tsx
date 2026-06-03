@@ -25,6 +25,7 @@ import { RasterLayer } from './canvas/RasterLayer';
 import { GridLayer } from './canvas/GridLayer';
 import { MeasurementsLayer } from './canvas/MeasurementsLayer';
 import { DetectionLayer } from './canvas/DetectionLayer';
+import { FootingGridLayer } from './canvas/FootingGridLayer';
 import { DraftLayer } from './canvas/DraftLayer';
 import { SnapHud } from './canvas/SnapHud';
 import { ScaleDialog } from './ScaleDialog';
@@ -55,6 +56,8 @@ export function CanvasArea() {
   const activeTool = useToolStore((s) => s.activeTool);
   const draftPoints = useToolStore((s) => s.draftPoints);
   const cursorPagePoint = useToolStore((s) => s.cursorPagePoint);
+  const gridLines = useToolStore((s) => s.gridLines);
+  const gridPendingStart = useToolStore((s) => s.gridPendingStart);
   const measurements = useMeasurementsForPage(page?.id ?? null);
 
   // snap/grid state สำหรับ overlay
@@ -135,6 +138,12 @@ export function CanvasArea() {
           />
           <MeasurementsLayer measurements={measurements} transform={transform} />
           <DetectionLayer pageId={page.id} transform={transform} />
+          <FootingGridLayer
+            gridLines={gridLines}
+            pendingStart={gridPendingStart}
+            cursorPoint={cursorPagePoint}
+            transform={transform}
+          />
           <DraftLayer
             tool={activeTool}
             draftPoints={draftPoints}

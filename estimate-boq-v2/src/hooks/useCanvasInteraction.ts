@@ -306,10 +306,30 @@ export function useCanvasInteraction(
         return;
       }
 
+      // right-click ขณะ grid = ยกเลิกจุดเริ่มเส้นที่ค้าง
+      if (isRight && activeTool === 'grid') {
+        e.evt.preventDefault();
+        useToolStore.getState().setGridPendingStart(null);
+        return;
+      }
+
       // drawing tools — left click only
       if (!isLeft) return;
 
       const { final } = processCursor(raw);
+
+      // ─── grid (inc2): คลิกแรก=ตั้งจุดเริ่ม · คลิกสอง=ปิดเส้น push เข้า gridLines ──
+      // ใช้ final (จุดเดียวกับ cursor HUD ที่ผ่าน snap) — grid ไม่อยู่ใน gate ortho จึงยังไม่ ortho (inc3)
+      if (activeTool === 'grid') {
+        const pending = useToolStore.getState().gridPendingStart;
+        if (!pending) {
+          useToolStore.getState().setGridPendingStart(final);
+        } else {
+          useToolStore.getState().addGridLine({ a: pending, b: final });
+          useToolStore.getState().setGridPendingStart(null);
+        }
+        return;
+      }
 
       // ─── scale tool ────────────────────────────────────────────────
       if (activeTool === 'scale') {

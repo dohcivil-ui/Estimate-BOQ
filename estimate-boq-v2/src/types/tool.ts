@@ -1,3 +1,11 @@
+import type { Point2D } from '@/types/viewport';
+
+/** เส้น grid 1 เส้น (page-px) — ปลายสองด้าน ไว้วาด overlay (inc2) + นับเป็น GridDef (inc ถัดไป) */
+export interface GridLine {
+  a: Point2D;
+  b: Point2D;
+}
+
 /** เครื่องมือใน Step 2.3 */
 export type Tool =
   | 'select'   // เลือกแก้ไข
