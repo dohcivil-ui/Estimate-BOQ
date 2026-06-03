@@ -7,8 +7,10 @@
  *   - overrides (เปลี่ยนชนิดเฉพาะจุด) — ยังไม่รองรับรอบนี้
  * Save → setGrid(def) → BOQ preview recompute + ติดธง 🚩 ถ้าจำนวนต่าง
  */
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { enumerateGrid, type GridDef } from '@/services/compute/gridModel';
+import { useToolStore } from '@/stores/toolStore';
+import { deriveAxesFromLines } from '@/services/compute/gridDerive';
 
 interface Props {
   existing: GridDef | null;
@@ -39,6 +41,15 @@ export function GridDialog({ existing, onSave, onClear, onClose }: Props) {
       ? existing.extras.map((e) => ({ mark: e.mark, count: String(e.count) }))
       : [],
   );
+
+  // อ่านเส้น grid ที่วาด (reactive) + คำนวณแกนจากเรขาคณิต (cheap, memo)
+  const gridLines = useToolStore((s) => s.gridLines);
+  const derived = useMemo(() => deriveAxesFromLines(gridLines), [gridLines]);
+  // เติมช่อง long/short จากเส้นที่วาด — เขียนทับเฉพาะ 2 ช่องนี้ ไม่แตะ mark/extras
+  const fillFromLines = () => {
+    setLongRaw(derived.longAxis.join(',')); // ตั้ง → "1,2,..,N"
+    setShortRaw(derived.shortAxis.join(',')); // นอน → "A,B,..,M"
+  };
 
   const longAxis = splitAxis(longRaw);
   const shortAxis = splitAxis(shortRaw);
@@ -96,6 +107,17 @@ export function GridDialog({ existing, onSave, onClear, onClose }: Props) {
             ✕
           </button>
         </div>
+
+        {/* เติมแกน long/short อัตโนมัติจากเส้นที่วาดบนแบบ (ไม่แตะ mark/extras) */}
+        <button
+          type="button"
+          onClick={fillFromLines}
+          disabled={gridLines.length === 0}
+          className="w-full rounded bg-bg-raised px-2 py-1 text-[11px] text-ink-secondary hover:bg-bg-hover disabled:opacity-40"
+        >
+          เติมจากเส้นที่วาด (ตั้ง {derived.longAxis.length} · นอน{' '}
+          {derived.shortAxis.length})
+        </button>
 
         <TxtIn
           label='แกนยาว — คั่นด้วยจุลภาค (เช่น "1,2,3,4,5,6")'
