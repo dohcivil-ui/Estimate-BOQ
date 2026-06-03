@@ -57,6 +57,17 @@ export function projectPointOnSegment(
   return { point, t, distance: Math.hypot(p.x - point.x, p.y - point.y) };
 }
 
+/** ระยะจากจุด p ถึงเซ็กเมนต์ a–b (page-px) — clamp ที่ปลายเส้น */
+export function distancePointToSegment(p: Pt, a: Pt, b: Pt): number {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len2 = dx * dx + dy * dy;
+  if (len2 === 0) return distancePx(p, a);
+  let t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2;
+  t = Math.max(0, Math.min(1, t));
+  return distancePx(p, { x: a.x + t * dx, y: a.y + t * dy });
+}
+
 /** จุดตัดของ 2 segment (ใน range [0,1] ของทั้งคู่) — null ถ้าไม่ตัดหรือขนาน */
 export function segmentIntersection(
   p1: Pt,

@@ -17,6 +17,8 @@ interface ToolState {
   gridLines: GridLine[];
   /** จุดเริ่มเส้น grid ที่ค้างอยู่ (คลิกแรก) — null = ยังไม่เริ่ม */
   gridPendingStart: Point2D | null;
+  /** index ของเส้น grid ที่เลือกอยู่ (tool V) — null = ไม่ได้เลือก */
+  selectedGridLine: number | null;
 
   setActiveTool: (tool: Tool) => void;
   addDraftPoint: (p: Point2D) => void;
@@ -27,6 +29,8 @@ interface ToolState {
   setGridPendingStart: (p: Point2D | null) => void;
   addGridLine: (line: GridLine) => void;
   clearGridDraft: () => void;
+  setSelectedGridLine: (i: number | null) => void;
+  removeGridLine: (i: number) => void;
 }
 
 export const useToolStore = create<ToolState>((set) => ({
@@ -35,11 +39,13 @@ export const useToolStore = create<ToolState>((set) => ({
   cursorPagePoint: null,
   gridLines: [],
   gridPendingStart: null,
+  selectedGridLine: null,
 
   setActiveTool: (tool) => {
     // เปลี่ยน tool = ออกจากโหมดคัดลอกวาง (copy-stamp) เสมอ
+    // หมายเหตุ: ไม่ล้าง gridLines แล้ว (inc2.5) — เก็บเส้นไว้ข้าม tool เพื่อเลือก/ลบด้วย V
     useDetectionStore.getState().stopStamp();
-    set({ activeTool: tool, draftPoints: [], cursorPagePoint: null, gridLines: [], gridPendingStart: null });
+    set({ activeTool: tool, draftPoints: [], cursorPagePoint: null, gridPendingStart: null, selectedGridLine: null });
   },
 
   addDraftPoint: (p) =>
@@ -57,6 +63,12 @@ export const useToolStore = create<ToolState>((set) => ({
   setGridPendingStart: (p) => set({ gridPendingStart: p }),
   addGridLine: (line) => set((s) => ({ gridLines: [...s.gridLines, line] })),
   clearGridDraft: () => set({ gridLines: [], gridPendingStart: null }),
+  setSelectedGridLine: (i) => set({ selectedGridLine: i }),
+  removeGridLine: (i) =>
+    set((s) => ({
+      gridLines: s.gridLines.filter((_, idx) => idx !== i),
+      selectedGridLine: null,
+    })),
 }));
 
 export const useActiveTool = () => useToolStore((s) => s.activeTool);

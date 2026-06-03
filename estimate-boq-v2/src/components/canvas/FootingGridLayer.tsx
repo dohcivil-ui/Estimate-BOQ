@@ -14,11 +14,13 @@ interface Props {
   pendingStart: Point2D | null;
   cursorPoint: Point2D | null;
   transform: ViewTransform;
+  selectedIndex: number | null;
 }
 
 const COLOR = CANVAS_COLORS.grid; // ทอง #c9a227
+const COLOR_SEL = CANVAS_COLORS.selected; // ส้ม #f97316 — เส้นที่เลือก
 
-export function FootingGridLayer({ gridLines, pendingStart, cursorPoint, transform }: Props) {
+export function FootingGridLayer({ gridLines, pendingStart, cursorPoint, transform, selectedIndex }: Props) {
   // ไม่มีอะไรต้องวาด → layer ว่าง (ยังคง mount ที่ slot เดิม)
   if (gridLines.length === 0 && !pendingStart) return <Layer listening={false} />;
 
@@ -38,7 +40,15 @@ export function FootingGridLayer({ gridLines, pendingStart, cursorPoint, transfo
       {gridLines.map((ln, i) => {
         const [ax, ay] = toScreen(ln.a);
         const [bx, by] = toScreen(ln.b);
-        return <Line key={i} points={[ax, ay, bx, by]} stroke={COLOR} strokeWidth={1.5} />;
+        const sel = i === selectedIndex;
+        return (
+          <Line
+            key={i}
+            points={[ax, ay, bx, by]}
+            stroke={sel ? COLOR_SEL : COLOR}
+            strokeWidth={sel ? 3 : 1.5}
+          />
+        );
       })}
       {preview && <Line points={preview} stroke={COLOR} strokeWidth={1.5} dash={[6, 4]} />}
       {startScreen && (

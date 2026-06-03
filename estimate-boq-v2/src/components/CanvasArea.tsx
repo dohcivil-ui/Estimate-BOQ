@@ -58,6 +58,7 @@ export function CanvasArea() {
   const cursorPagePoint = useToolStore((s) => s.cursorPagePoint);
   const gridLines = useToolStore((s) => s.gridLines);
   const gridPendingStart = useToolStore((s) => s.gridPendingStart);
+  const selectedGridLine = useToolStore((s) => s.selectedGridLine);
   const measurements = useMeasurementsForPage(page?.id ?? null);
 
   // snap/grid state สำหรับ overlay
@@ -143,6 +144,7 @@ export function CanvasArea() {
             pendingStart={gridPendingStart}
             cursorPoint={cursorPagePoint}
             transform={transform}
+            selectedIndex={selectedGridLine}
           />
           <DraftLayer
             tool={activeTool}

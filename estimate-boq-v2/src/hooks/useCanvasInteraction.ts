@@ -12,6 +12,7 @@ import { screenToPage } from '@/core/coords';
 import { applyOrthoLock } from '@/core/orthoLock';
 import { findSnap, type SnapPoint } from '@/core/snap';
 import { findDarkPixelNear } from '@/core/imageEdges';
+import { distancePointToSegment } from '@/core/geometry';
 import { useToolStore } from '@/stores/toolStore';
 import { useViewportStore } from '@/stores/viewportStore';
 import { useOrthoStore } from '@/stores/orthoStore';
@@ -250,6 +251,8 @@ export function useCanvasInteraction(
 
       // select tool — left click = hit test
       if (activeTool === 'select' && isLeft) {
+        // ทุกคลิกเลือกใหม่ = ล้างเส้น grid ที่เลือกไว้ก่อน (ตั้งใหม่ถ้าโดน)
+        useToolStore.getState().setSelectedGridLine(null);
         // priority: member ที่ระบายไว้ก่อน → toggleSelect (เผื่อ hit pad ~10 screen px)
         const det = useDetectionStore.getState();
         const hitPad = 10 / transformZoom;
@@ -266,6 +269,22 @@ export function useCanvasInteraction(
           } else {
             det.toggleSelect(memberHit.id);
           }
+          return;
+        }
+        // ─── grid line hit-test (inc2.5) — เลือกเส้น grid เพื่อลบด้วย Delete ──
+        const gridLines = useToolStore.getState().gridLines;
+        const gridTol = 8 / transformZoom; // ~8 screen px
+        let gridHit = -1;
+        for (let i = 0; i < gridLines.length; i++) {
+          if (distancePointToSegment(raw, gridLines[i]!.a, gridLines[i]!.b) <= gridTol) {
+            gridHit = i;
+            break;
+          }
+        }
+        if (gridHit >= 0) {
+          det.clearSelection();
+          useMeasurementStore.getState().select(null);
+          useToolStore.getState().setSelectedGridLine(gridHit);
           return;
         }
         // ไม่โดน member → ล้าง selection + บอกวิธีปักหมุดใหม่ แล้ว fallback measurement

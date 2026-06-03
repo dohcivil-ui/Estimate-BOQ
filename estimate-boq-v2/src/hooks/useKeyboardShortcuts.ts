@@ -89,6 +89,9 @@ export function useKeyboardShortcuts(opts: {
           onCancelDraft();
         } else {
           useMeasurementStore.getState().select(null);
+          // ล้างเส้น grid ที่เลือก + จุดเริ่มเส้นที่ค้าง (inc2.5)
+          tool.setSelectedGridLine(null);
+          tool.setGridPendingStart(null);
         }
         return;
       }
@@ -147,6 +150,13 @@ export function useKeyboardShortcuts(opts: {
         if (detIds.length > 0) {
           e.preventDefault();
           useDetectionStore.getState().deleteMembers(detIds);
+          return;
+        }
+        // เส้น grid ที่เลือกไว้ (inc2.5) — ลบทิ้ง
+        const gridSel = useToolStore.getState().selectedGridLine;
+        if (gridSel != null) {
+          e.preventDefault();
+          useToolStore.getState().removeGridLine(gridSel);
           return;
         }
         if (e.key === 'Delete') {
