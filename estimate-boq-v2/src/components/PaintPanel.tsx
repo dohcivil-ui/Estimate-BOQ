@@ -47,16 +47,26 @@ function isDimKind(mark: string): boolean {
 
 const PRESET_MARKS = ['F2', 'F1', 'C2', 'C3', 'GB1', 'GB2', 'GS'];
 const SWATCHES = [
-  '#ef4444',
-  '#f97316',
-  '#f59e0b',
-  '#22c55e',
-  '#14b8a6',
-  '#06b6d4',
-  '#3b82f6',
-  '#a855f7',
-  '#ec4899',
-  '#84cc16',
+  '#ef4444', // red
+  '#f97316', // orange
+  '#f59e0b', // amber
+  '#eab308', // yellow
+  '#84cc16', // lime
+  '#22c55e', // green
+  '#10b981', // emerald
+  '#14b8a6', // teal
+  '#06b6d4', // cyan
+  '#0ea5e9', // sky
+  '#3b82f6', // blue
+  '#6366f1', // indigo
+  '#8b5cf6', // violet
+  '#a855f7', // purple
+  '#d946ef', // fuchsia
+  '#ec4899', // pink
+  '#f43f5e', // rose
+  '#78716c', // stone
+  '#64748b', // slate
+  '#334155', // slate-700
 ];
 
 interface MarkGroup {
