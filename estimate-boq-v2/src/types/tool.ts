@@ -4,6 +4,8 @@ import type { Point2D } from '@/types/viewport';
 export interface GridLine {
   a: Point2D;
   b: Point2D;
+  /** ชนิดเส้น (inc4a): 'axis' = แกนจริง (นับเป็น grid) · 'guide' = เส้นช่วย (ไม่นับ) · ไม่ระบุ = 'axis' */
+  kind?: 'axis' | 'guide';
 }
 
 /** เครื่องมือใน Step 2.3 */

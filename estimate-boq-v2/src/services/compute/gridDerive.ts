@@ -27,9 +27,11 @@ function letterLabel(i: number): string {
  * หมายเหตุ: 1 เส้น = 1 แกน (ยังไม่ dedupe เส้นซ้อน — DC)
  */
 export function deriveAxesFromLines(lines: GridLine[]): DerivedAxes {
+  // กรองเส้นช่วย (guide) ออกก่อนจำแนก — ไม่ให้ถูกนับเป็นแกน grid (inc4a) · ไม่ระบุ kind = แกน
+  const axisLines = lines.filter((ln) => ln.kind !== 'guide');
   const vertical: number[] = [];    // x กลางของเส้นตั้ง
   const horizontal: number[] = [];  // y กลางของเส้นนอน
-  for (const ln of lines) {
+  for (const ln of axisLines) {
     const dx = ln.b.x - ln.a.x;     // กว้างแกน x
     const dy = ln.b.y - ln.a.y;     // สูงแกน y
     if (Math.abs(dy) >= Math.abs(dx)) {

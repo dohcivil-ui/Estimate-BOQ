@@ -30,4 +30,15 @@ describe('deriveAxesFromLines', () => {
     const { longAxis, shortAxis } = deriveAxesFromLines([line(0,0,0,100), line(50,0,50,100), line(0,0,100,0)]);
     expect(longAxis.length * shortAxis.length).toBe(2);
   });
+  it('กรองเส้น guide ออก ไม่นับเป็นแกน (inc4a)', () => {
+    const lines = [
+      line(0, 0, 0, 100),     // ตั้ง (แกน)
+      line(50, 0, 50, 100),   // ตั้ง (แกน)
+      line(0, 0, 100, 0),     // นอน (แกน)
+      { ...line(25, 0, 25, 100), kind: 'guide' as const }, // เส้นช่วย — ต้องถูกกรองทิ้ง
+    ];
+    const { longAxis, shortAxis } = deriveAxesFromLines(lines);
+    expect(longAxis).toEqual(['1', '2']);  // เส้นตั้งจริง 2 (guide ไม่ถูกนับ)
+    expect(shortAxis).toEqual(['A']);      // เส้นนอน 1
+  });
 });
