@@ -27,12 +27,14 @@ import { useRawFileStore } from '@/stores/rawFileStore';
 import { useViewportStore } from '@/stores/viewportStore';
 import { useAIStore } from '@/stores/aiStore';
 import { useDetectionStore } from '@/stores/detectionStore';
+import { useToolStore } from '@/stores/toolStore';
 import type {
   Member,
   MarkDims,
   MarkDimsSource,
 } from '@/stores/detectionStore';
 import type { GridDef } from '@/services/compute/gridModel';
+import type { GridLine } from '@/types/tool';
 import { loadDrawingFile } from './loadDrawing';
 import type { Measurement } from '@/types/measurement';
 import type { BOQItem, Discipline, DisciplineGroup } from '@/types/boq';
@@ -385,10 +387,12 @@ export async function saveProject(): Promise<string> {
   {
     const { members, markDims, markDimsSource, grid } =
       useDetectionStore.getState();
+    // gridLines อยู่ toolStore (เส้นแกนที่วาด) — persist คู่กับ grid (inc5)
+    const { gridLines } = useToolStore.getState();
     const { error } = await client.from('detection_state').upsert(
       {
         project_id: projectId,
-        state_json: { members, markDims, markDimsSource, grid },
+        state_json: { members, markDims, markDimsSource, grid, gridLines },
         updated_at: new Date().toISOString(),
       },
       { onConflict: 'project_id' },
@@ -566,6 +570,7 @@ export async function loadProject(
       markDims?: Record<string, MarkDims>;
       markDimsSource?: Record<string, MarkDimsSource>;
       grid?: GridDef | null;
+      gridLines?: GridLine[];
     };
     useDetectionStore.getState().hydrateDetection({
       members: s.members,
@@ -573,6 +578,8 @@ export async function loadProject(
       markDimsSource: s.markDimsSource,
       grid: s.grid ?? null,
     });
+    // hydrate เส้นแกนกลับ toolStore (payload เก่าไม่มี → []) — inc5
+    useToolStore.getState().setGridLines(s.gridLines ?? []);
   }
 
   // ─── 8. update current project + mark saved ──────────────────────────
@@ -652,6 +659,7 @@ function resetAllStores(): void {
   useViewportStore.setState({ byPageId: {} });
   useAIStore.getState().clearAll();
   useDetectionStore.getState().clearDetection();
+  useToolStore.getState().clearGridDraft(); // ล้างเส้นแกนค้างข้ามโปรเจกต์ (inc5)
 }
 
 function storagePathFor(projectId: string, file: DrawingFile): string {

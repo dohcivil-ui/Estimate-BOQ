@@ -31,6 +31,8 @@ interface ToolState {
   clearGridDraft: () => void;
   setSelectedGridLine: (i: number | null) => void;
   removeGridLine: (i: number) => void;
+  /** แทนที่ gridLines ทั้งชุด (hydrate ตอน loadProject — inc5) */
+  setGridLines: (lines: GridLine[]) => void;
 }
 
 export const useToolStore = create<ToolState>((set) => ({
@@ -69,6 +71,7 @@ export const useToolStore = create<ToolState>((set) => ({
       gridLines: s.gridLines.filter((_, idx) => idx !== i),
       selectedGridLine: null,
     })),
+  setGridLines: (lines) => set({ gridLines: lines, selectedGridLine: null }),
 }));
 
 export const useActiveTool = () => useToolStore((s) => s.activeTool);
