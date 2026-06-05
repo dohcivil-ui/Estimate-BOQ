@@ -6,6 +6,7 @@
  * ดังนั้น subscriptions ที่ยิงระหว่าง load จะถูกลบไปด้วย (ไม่กระทบ)
  */
 import { useCurrentProject } from './currentProjectStore';
+import { setLastProjectId, clearLastProjectId } from '@/services/lastProject';
 import { useMeasurementStore } from './measurementStore';
 import { useBOQStore } from './boqStore';
 import { useScaleStore } from './scaleStore';
@@ -53,5 +54,12 @@ export function initDirtyTracking(): void {
   });
   useDrawingStore.subscribe((s, prev) => {
     if (s.files !== prev.files || s.pages !== prev.pages) mark();
+  });
+
+  // mirror projectId -> LS (inc5/R1-C6) — ที่เดียว ครอบ save/load/reset อัตโนมัติ
+  useCurrentProject.subscribe((s, prev) => {
+    if (s.projectId === prev.projectId) return; // ยิงเฉพาะตอน id เปลี่ยน
+    if (s.projectId) setLastProjectId(s.projectId);
+    else clearLastProjectId();
   });
 }
