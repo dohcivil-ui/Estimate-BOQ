@@ -346,7 +346,14 @@ export function buildBOQ(opts: BuildBOQOptions): BuildBOQResult {
       );
     }
     if (enumerated) {
-      const rec = reconcileGridCount(enumerated.byMark, tally.footingByMark);
+      // normalize enumerated keys → UPPER (tally ฝั่งคนแท็กเป็น UPPER เสมอจาก splitMarks)
+      //   ถ้า GridDef กรอก "f2"/"F2 " จะได้ไม่นับเป็นคนละ mark → ธงเพี้ยน
+      const enumUpper = new Map<string, number>();
+      for (const [k, v] of enumerated.byMark) {
+        const key = k.trim().toUpperCase();
+        enumUpper.set(key, (enumUpper.get(key) ?? 0) + v);
+      }
+      const rec = reconcileGridCount(enumUpper, tally.footingByMark);
       for (const d of rec.diffs) {
         if (d.ok) continue;
         flaggedFootingMarks.add(d.mark.trim().toUpperCase());

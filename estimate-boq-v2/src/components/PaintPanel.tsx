@@ -804,7 +804,7 @@ export function PaintPanel() {
           {computed && computed.warnings.length > 0 && (
             <ul className="mt-2 space-y-0.5">
               {computed.warnings
-                .filter((w) => w.startsWith('❓') || w.startsWith('⚠️'))
+                .filter((w) => w.startsWith('❓') || w.startsWith('⚠️') || w.startsWith('🚩'))
                 .map((w, i) => (
                   <li key={i} className="text-[10px] text-warning">
                     {w}

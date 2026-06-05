@@ -47,6 +47,29 @@ test('grid แต่ไม่มี members → ไม่มี 🚩', () => {
   expect(r.warnings.some((w) => w.startsWith('🚩'))).toBe(false);
 });
 
+// grid กรอกตัวพิมพ์เล็ก/มีช่องว่าง ("f2") ต้อง match tag UPPER ("F2") → ไม่ใช่ธงปลอม
+test('grid mixed-case "f2" = tag "F2" ครบ → ไม่มี 🚩 (normalize UPPER)', () => {
+  const lowerGrid: GridDef = {
+    longAxis: ['1', '2', '3', '4', '5', '6'],
+    shortAxis: ['A', 'B'],
+    intersectionMark: ' f2 ',
+    extras: [{ mark: 'f1', count: 2 }],
+  };
+  const r = buildBOQ({ extract: [], members: members({ F2: 12, F1: 2 }), grid: lowerGrid });
+  expect(r.warnings.some((w) => w.startsWith('🚩'))).toBe(false);
+});
+
+// grid "f2" (เล็ก) vs tag ขาด → ยังติดธง และ mark ในธงเป็น UPPER "F2"
+test('grid mixed-case "f2" vs tag ขาด → 🚩 mark UPPER', () => {
+  const lowerGrid: GridDef = {
+    longAxis: ['1', '2', '3', '4', '5', '6'],
+    shortAxis: ['A', 'B'],
+    intersectionMark: 'f2',
+  };
+  const r = buildBOQ({ extract: [], members: members({ F2: 10 }), grid: lowerGrid });
+  expect(hasFlag(r.warnings, 'F2')).toBe(true);
+});
+
 // grid invalid (longAxis ว่าง → enumerateGrid throw) → ⚠️ ข้าม ไม่แครช ไม่มี 🚩
 test('grid invalid → ⚠️ ข้ามการเทียบ ไม่ throw + ไม่มี 🚩', () => {
   const badGrid: GridDef = { ...page17, longAxis: [] };
