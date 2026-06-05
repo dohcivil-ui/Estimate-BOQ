@@ -200,7 +200,8 @@ export function PaintPanel() {
   );
   const computed = useMemo(
     () =>
-      memberInputs.length > 0 && Object.keys(markDims).length > 0
+      memberInputs.length > 0 &&
+      (Object.keys(markDims).length > 0 || grid != null)
         ? buildBOQ({ extract: [], members: memberInputs, markDims, ...(grid ? { grid } : {}) })
         : null,
     [memberInputs, markDims, grid],

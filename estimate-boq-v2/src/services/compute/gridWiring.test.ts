@@ -29,6 +29,14 @@ test('grid ≠ tag → 🚩 ระบุ mark + เลขสองฝั่ง',
   expect(hasFlag(r.warnings, 'F1')).toBe(false);
 });
 
+// ไม่กรอกมิติเลย (markDims ว่าง) แต่มี grid + tag ขาด → items ว่าง แต่ 🚩 ยังโผล่
+//   (สัญญา C4c: ธง reconcile อิสระจากการกรอกมิติ — gate PaintPanel ปล่อยให้เรียกได้เมื่อมี grid)
+test('ไม่มี markDims + grid + tag ขาด → items=0 แต่มี 🚩', () => {
+  const r = buildBOQ({ extract: [], members: members({ F2: 10, F1: 2 }), grid: page17 });
+  expect(r.items.length).toBe(0);
+  expect(hasFlag(r.warnings, 'F2')).toBe(true);
+});
+
 // แท็กตรง grid ทุก mark → ไม่มี 🚩
 test('grid = tag → ไม่มี 🚩', () => {
   const r = buildBOQ({ extract: [], members: members({ F2: 12, F1: 2 }), grid: page17 });
