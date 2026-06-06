@@ -25,6 +25,8 @@ export const CANVAS_COLORS = {
   label: '#e2e8f0',
   /** grid */
   grid: '#c9a227',
+  /** เส้นบอกระยะ (dimension) — แดง ต่างจาก grid ทอง + selected ส้ม (R1-C8b) */
+  dimension: '#ef4444',
 } as const;
 
 /** สี draft ตาม tool */

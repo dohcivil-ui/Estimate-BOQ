@@ -92,6 +92,9 @@ export function useKeyboardShortcuts(opts: {
           // ล้างเส้น grid ที่เลือก + จุดเริ่มเส้นที่ค้าง (inc2.5)
           tool.setSelectedGridLine(null);
           tool.setGridPendingStart(null);
+          // ล้างเส้น dimension ที่เลือก + จุดเริ่มเส้นที่ค้าง (R1-C8b)
+          tool.setSelectedDimLine(null);
+          tool.setDimPendingStart(null);
         }
         return;
       }
@@ -157,6 +160,13 @@ export function useKeyboardShortcuts(opts: {
         if (gridSel != null) {
           e.preventDefault();
           useToolStore.getState().removeGridLine(gridSel);
+          return;
+        }
+        // เส้น dimension ที่เลือกไว้ (R1-C8b) — ลบทิ้ง
+        const dimSel = useToolStore.getState().selectedDimLine;
+        if (dimSel != null) {
+          e.preventDefault();
+          useToolStore.getState().removeDimLine(dimSel);
           return;
         }
         if (e.key === 'Delete') {

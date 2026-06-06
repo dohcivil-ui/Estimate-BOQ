@@ -1,0 +1,79 @@
+/**
+ * DimensionLayer — overlay เส้นบอกระยะที่ผู้ใช้วาด (R1-C8b)
+ * - วาด: เส้น commit แล้ว = Arrow สองหัว + label กลางเส้น · preview จุดเริ่ม→cursor (ประ) + node จุดเริ่ม
+ * - label: valueM != null ? "x.xx ม." : "?"  (C8b ทุกเส้น = "?" รอ C8c กรอกค่า)
+ * - page-px → screen สูตรเดียวกับ FootingGridLayer · listening={false} ทั้ง layer
+ * - ⚠️ slot ตายตัวใน CanvasArea (FootingGrid → ที่นี่ → Draft) ห้าม moveToTop
+ */
+import { Fragment } from 'react';
+import { Layer, Line, Circle, Arrow, Label, Tag, Text } from 'react-konva';
+import type { Point2D, ViewTransform } from '@/types/viewport';
+import type { DimLine } from '@/types/tool';
+import { CANVAS_COLORS } from './canvasTheme';
+
+interface Props {
+  dimensions: DimLine[];
+  pendingStart: Point2D | null;
+  cursorPoint: Point2D | null;
+  transform: ViewTransform;
+  selectedIndex: number | null;
+}
+
+const COLOR = CANVAS_COLORS.dimension; // ฟ้า #38bdf8
+const COLOR_SEL = CANVAS_COLORS.selected; // ส้ม — เส้นที่เลือก
+
+export function DimensionLayer({ dimensions, pendingStart, cursorPoint, transform, selectedIndex }: Props) {
+  // ไม่มีอะไรต้องวาด → layer ว่าง (ยังคง mount ที่ slot เดิม)
+  if (dimensions.length === 0 && !pendingStart) return <Layer listening={false} />;
+
+  const toScreen = (p: Point2D): [number, number] => [
+    p.x * transform.zoom + transform.panX,
+    p.y * transform.zoom + transform.panY,
+  ];
+
+  const preview =
+    pendingStart && cursorPoint
+      ? [...toScreen(pendingStart), ...toScreen(cursorPoint)]
+      : null;
+  const startScreen = pendingStart ? toScreen(pendingStart) : null;
+
+  return (
+    <Layer listening={false}>
+      {dimensions.map((d, i) => {
+        const [ax, ay] = toScreen(d.a);
+        const [bx, by] = toScreen(d.b);
+        const sel = i === selectedIndex;
+        const color = sel ? COLOR_SEL : COLOR;
+        const label = d.valueM != null ? `${d.valueM.toFixed(2)} ม.` : '?';
+        return (
+          <Fragment key={i}>
+            <Arrow
+              points={[ax, ay, bx, by]}
+              stroke={color}
+              fill={color}
+              strokeWidth={sel ? 3 : 1.5}
+              pointerLength={8}
+              pointerWidth={7}
+              pointerAtBeginning
+            />
+            <DimLabel x={(ax + bx) / 2} y={(ay + by) / 2 - 18} text={label} color={color} />
+          </Fragment>
+        );
+      })}
+      {preview && <Line points={preview} stroke={COLOR} strokeWidth={1.5} dash={[6, 4]} />}
+      {startScreen && (
+        <Circle x={startScreen[0]} y={startScreen[1]} radius={4} fill={COLOR}
+          stroke={CANVAS_COLORS.outline} strokeWidth={1.5} />
+      )}
+    </Layer>
+  );
+}
+
+function DimLabel({ x, y, text, color }: { x: number; y: number; text: string; color: string }) {
+  return (
+    <Label x={x} y={y} offsetX={text.length * 3}>
+      <Tag fill="#0b1220" opacity={0.82} cornerRadius={3} />
+      <Text text={text} fontFamily="Sarabun" fontSize={12} fontStyle="600" fill={color} padding={4} />
+    </Label>
+  );
+}

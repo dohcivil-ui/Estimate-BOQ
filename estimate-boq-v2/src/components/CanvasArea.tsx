@@ -26,6 +26,7 @@ import { GridLayer } from './canvas/GridLayer';
 import { MeasurementsLayer } from './canvas/MeasurementsLayer';
 import { DetectionLayer } from './canvas/DetectionLayer';
 import { FootingGridLayer } from './canvas/FootingGridLayer';
+import { DimensionLayer } from './canvas/DimensionLayer';
 import { DraftLayer } from './canvas/DraftLayer';
 import { SnapHud } from './canvas/SnapHud';
 import { ScaleDialog } from './ScaleDialog';
@@ -59,6 +60,9 @@ export function CanvasArea() {
   const gridLines = useToolStore((s) => s.gridLines);
   const gridPendingStart = useToolStore((s) => s.gridPendingStart);
   const selectedGridLine = useToolStore((s) => s.selectedGridLine);
+  const dimensions = useToolStore((s) => s.dimensions);
+  const dimPendingStart = useToolStore((s) => s.dimPendingStart);
+  const selectedDimLine = useToolStore((s) => s.selectedDimLine);
   const measurements = useMeasurementsForPage(page?.id ?? null);
 
   // snap/grid state สำหรับ overlay
@@ -108,6 +112,7 @@ export function CanvasArea() {
       length: 'crosshair',
       area: 'crosshair',
       paint: 'crosshair',
+      dimension: 'crosshair',
     };
     c.style.cursor = CURSORS[activeTool] ?? 'default';
   }, [activeTool, page]);
@@ -145,6 +150,13 @@ export function CanvasArea() {
             cursorPoint={cursorPagePoint}
             transform={transform}
             selectedIndex={selectedGridLine}
+          />
+          <DimensionLayer
+            dimensions={dimensions}
+            pendingStart={dimPendingStart}
+            cursorPoint={cursorPagePoint}
+            transform={transform}
+            selectedIndex={selectedDimLine}
           />
           <DraftLayer
             tool={activeTool}

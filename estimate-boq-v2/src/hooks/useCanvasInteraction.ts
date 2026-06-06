@@ -261,8 +261,9 @@ export function useCanvasInteraction(
 
       // select tool — left click = hit test
       if (activeTool === 'select' && isLeft) {
-        // ทุกคลิกเลือกใหม่ = ล้างเส้น grid ที่เลือกไว้ก่อน (ตั้งใหม่ถ้าโดน)
+        // ทุกคลิกเลือกใหม่ = ล้างเส้น grid + dimension ที่เลือกไว้ก่อน (ตั้งใหม่ถ้าโดน)
         useToolStore.getState().setSelectedGridLine(null);
+        useToolStore.getState().setSelectedDimLine(null);
         // priority: member ที่ระบายไว้ก่อน → toggleSelect (เผื่อ hit pad ~10 screen px)
         const det = useDetectionStore.getState();
         const hitPad = 10 / transformZoom;
@@ -295,6 +296,22 @@ export function useCanvasInteraction(
           det.clearSelection();
           useMeasurementStore.getState().select(null);
           useToolStore.getState().setSelectedGridLine(gridHit);
+          return;
+        }
+        // ─── dimension line hit-test (R1-C8b) — เลือกเส้นเพื่อลบด้วย Delete ──
+        const dimensions = useToolStore.getState().dimensions;
+        const dimTol = 8 / transformZoom; // ~8 screen px
+        let dimHit = -1;
+        for (let i = 0; i < dimensions.length; i++) {
+          if (distancePointToSegment(raw, dimensions[i]!.a, dimensions[i]!.b) <= dimTol) {
+            dimHit = i;
+            break;
+          }
+        }
+        if (dimHit >= 0) {
+          det.clearSelection();
+          useMeasurementStore.getState().select(null);
+          useToolStore.getState().setSelectedDimLine(dimHit);
           return;
         }
         // ไม่โดน member → ล้าง selection + บอกวิธีปักหมุดใหม่ แล้ว fallback measurement
@@ -342,6 +359,13 @@ export function useCanvasInteraction(
         return;
       }
 
+      // right-click ขณะ dimension = ยกเลิกจุดเริ่มเส้นที่ค้าง (R1-C8b)
+      if (isRight && activeTool === 'dimension') {
+        e.evt.preventDefault();
+        useToolStore.getState().setDimPendingStart(null);
+        return;
+      }
+
       // drawing tools — left click only
       if (!isLeft) return;
 
@@ -356,6 +380,19 @@ export function useCanvasInteraction(
         } else {
           useToolStore.getState().addGridLine({ a: pending, b: final });
           useToolStore.getState().setGridPendingStart(null);
+        }
+        return;
+      }
+
+      // ─── dimension (R1-C8b): คลิกแรก=จุดเริ่ม · คลิกสอง=ปิดเส้น valueM=null (C8c กรอกค่าทีหลัง) ──
+      // มิเรอร์ grid 2-คลิก · ใช้ final (ผ่าน snap node) · ortho H/V deferred (snap node ก็ได้เส้นตรงแกน)
+      if (activeTool === 'dimension') {
+        const pending = useToolStore.getState().dimPendingStart;
+        if (!pending) {
+          useToolStore.getState().setDimPendingStart(final);
+        } else {
+          useToolStore.getState().addDimLine({ a: pending, b: final, valueM: null });
+          useToolStore.getState().setDimPendingStart(null);
         }
         return;
       }
