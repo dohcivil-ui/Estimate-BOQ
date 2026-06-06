@@ -34,7 +34,7 @@ import type {
   MarkDimsSource,
 } from '@/stores/detectionStore';
 import type { GridDef } from '@/services/compute/gridModel';
-import type { GridLine } from '@/types/tool';
+import type { GridLine, DimLine } from '@/types/tool';
 import { loadDrawingFile } from './loadDrawing';
 import type { Measurement } from '@/types/measurement';
 import type { BOQItem, Discipline, DisciplineGroup } from '@/types/boq';
@@ -388,13 +388,14 @@ export async function saveProject(): Promise<string> {
     const { members, markDims, markDimsSource, grid } =
       useDetectionStore.getState();
     // gridLines อยู่ toolStore (เส้นแกนที่วาด) — persist คู่กับ grid (inc5)
-    const { gridLines } = useToolStore.getState();
+    // dimensions = เส้นบอกระยะ + ค่าที่คนพิมพ์ (R1-C8)
+    const { gridLines, dimensions } = useToolStore.getState();
     // activePageId อยู่ drawingStore (หน้าที่เปิดอยู่) — persist เพื่อกลับมาหน้าเดิม (R1-C7)
     const { activePageId } = useDrawingStore.getState();
     const { error } = await client.from('detection_state').upsert(
       {
         project_id: projectId,
-        state_json: { members, markDims, markDimsSource, grid, gridLines, activePageId },
+        state_json: { members, markDims, markDimsSource, grid, gridLines, dimensions, activePageId },
         updated_at: new Date().toISOString(),
       },
       { onConflict: 'project_id' },
@@ -573,6 +574,7 @@ export async function loadProject(
       markDimsSource?: Record<string, MarkDimsSource>;
       grid?: GridDef | null;
       gridLines?: GridLine[];
+      dimensions?: DimLine[];
       activePageId?: string | null;
     };
     useDetectionStore.getState().hydrateDetection({
@@ -583,6 +585,8 @@ export async function loadProject(
     });
     // hydrate เส้นแกนกลับ toolStore (payload เก่าไม่มี → []) — inc5
     useToolStore.getState().setGridLines(s.gridLines ?? []);
+    // hydrate เส้นบอกระยะกลับ toolStore (payload เก่าไม่มี → []) — R1-C8
+    useToolStore.getState().setDimLines(s.dimensions ?? []);
     // กลับไปหน้าที่เปิดค้างไว้ — restore เฉพาะเมื่อ pageId ยังมีอยู่จริง (R1-C7)
     if (
       s.activePageId &&

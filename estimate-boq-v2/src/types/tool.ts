@@ -8,6 +8,14 @@ export interface GridLine {
   kind?: 'axis' | 'guide';
 }
 
+/** เส้นบอกระยะ 1 เส้น (page-px) — ปลายสองด้าน + ระยะจริงที่ "คนพิมพ์เท่านั้น" (R1-C8) */
+export interface DimLine {
+  a: Point2D;
+  b: Point2D;
+  /** ระยะจริง (เมตร) — human-only · null = ยังไม่กรอก · ห้าม path AI เขียน */
+  valueM: number | null;
+}
+
 /** เครื่องมือใน Step 2.3 */
 export type Tool =
   | 'select'   // เลือกแก้ไข
