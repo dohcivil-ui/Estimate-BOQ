@@ -389,10 +389,12 @@ export async function saveProject(): Promise<string> {
       useDetectionStore.getState();
     // gridLines อยู่ toolStore (เส้นแกนที่วาด) — persist คู่กับ grid (inc5)
     const { gridLines } = useToolStore.getState();
+    // activePageId อยู่ drawingStore (หน้าที่เปิดอยู่) — persist เพื่อกลับมาหน้าเดิม (R1-C7)
+    const { activePageId } = useDrawingStore.getState();
     const { error } = await client.from('detection_state').upsert(
       {
         project_id: projectId,
-        state_json: { members, markDims, markDimsSource, grid, gridLines },
+        state_json: { members, markDims, markDimsSource, grid, gridLines, activePageId },
         updated_at: new Date().toISOString(),
       },
       { onConflict: 'project_id' },
@@ -571,6 +573,7 @@ export async function loadProject(
       markDimsSource?: Record<string, MarkDimsSource>;
       grid?: GridDef | null;
       gridLines?: GridLine[];
+      activePageId?: string | null;
     };
     useDetectionStore.getState().hydrateDetection({
       members: s.members,
@@ -580,6 +583,13 @@ export async function loadProject(
     });
     // hydrate เส้นแกนกลับ toolStore (payload เก่าไม่มี → []) — inc5
     useToolStore.getState().setGridLines(s.gridLines ?? []);
+    // กลับไปหน้าที่เปิดค้างไว้ — restore เฉพาะเมื่อ pageId ยังมีอยู่จริง (R1-C7)
+    if (
+      s.activePageId &&
+      useDrawingStore.getState().pages.some((p) => p.id === s.activePageId)
+    ) {
+      useDrawingStore.getState().setActivePage(s.activePageId);
+    }
   }
 
   // ─── 8. update current project + mark saved ──────────────────────────
