@@ -172,7 +172,19 @@ function wrapDbError(
   operation: string,
 ): Error {
   if (err instanceof RLSError) return err;
-  const original = err instanceof Error ? err.message : String(err);
+  const original =
+    err instanceof Error
+      ? err.message
+      : err && typeof err === 'object'
+        ? [
+            (err as { code?: string }).code,
+            (err as { message?: string }).message,
+            (err as { details?: string }).details,
+            (err as { hint?: string }).hint,
+          ]
+            .filter(Boolean)
+            .join(' · ') || JSON.stringify(err)
+        : String(err);
   if (isRLSError(err)) {
     return new RLSError(tableName, operation, original);
   }
@@ -331,7 +343,9 @@ export async function saveProject(): Promise<string> {
   }
 
   // ─── 4. upsert drawing_pages ──────────────────────────────────────────
-  const pageRows = drawing.pages.map((p) => ({
+  // กันแถวซ้ำ id ในชุดเดียว (ป้องกัน 409 ON CONFLICT cannot affect row a second time)
+  const uniquePages = Array.from(new Map(drawing.pages.map((p) => [p.id, p])).values());
+  const pageRows = uniquePages.map((p) => ({
     id: p.id,
     project_id: projectId,
     file_id: p.fileId,
