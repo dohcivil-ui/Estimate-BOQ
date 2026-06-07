@@ -10,13 +10,15 @@
  * หน่วย: เมตร (m) สำหรับมิติ, ลบ.ม. (m³) ปริมาตร, ตร.ม. (m²) พื้นที่, kg เหล็ก
  */
 
+import { EXCAVATION_ALLOWANCE_PCT, FILL_ALLOWANCE_PCT } from '@/data/cgdAllowance';
+
 // ─────────────────────────────────────────────────────────────
 // 1) ค่าคงที่ทางวิศวกรรม (แก้ที่เดียว — กฎ "centralized" ของผู้ใช้)
 // ─────────────────────────────────────────────────────────────
 export const CONST = {
   SAND_THK: 0.05,      // ทรายหยาบรองพื้น หนา 0.05 ม. (กฎ 14)
   LEAN_THK: 0.05,      // คอนกรีตหยาบ 1:3:5 หนา 0.05 ม. (กฎ 2/14)
-  EXCAV_SIDE: 0.50,    // เผื่อขุดข้างละ 0.50 ม. (กฎ 2/14) → +1.0 ต่อมิติ
+  // EXCAV_SIDE ลบแล้ว — ขุดดินใช้ ×1.30 ตาม CGD ข้อ 1 (rule-14 resolved 7 มิ.ย.2569)
 } as const;
 
 /** น้ำหนักเหล็ก kg/m = d²/162 (d เป็น มม.) — ตารางอ้างอิงไว้ cross-check */
@@ -68,8 +70,8 @@ export interface PedestalSpec {
   W: number;             // หน้าตัด กว้าง (ม.)
   L: number;             // หน้าตัด ยาว (ม.)
   H: number;             // ความสูง (ม.) — คิด 1.00 ตามแบบ
-  vBars: { size: string; count: number };  // เหล็กยืน เช่น {DB12, 8}
-  tie: { size: string; spacing: number };  // ปลอก เช่น {RB6, 0.19}
+  vBars?: { size: string; count: number };  // เหล็กยืน (optional — ว่าง = ยังไม่ใส่เหล็ก rebar 0)
+  tie?: { size: string; spacing: number };   // ปลอก (optional)
   /** เผื่อฝัง+ทาบเหล็กยืนต่อเส้น (ม.) — ❓ ถ้าไม่ระบุ default 0.40 (~40db) */
   dowel?: number;
   cover?: number;        // default 0.04
@@ -141,12 +143,20 @@ export function computeFooting(f: FootingSpec): FootingQty {
 
   // ปริมาตร/พื้นที่ (×N)
   const concrete_m3 = W * L * T * N;
-  const sand_m3 = W * L * sandThk * N;
-  const lean_m3 = W * L * leanThk * N;
-  const excavation_m3 = (W + 2 * CONST.EXCAV_SIDE) * (L + 2 * CONST.EXCAV_SIDE) * D * N;
+  // ── ปริมาตร geometric (วางจริง) — ใช้คิด backfill void (ทาง A) ──
+  const sandGeom_m3 = W * L * sandThk * N;
+  const leanGeom_m3 = W * L * leanThk * N;
+  const neatHole_m3 = W * L * D * N; // หลุมสุทธิ (ไม่เผื่อ)
+  // ── ปริมาณคิดจ่าย — เผื่อตาม CGD (SoT: cgdAllowance.ts) ──
+  const sand_m3 = sandGeom_m3 * (1 + FILL_ALLOWANCE_PCT.sandSubbase / 100); // ทราย ×1.25 (ข้อ 2)
+  const lean_m3 = leanGeom_m3; // lean ไม่เผื่อบดอัด (เทไม่ยุบ)
+  const excavation_m3 = neatHole_m3 * (1 + EXCAVATION_ALLOWANCE_PCT / 100); // ขุดดิน ×1.30 (ข้อ 1) — แทน +0.50ม.
   const pedVolPer = ped ? ped.W * ped.L * ped.H : (f.pedestalVol ?? 0);
   const pedestalVol = pedVolPer * N;
-  const backfill_m3 = excavation_m3 - concrete_m3 - sand_m3 - lean_m3 - pedestalVol;
+  // ถมกลับ = void หลุมสุทธิ หลังวาง solids (geometric ทั้งหมด — ทาง A)
+  const backfillRaw = neatHole_m3 - concrete_m3 - sandGeom_m3 - leanGeom_m3 - pedestalVol;
+  // หลุมพอดี solids → backfill ≈ 0 · clamp กัน float noise ทำให้ติดลบจิ๋ว/เตือนผิด
+  const backfill_m3 = Math.abs(backfillRaw) < 1e-6 ? 0 : backfillRaw;
   const formwork_m2 = 2 * (W + L) * T * N; // ไม้แบบข้าง = เส้นรอบรูป × หนา
 
   if (backfill_m3 < 0)
@@ -188,23 +198,31 @@ export function computeFooting(f: FootingSpec): FootingQty {
     const pcover = ped.cover ?? 0.04;
     ped_concrete_m3 = ped.W * ped.L * ped.H * N;
     ped_formwork_m2 = 2 * (ped.W + ped.L) * ped.H * N; // 4 ด้าน
-    // เหล็กยืน
-    const dowel = ped.dowel ?? 0.40;
-    dowelUsed = dowel;
-    dowelDefault = ped.dowel == null;
-    if (ped.dowel == null)
-      warnings.push(`❓ ${f.type}: เผื่อฝัง/ทาบเหล็กยืนตอม่อใช้ค่า default 0.40m (S2-04 ไม่ระบุ lap)`);
-    const vKg = ped.vBars.count * (ped.H + dowel) * barWeightPerM(ped.vBars.size) * N;
-    rebar_breakdown[ped.vBars.size] = (rebar_breakdown[ped.vBars.size] ?? 0) + vKg;
-    partOf(ped.vBars.size).pedV += vKg;
-    rebar_kg += vKg;
-    // ปลอก
-    const nTie = Math.floor(ped.H / ped.tie.spacing) + 1;
-    const tieLen = 2 * ((ped.W - 2 * pcover) + (ped.L - 2 * pcover)) + 2 * 0.05; // +งอ
-    const tKg = nTie * tieLen * barWeightPerM(ped.tie.size) * N;
-    rebar_breakdown[ped.tie.size] = (rebar_breakdown[ped.tie.size] ?? 0) + tKg;
-    partOf(ped.tie.size).pedTie += tKg;
-    rebar_kg += tKg;
+    // เหล็กยืน (optional — ว่าง = ยังไม่ใส่เหล็ก คิดคอนกรีต/ดินอย่างเดียว)
+    if (ped.vBars) {
+      const dowel = ped.dowel ?? 0.40;
+      dowelUsed = dowel;
+      dowelDefault = ped.dowel == null;
+      if (ped.dowel == null)
+        warnings.push(`❓ ${f.type}: เผื่อฝัง/ทาบเหล็กยืนตอม่อใช้ค่า default 0.40m (S2-04 ไม่ระบุ lap)`);
+      const vKg = ped.vBars.count * (ped.H + dowel) * barWeightPerM(ped.vBars.size) * N;
+      rebar_breakdown[ped.vBars.size] = (rebar_breakdown[ped.vBars.size] ?? 0) + vKg;
+      partOf(ped.vBars.size).pedV += vKg;
+      rebar_kg += vKg;
+    }
+    // ปลอก (optional)
+    if (ped.tie) {
+      const nTie = Math.floor(ped.H / ped.tie.spacing) + 1;
+      const tieLen = 2 * ((ped.W - 2 * pcover) + (ped.L - 2 * pcover)) + 2 * 0.05; // +งอ
+      const tKg = nTie * tieLen * barWeightPerM(ped.tie.size) * N;
+      rebar_breakdown[ped.tie.size] = (rebar_breakdown[ped.tie.size] ?? 0) + tKg;
+      partOf(ped.tie.size).pedTie += tKg;
+      rebar_kg += tKg;
+    }
+    if (!ped.vBars || !ped.tie)
+      warnings.push(
+        `❓ ${f.type}: ตอม่อ${ped.type ? ' ' + ped.type : ''} ยังไม่ใส่เหล็ก — คิดคอนกรีต/ดิน เหล็กตอม่อ=0`,
+      );
   }
 
   // ── เหล็กรัดรอบฐาน (RB9) — แยกจากตะแกรง (สูตรวิศวกรยืนยันแล้ว) ──

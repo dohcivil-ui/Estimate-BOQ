@@ -190,11 +190,23 @@ function buildFooting(
       const [pW = 0, pL = 0, pH = 0] = pdims;
       const vBars = parseVBars(pItem.rebar ?? pItem.description);
       const tie = parseTie(pItem.rebar ?? pItem.description);
-      if (pW && pL && pH && vBars && tie) {
-        pedestal = { type: pedCode, W: pW, L: pL, H: pH, vBars, tie };
+      if (pW && pL && pH) {
+        // ตอม่อคิดงานดิน/คอนกรีตจากมิติ — เหล็ก optional (ว่าง/parse ไม่ได้ = rebar 0)
+        pedestal = {
+          type: pedCode,
+          W: pW,
+          L: pL,
+          H: pH,
+          ...(vBars ? { vBars } : {}),
+          ...(tie ? { tie } : {}),
+        };
+        if (!vBars || !tie)
+          warnings.push(
+            `❓ ${code}/${pedCode}: ตอม่อยังไม่ใส่เหล็ก — คิดคอนกรีต/ดิน/depth ครบ เหล็กตอม่อ=0`,
+          );
       } else {
         warnings.push(
-          `❓ ${code}/${pedCode}: ตอม่ออ่านมิติ/เหล็กไม่ครบ — คิดเฉพาะฐาน (ไม่รวมตอม่อ)`,
+          `❓ ${code}/${pedCode}: ตอม่ออ่านมิติไม่ครบ (W/L/H) — คิดเฉพาะฐาน`,
         );
       }
     } else {
@@ -344,11 +356,23 @@ export function specsFromMarks(input: MarksSpecInput): AdapterResult {
       if (pd && pd.kind === 'column') {
         const vBars = parseVBars(pd.vBars);
         const tie = parseTie(pd.tie);
-        if (pd.W && pd.L && pd.H && vBars && tie) {
-          pedestal = { type: pedMark, W: pd.W, L: pd.L, H: pd.H, vBars, tie };
+        if (pd.W && pd.L && pd.H) {
+          // ตอม่อคิดงานดิน/คอนกรีตจากมิติ — เหล็ก optional (ว่าง/parse ไม่ได้ = rebar 0)
+          pedestal = {
+            type: pedMark,
+            W: pd.W,
+            L: pd.L,
+            H: pd.H,
+            ...(vBars ? { vBars } : {}),
+            ...(tie ? { tie } : {}),
+          };
+          if (!vBars || !tie)
+            warnings.push(
+              `❓ ${mark}/${pedMark}: ตอม่อยังไม่ใส่เหล็ก — คิดคอนกรีต/ดิน/depth ครบ เหล็กตอม่อ=0`,
+            );
         } else {
           warnings.push(
-            `❓ ${mark}/${pedMark}: ตอม่ออ่านมิติ/เหล็กไม่ครบ — คิดเฉพาะฐาน`,
+            `❓ ${mark}/${pedMark}: ตอม่ออ่านมิติไม่ครบ (W/L/H) — คิดเฉพาะฐาน`,
           );
         }
       } else {
