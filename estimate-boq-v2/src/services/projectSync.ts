@@ -342,6 +342,14 @@ export async function saveProject(): Promise<string> {
     if (error) throw wrapDbError(error, 'drawing_files', 'บันทึก');
   }
 
+  // ลบไฟล์กำพร้าใน DB ที่ผู้ใช้ลบออกไปแล้ว (cascade ไม่ครอบ drawing_pages จึงลบ pages แยกใน §4)
+  const keepFileIds = drawing.files.map((f) => f.id);
+  const delFiles = client.from('drawing_files').delete().eq('project_id', projectId);
+  const { error: delFileErr } = keepFileIds.length
+    ? await delFiles.not('id', 'in', `(${keepFileIds.join(',')})`)
+    : await delFiles; // ไม่เหลือไฟล์เลย = ลบทุกแถวของ project
+  if (delFileErr) throw wrapDbError(delFileErr, 'drawing_files', 'ลบไฟล์เก่า');
+
   // ─── 4. upsert drawing_pages ──────────────────────────────────────────
   // กันแถวซ้ำ id ในชุดเดียว (ป้องกัน 409 ON CONFLICT cannot affect row a second time)
   const uniquePages = Array.from(new Map(drawing.pages.map((p) => [p.id, p])).values());
@@ -361,6 +369,14 @@ export async function saveProject(): Promise<string> {
       .upsert(pageRows, { onConflict: 'id' });
     if (error) throw wrapDbError(error, 'drawing_pages', 'บันทึก');
   }
+
+  // ลบ page กำพร้าใน DB ที่ผู้ใช้ลบไฟล์/หน้าออกไปแล้ว (ไม่งั้น reload กลับมา) — cascade ลบ shapes/ai เก่าให้
+  const keepPageIds = uniquePages.map((p) => p.id);
+  const delPages = client.from('drawing_pages').delete().eq('project_id', projectId);
+  const { error: delPgErr } = keepPageIds.length
+    ? await delPages.not('id', 'in', `(${keepPageIds.join(',')})`)
+    : await delPages; // ไม่เหลือหน้าเลย = ลบทุกแถวของ project
+  if (delPgErr) throw wrapDbError(delPgErr, 'drawing_pages', 'ลบหน้าเก่า');
 
   // ─── 5. delete + insert shapes (เพราะ undo อาจลบ measurement) ────────
   {
@@ -737,6 +753,10 @@ function rowToMeasurement(row: ShapeRow): Measurement | null {
   return j as unknown as Measurement;
 }
 
+// uuid pattern (Postgres uuid รับทุก version) — กรองค่าที่ใส่ลง column ชนิด uuid ได้
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function boqToRow(
   it: BOQItem,
   projectId: string,
@@ -755,7 +775,9 @@ function boqToRow(
     waste_pct: it.wastePct,
     thickness_m: it.thickness ?? null,
     source: it.source,
-    source_ref: it.sourceRef ?? null,
+    // source_ref เป็น column ชนิด uuid → ใส่เฉพาะค่าที่เป็น uuid จริง (เช่น measurement id)
+    // composite trace (paint:{pageId}:marks / {analysisId}:compute / preset id) เก็บไม่ได้ → null กัน 22P02
+    source_ref: it.sourceRef && UUID_RE.test(it.sourceRef) ? it.sourceRef : null,
     notes: it.notes ?? null,
     page_id: pageId,
     discipline,
