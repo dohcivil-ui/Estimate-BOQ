@@ -5,9 +5,11 @@
  * - drop zone overlay, import progress, error toast
  * - ScaleDialog modal
  */
-import { useEffect, useLayoutEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Stage } from 'react-konva';
 import type Konva from 'konva';
+import type { DimLine } from '@/types/tool';
+import type { ViewTransform } from '@/types/viewport';
 import { useActivePage, useDrawingStore } from '@/stores/drawingStore';
 import { useViewportStore } from '@/stores/viewportStore';
 import { useCanvasSize } from '@/stores/canvasSizeStore';
@@ -63,6 +65,8 @@ export function CanvasArea() {
   const dimensions = useToolStore((s) => s.dimensions);
   const dimPendingStart = useToolStore((s) => s.dimPendingStart);
   const selectedDimLine = useToolStore((s) => s.selectedDimLine);
+  const setSelectedDimLine = useToolStore((s) => s.setSelectedDimLine);
+  const setDimValue = useToolStore((s) => s.setDimValue);
   const measurements = useMeasurementsForPage(page?.id ?? null);
 
   // snap/grid state สำหรับ overlay
@@ -193,6 +197,18 @@ export function CanvasArea() {
           onClose={interaction.closeScaleDialog}
         />
       )}
+
+      {/* C8c: ช่องพิมพ์ระยะจริงลอยกลางเส้น dimension ที่เลือก (human-only) */}
+      {selectedDimLine != null && transform && dimensions[selectedDimLine] && (
+        <DimValueInput
+          key={selectedDimLine}
+          line={dimensions[selectedDimLine]}
+          index={selectedDimLine}
+          transform={transform}
+          onCommit={setDimValue}
+          onClose={() => setSelectedDimLine(null)}
+        />
+      )}
     </div>
   );
 }
@@ -281,6 +297,79 @@ function ErrorToast({
           ✕
         </button>
       </div>
+    </div>
+  );
+}
+
+/** C8c — ช่องพิมพ์ระยะจริง (เมตร) ลอยกลางเส้น dimension ที่เลือก · human-only (ไม่มี path AI) */
+function DimValueInput({
+  line,
+  index,
+  transform,
+  onCommit,
+  onClose,
+}: {
+  line: DimLine;
+  index: number;
+  transform: ViewTransform;
+  onCommit: (i: number, valueM: number | null) => void;
+  onClose: () => void;
+}) {
+  const [text, setText] = useState(line.valueM != null ? String(line.valueM) : '');
+  const skipCommit = useRef(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // เด้ง focus เข้า input อัตโนมัติ (rAF ให้ชนะ canvas ที่แย่ง focus หลังคลิกเลือกเส้น)
+  useEffect(() => {
+    const id = requestAnimationFrame(() => inputRef.current?.focus());
+    return () => cancelAnimationFrame(id);
+  }, []);
+
+  const midX = ((line.a.x + line.b.x) / 2) * transform.zoom + transform.panX;
+  const midY = ((line.a.y + line.b.y) / 2) * transform.zoom + transform.panY;
+
+  const commit = () => {
+    if (skipCommit.current) {
+      skipCommit.current = false;
+      return;
+    }
+    const t = text.trim();
+    if (t === '') {
+      onCommit(index, null);
+      return;
+    }
+    const n = parseFloat(t);
+    onCommit(index, Number.isFinite(n) && n > 0 ? n : null);
+  };
+
+  return (
+    <div
+      className="absolute z-40 -translate-x-1/2 -translate-y-1/2"
+      style={{ left: midX, top: midY }}
+    >
+      <input
+        ref={inputRef}
+        type="text"
+        inputMode="decimal"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onFocus={(e) => e.target.select()}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            e.currentTarget.blur(); // → onBlur → commit()
+            onClose();              // ปิดกล่องหลังกรอกเสร็จ
+          } else if (e.key === 'Escape') {
+            e.preventDefault();
+            skipCommit.current = true;
+            e.currentTarget.blur();
+            onClose();              // ยกเลิก + ปิด
+          }
+        }}
+        onBlur={commit}
+        placeholder="ระยะ ม."
+        className="w-20 rounded border border-accent bg-bg-panel px-1.5 py-0.5 text-center text-xs text-ink-primary shadow-lg outline-none"
+      />
     </div>
   );
 }
