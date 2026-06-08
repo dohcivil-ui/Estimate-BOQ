@@ -9,7 +9,7 @@
  *
  * ⚠️ นับเฉพาะ member ที่ระบายตำแหน่งแล้ว (geometry != null) — seed/ghost ไม่นับ
  */
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useActivePage, useDrawingStore } from '@/stores/drawingStore';
 import {
   useDetectionStore,
@@ -781,24 +781,44 @@ export function PaintPanel() {
           ) : (
             <>
               <ul className="mb-2 space-y-0.5">
-                {computed.items.map((it, i) => (
-                  <li
-                    key={i}
-                    className="flex items-center justify-between gap-2 text-[11px]"
-                  >
-                    <span className="text-ink-primary">{it.name}</span>
-                    <span className="shrink-0 text-ink-muted">
-                      {it.quantity} {it.unit}
-                    </span>
-                  </li>
-                ))}
+                {computed.items.map((it, i) => {
+                  // ตอม่อถูกพับเป็น sub_item ของฐาน — ดึงมาโชว์เป็นบรรทัดแยกใต้หัวฐาน
+                  //   (display เท่านั้น · 1 ตอม่อ/ฐาน → จำนวน = it.quantity)
+                  const pedSub = it.sub_items?.find((s) => s.name === 'คอนกรีตตอม่อ');
+                  const pedMark = pedSub
+                    ? PEDESTAL_OF[it.name.trim().split(/\s+/)[0]?.toUpperCase() ?? '']
+                    : undefined;
+                  return (
+                    <Fragment key={i}>
+                      <li className="flex items-center justify-between gap-2 text-[11px]">
+                        <span className="text-ink-primary">{it.name}</span>
+                        <span className="shrink-0 text-ink-muted">
+                          {it.quantity} {it.unit}
+                        </span>
+                      </li>
+                      {pedSub && (
+                        <li className="flex items-center justify-between gap-2 text-[11px]">
+                          <span className="text-ink-primary">ตอม่อ {pedMark ?? ''}</span>
+                          <span className="shrink-0 text-ink-muted">
+                            {it.quantity} ต้น
+                          </span>
+                        </li>
+                      )}
+                    </Fragment>
+                  );
+                })}
               </ul>
               <button
                 type="button"
                 onClick={handleImportComputed}
                 className="w-full rounded bg-accent px-2 py-1.5 text-xs font-medium text-ink-inverse hover:opacity-90"
               >
-                📥 Import to BOQ ({computed.items.length} รายการ)
+                📥 Import to BOQ (
+                {computed.items.length +
+                  computed.items.filter((it) =>
+                    it.sub_items?.some((s) => s.name === 'คอนกรีตตอม่อ'),
+                  ).length}{' '}
+                รายการ)
               </button>
             </>
           )}
