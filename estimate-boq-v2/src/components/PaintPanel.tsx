@@ -9,7 +9,7 @@
  *
  * ⚠️ นับเฉพาะ member ที่ระบายตำแหน่งแล้ว (geometry != null) — seed/ghost ไม่นับ
  */
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useActivePage, useDrawingStore } from '@/stores/drawingStore';
 import {
   useDetectionStore,
@@ -781,32 +781,27 @@ export function PaintPanel() {
           ) : (
             <>
               <ul className="mb-2 space-y-0.5">
-                {computed.items.map((it, i) => {
-                  // ตอม่อถูกพับเป็น sub_item ของฐาน — ดึงมาโชว์เป็นบรรทัดแยกใต้หัวฐาน
-                  //   (display เท่านั้น · 1 ตอม่อ/ฐาน → จำนวน = it.quantity)
-                  const pedSub = it.sub_items?.find((s) => s.name === 'คอนกรีตตอม่อ');
-                  const pedMark = pedSub
-                    ? PEDESTAL_OF[it.name.trim().split(/\s+/)[0]?.toUpperCase() ?? '']
-                    : undefined;
-                  return (
-                    <Fragment key={i}>
-                      <li className="flex items-center justify-between gap-2 text-[11px]">
-                        <span className="text-ink-primary">{it.name}</span>
-                        <span className="shrink-0 text-ink-muted">
-                          {it.quantity} {it.unit}
-                        </span>
-                      </li>
-                      {pedSub && (
-                        <li className="flex items-center justify-between gap-2 text-[11px]">
-                          <span className="text-ink-primary">ตอม่อ {pedMark ?? ''}</span>
-                          <span className="shrink-0 text-ink-muted">
-                            {it.quantity} ต้น
-                          </span>
-                        </li>
-                      )}
-                    </Fragment>
-                  );
-                })}
+                {(() => {
+                  const rows: { label: string; qty: number; unit: string; rank: number; code: string }[] = [];
+                  for (const it of computed.items) {
+                    const code = it.name.trim().split(/\s+/)[0]?.toUpperCase() ?? '';
+                    // ดึงคำหมวดไทยจากชื่อ (ตัด token รหัสหน้า + วงเล็บท้าย) — generic ทุกหมวด
+                    const cat = it.name.trim().replace(/^\S+\s*/, '').replace(/\s*\(.*\)\s*$/, '').trim() || 'ฐานราก';
+                    rows.push({ label: `${cat} ${code}`, qty: it.quantity, unit: it.unit, rank: 0, code });
+                    const pedSub = it.sub_items?.find((s) => s.name === 'คอนกรีตตอม่อ');
+                    if (pedSub) {
+                      const pedMark = PEDESTAL_OF[code] ?? '';
+                      rows.push({ label: `เสาตอม่อ ${pedMark}`, qty: it.quantity, unit: 'ต้น', rank: 1, code: pedMark });
+                    }
+                  }
+                  rows.sort((a, b) => a.rank - b.rank || a.code.localeCompare(b.code, undefined, { numeric: true }));
+                  return rows.map((r, i) => (
+                    <li key={i} className="flex items-center justify-between gap-2 text-[11px]">
+                      <span className="text-ink-primary">{r.label}</span>
+                      <span className="shrink-0 text-ink-muted">{r.qty} {r.unit}</span>
+                    </li>
+                  ));
+                })()}
               </ul>
               <button
                 type="button"
