@@ -62,7 +62,7 @@ export function CreateFromMeasurementsModal({ onClose }: Props) {
         quantity: qty,
         unitPrice: preset.rate,
         isMaterial: false,
-        wastePct: preset.defaultWastePct ?? 0,
+        wastePct: 0, // BOQ = net · เผื่อคิดที่ ปร.4 (r19)
         thickness: needsThickness ? 0.1 : undefined,
         source: 'measurement',
         sourceRef: m.id,
