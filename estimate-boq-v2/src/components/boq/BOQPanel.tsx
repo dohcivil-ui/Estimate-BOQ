@@ -11,9 +11,7 @@ import { useProjectMeta } from '@/stores/projectMetaStore';
 import { useMeasurementStore } from '@/stores/measurementStore';
 import {
   directCostTotal,
-  effectiveFactorF,
   formatCurrency,
-  marketPrice,
   totalsByKind,
 } from '@/core/boqCalc';
 import { ProjectMetaForm } from './ProjectMetaForm';
@@ -36,7 +34,6 @@ export function BOQPanel() {
   const canUndo = useBOQStore((s) => s.past.length > 0);
   const canRedo = useBOQStore((s) => s.future.length > 0);
   const measurements = useMeasurementStore((s) => s.measurements);
-  const meta = useProjectMeta();
 
   const [showAIImport, setShowAIImport] = useState(false);
   const [showGPTExport, setShowGPTExport] = useState(false);
@@ -47,16 +44,6 @@ export function BOQPanel() {
 
   const totals = totalsByKind(items);
   const direct = directCostTotal(items);
-  // Factor F: ใช้ตาราง CGD 2567 ตามค่างาน (หรือ override ถ้า meta.factorF > 0)
-  const factorF = effectiveFactorF(
-    direct,
-    meta.factorF,
-    meta.advancePct,
-    meta.retentionPct,
-  );
-  const market = marketPrice(direct, factorF);
-  const vat = market * (meta.vatPct / 100);
-  const grand = market + vat;
 
   const handleAddManual = () => {
     const now = new Date().toISOString();
@@ -222,16 +209,6 @@ export function BOQPanel() {
           <TotalsRow label="รวมค่าวัสดุ" value={totals.material} />
           <div className="border-t border-bg-border pt-1">
             <TotalsRow label="Direct Cost" value={direct} bold />
-          </div>
-          <TotalsRow
-            label={`× Factor F (${factorF.toFixed(4)}${meta.factorF > 0 ? ' กรอกเอง' : ' ตาราง'})`}
-            value={market}
-            bold
-            color="text-success"
-          />
-          <TotalsRow label={`+ VAT ${meta.vatPct}%`} value={vat} />
-          <div className="mt-1 rounded bg-warning/10 px-2 py-1.5">
-            <TotalsRow label="ราคารวมสุทธิ" value={grand} bold color="text-warning" />
           </div>
         </div>
       )}
