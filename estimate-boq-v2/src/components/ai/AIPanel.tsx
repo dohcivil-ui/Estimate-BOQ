@@ -417,7 +417,7 @@ function InitialAnalysisBubble({ analysis }: { analysis: AIAnalysis }) {
               <button
                 type="button"
                 onClick={handleCompute}
-                title="คำนวณปริมาณ deterministic (คอนกรีต/ตอม่อ/ทราย/lean/ไม้แบบ/เหล็ก/ดินขุด/ถม + ลวดผูก/ตะปู/ไม้คร่า) จากมิติที่ AI ถอดได้"
+                title="คำนวณปริมาณ deterministic (คอนกรีต/ตอม่อ/ทราย/lean/ไม้แบบ/เหล็ก/ดินขุด/ถม + ลวดผูก/ตะปู/ไม้เคร่า) จากมิติที่ AI ถอดได้"
                 className="rounded bg-accent px-2 py-1 text-[11px] font-medium text-ink-inverse hover:bg-accent-hover"
               >
                 🧮 Import to BOQ (คำนวณปริมาณ)

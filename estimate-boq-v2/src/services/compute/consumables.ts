@@ -5,7 +5,7 @@
  * โมดูลนี้เติม "ของพ่วง" ที่อิงปริมาณหลัก:
  *   - ลวดผูกเหล็ก  ∝ น้ำหนักเหล็ก
  *   - ตะปู         ∝ พื้นที่ไม้แบบ
- *   - ไม้คร่า/ตงยึดแบบ (waler) ∝ พื้นที่ไม้แบบ
+ *   - ไม้เคร่า/ตงยึดแบบ (waler) ∝ พื้นที่ไม้แบบ
  *
  * อัตราส่วนทั้งหมดอยู่ใน CONSUMABLE_RATIOS ที่เดียว (กฎ centralized — แก้ที่เดียว)
  * pure module: ไม่มี dependency กับ store/supabase/react
@@ -18,7 +18,7 @@ export interface ConsumableRatios {
   tieWirePct: number;
   // ตะปู 0.25 กก./ตร.ม. — กบก. (ตำรา น.15); ดู docs/cgd-constants.md A2
   nailsPerM2: number;
-  /** ไม้คร่า/ตงยึดแบบ = พื้นที่ไม้แบบ × walerFactor (ม./ตร.ม.) — ตั้งค่าได้ */
+  /** ไม้เคร่า/ตงยึดแบบ = พื้นที่ไม้แบบ × walerFactor (ม./ตร.ม.) — ตั้งค่าได้ */
   walerFactor: number;
 }
 
@@ -37,7 +37,7 @@ export interface ConsumableTotals {
 export interface ConsumableQty {
   tieWire_kg: number; // ลวดผูกเหล็ก (กก.)
   nails_kg: number; // ตะปู (กก.)
-  waler_m: number; // ไม้คร่า/ตงยึดแบบ (ม.)
+  waler_m: number; // ไม้เคร่า/ตงยึดแบบ (ม.)
 }
 
 const round1 = (x: number): number => +x.toFixed(1);
