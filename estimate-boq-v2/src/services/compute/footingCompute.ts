@@ -10,8 +10,6 @@
  * หน่วย: เมตร (m) สำหรับมิติ, ลบ.ม. (m³) ปริมาตร, ตร.ม. (m²) พื้นที่, kg เหล็ก
  */
 
-import { EXCAVATION_ALLOWANCE_PCT, FILL_ALLOWANCE_PCT } from '@/data/cgdAllowance';
-
 // ─────────────────────────────────────────────────────────────
 // 1) ค่าคงที่ทางวิศวกรรม (แก้ที่เดียว — กฎ "centralized" ของผู้ใช้)
 // ─────────────────────────────────────────────────────────────
@@ -148,9 +146,9 @@ export function computeFooting(f: FootingSpec): FootingQty {
   const leanGeom_m3 = W * L * leanThk * N;
   const neatHole_m3 = W * L * D * N; // หลุมสุทธิ (ไม่เผื่อ)
   // ── ปริมาณคิดจ่าย — เผื่อตาม CGD (SoT: cgdAllowance.ts) ──
-  const sand_m3 = sandGeom_m3 * (1 + FILL_ALLOWANCE_PCT.sandSubbase / 100); // ทราย ×1.25 (ข้อ 2)
+  const sand_m3 = sandGeom_m3; // BOQ = net (geometric) · เผื่อบดอัด 25% ย้ายไปคิดที่ ปร.4
   const lean_m3 = leanGeom_m3; // lean ไม่เผื่อบดอัด (เทไม่ยุบ)
-  const excavation_m3 = neatHole_m3 * (1 + EXCAVATION_ALLOWANCE_PCT / 100); // ขุดดิน ×1.30 (ข้อ 1) — แทน +0.50ม.
+  const excavation_m3 = neatHole_m3; // BOQ = net (ปริมาตรหลุมสุทธิ) · swell 30% ย้ายไปคิดที่ ปร.4
   const pedVolPer = ped ? ped.W * ped.L * ped.H : (f.pedestalVol ?? 0);
   const pedestalVol = pedVolPer * N;
   // ถมกลับ = void หลุมสุทธิ หลังวาง solids (geometric ทั้งหมด — ทาง A)

@@ -21,15 +21,15 @@ const baseF: FootingSpec = {
   leanThk: 0.05,
 };
 
-describe('computeFooting — งานดิน/ทราย ตาม CGD (×1.30 / ×1.25 / backfill geometric)', () => {
-  test('ขุดดิน = หลุมสุทธิ × 1.30 (ข้อ 1) — ไม่ใช่ +0.50ม.', () => {
-    // 4.00 × 1.30 = 5.20 (เดิมวิธี +0.5ม. = 3×3×1 = 9.00)
-    expect(computeFooting(baseF).excavation_m3).toBeCloseTo(5.2, 3);
+describe('computeFooting — งานดิน/ทราย ตาม CGD (net geometric · เผื่อย้ายไป ปร.4 · backfill geometric)', () => {
+  test('ขุดดิน = หลุมสุทธิ net (เดิม ×1.30=5.20 ย้าย ปร.4)', () => {
+    // หลุมสุทธิ 2×2×1.00 = 4.00 (geometric ล้วน)
+    expect(computeFooting(baseF).excavation_m3).toBeCloseTo(4, 3);
   });
 
-  test('ทรายรอง = geometric × 1.25 (ข้อ 2)', () => {
-    // geom 2×2×0.05 = 0.20 → ×1.25 = 0.25
-    expect(computeFooting(baseF).sand_m3).toBeCloseTo(0.25, 3);
+  test('ทรายรอง = net (เดิม ×1.25=0.25 ย้าย ปร.4)', () => {
+    // geom 2×2×0.05 = 0.20 (net)
+    expect(computeFooting(baseF).sand_m3).toBeCloseTo(0.2, 3);
   });
 
   test('lean = geometric ล้วน (ไม่เผื่อบดอัด)', () => {
@@ -43,7 +43,7 @@ describe('computeFooting — งานดิน/ทราย ตาม CGD (×1.
 
   test('×N: ปริมาณคูณจำนวนฐานถูกต้อง', () => {
     const q = computeFooting({ ...baseF, count: 2 });
-    expect(q.excavation_m3).toBeCloseTo(10.4, 3);
+    expect(q.excavation_m3).toBeCloseTo(8, 3);
     expect(q.backfill_m3).toBeCloseTo(4.8, 3);
   });
 
@@ -63,7 +63,7 @@ describe('computeFooting — ตอม่อ optional rebar (decouple)', () => {
       pedestal: { type: 'C2', W: 0.3, L: 0.3, H: 1.0 }, // ไม่มี vBars/tie
     });
     expect(q.ped_concrete_m3).toBeCloseTo(0.09, 3); // 0.3×0.3×1.0
-    expect(q.excavation_m3).toBeCloseTo(7.28, 2); // หลุมสุทธิ 2×2×1.40=5.60 ×1.30
+    expect(q.excavation_m3).toBeCloseTo(5.6, 2); // 5.60 หลุมสุทธิ net (เดิม ×1.30=7.28 ย้าย ปร.4)
     expect(q.backfill_m3).toBeCloseTo(3.91, 2); // 5.60 − 1.20 − 0.20 − 0.20 − 0.09
     expect(q.rebar_kg).toBe(0); // ไม่มีเหล็กฐาน+ตอม่อ
     expect(q.warnings.some((w) => w.includes('ยังไม่ใส่เหล็ก'))).toBe(true);
