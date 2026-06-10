@@ -120,7 +120,7 @@ function BOQRow({
         />
         {item.thickness != null && (
           <div className="text-[10px] text-ink-muted">
-            ×{item.thickness.toFixed(3)} m = {adjQty.toFixed(3)}
+            ×{item.thickness.toFixed(3)} m = {adjQty.toFixed(2)}
           </div>
         )}
       </td>
@@ -276,8 +276,8 @@ function NumberCell({
       title="คลิกเพื่อแก้ไข"
     >
       {value.toLocaleString('th-TH', {
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 4,
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
       })}
     </button>
   );
