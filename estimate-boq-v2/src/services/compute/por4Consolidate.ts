@@ -159,8 +159,13 @@ function buildPolicyMap(): Record<string, AllowancePolicy> {
 export const ALLOWANCE_POLICY: Record<string, AllowancePolicy> =
   buildPolicyMap();
 
-/** ปัดขึ้นเป็นจำนวนเต็ม + epsilon กัน float error (100×1.09 → 109.00000000000001 ไม่กลายเป็น 110) */
-const ceilInt = (x: number): number => Math.ceil(x - 1e-9);
+/**
+ * ปัดขึ้น 2 ตำแหน่งทศนิยม (+ epsilon กัน float, 100×1.09 → 109.0000…1 ไม่กลายเป็น 109.01)
+ * ปร.4 สพฐ. ปัจจุบันใช้ 2dp (เช่น 5.42 ลบ.ม.) — ไม่ใช่จำนวนเต็มแบบ ปร.4 ฉบับ 2544
+ * (ยืนยันโดยวิศวกร 10 มิ.ย. 2569 จากไฟล์ตัวอย่าง สพฐ.)
+ * หมายเหตุ rebar: คง "กก." ที่ชั้นนี้ · การแปลง "ตัน 3dp" เป็นเรื่องชั้น export ห้ามทำที่นี่
+ */
+const ceil2dp = (x: number): number => Math.ceil(x * 100 - 1e-7) / 100;
 
 function getPolicy(key: string): AllowancePolicy {
   const p = ALLOWANCE_POLICY[key];
@@ -291,7 +296,7 @@ export function consolidatePor4(groups: DisciplineGroup[]): Por4Result {
     const qtyAfterAllowance = policy.derived
       ? qtyNet // placeholder — จะถูก override
       : qtyNet * (1 + policy.pct / 100);
-    const qtyFinal = policy.derived ? qtyNet : ceilInt(qtyAfterAllowance);
+    const qtyFinal = policy.derived ? qtyNet : ceil2dp(qtyAfterAllowance);
     const unitPrice =
       b.priceQtySum > 0 ? b.weightedPriceSum / b.priceQtySum : 0;
     tempRows.push({
@@ -347,7 +352,7 @@ export function consolidatePor4(groups: DisciplineGroup[]): Por4Result {
         }
       }
       row.qtyAfterAllowance = derivedAfter;
-      row.qtyFinal = ceilInt(derivedAfter);
+      row.qtyFinal = ceil2dp(derivedAfter);
       row.amount = row.qtyFinal * row.unitPrice;
     } else if (row.materialKey === NAILS_KEY) {
       const derivedAfter = formworkPanelM2After * FORMWORK.nailKgPerSqm;
@@ -362,13 +367,13 @@ export function consolidatePor4(groups: DisciplineGroup[]): Por4Result {
         }
       }
       row.qtyAfterAllowance = derivedAfter;
-      row.qtyFinal = ceilInt(derivedAfter);
+      row.qtyFinal = ceil2dp(derivedAfter);
       row.amount = row.qtyFinal * row.unitPrice;
     } else if (row.materialKey === REBAR_LABOR_KEY) {
       // labor ผูก/ตัด/ดัดเหล็ก: qty = เหล็กวัสดุรวม (รวมเผื่อ) — ฐานเดียวกับ tiewire
       const derived = rebarMaterialKgAfter;
       row.qtyAfterAllowance = derived;
-      row.qtyFinal = ceilInt(derived);
+      row.qtyFinal = ceil2dp(derived);
       row.amount = row.qtyFinal * row.unitPrice;
     }
   }
@@ -377,7 +382,7 @@ export function consolidatePor4(groups: DisciplineGroup[]): Por4Result {
   const unmappedRows: Por4Row[] = unmapped.map((c) => {
     const role: Role = c.item.isMaterial ? 'material' : 'labor';
     const qty = c.item.quantity;
-    const qtyFinal = ceilInt(qty);
+    const qtyFinal = ceil2dp(qty);
     return {
       section: c.section,
       materialKey: undefined,

@@ -182,10 +182,11 @@ describe('consolidatePor4', () => {
     const res = consolidatePor4(groups);
     const tw = findRow(res.rows, 'consumable:tiewire', 'material');
     expect(tw).toBeDefined();
-    // qtyFinal ยังใช้ derived "หลังเผื่อ" (rebarAfter=1090): (1090/1000)×30 = 32.7 → ceil 33
+    // qtyFinal ยังใช้ derived "หลังเผื่อ" (rebarAfter=1090): (1090/1000)×30 = 32.7
+    // ceil 2dp = 32.7 (ปร.4 สพฐ. ใช้ 2dp ไม่ปัดจำนวนเต็ม)
     const expectedAfter = (1090 / 1000) * TIE_WIRE_KG_PER_TON;
     expect(tw!.qtyAfterAllowance).toBeCloseTo(expectedAfter, 6);
-    expect(tw!.qtyFinal).toBe(33);
+    expect(tw!.qtyFinal).toBeCloseTo(32.7, 6);
     // baseline เทียบกับ NET (1000/1000×30 = 30) vs BOQ 30 → drift 0% → ไม่มี warning
     expect(res.warnings.some((w) => w.startsWith('CONSUMABLE_DRIFT'))).toBe(false);
   });
@@ -265,7 +266,7 @@ describe('consolidatePor4', () => {
     expect(row).toBeDefined();
     expect(row!.allowance).toBeUndefined(); // net → no allowance attached
     expect(row!.qtyAfterAllowance).toBe(50.4); // = qtyNet (ก่อน ceil)
-    expect(row!.qtyFinal).toBe(51); // ceil(50.4)
+    expect(row!.qtyFinal).toBeCloseTo(50.4, 6); // ceil 2dp ของ 50.4 = 50.4 (ปร.4 สพฐ. 2dp)
   });
 
   it('7e) rebar:mesh = net (ไม่เผื่อ) + ไม่เข้าฐาน Σ เหล็ก (ไม่ pollute tiewire)', () => {
