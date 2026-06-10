@@ -14,20 +14,26 @@
     font-feature-settings: 'kern';
   }
 
-  /* scrollbar เข้ากับธีมเข้ม */
+  /* scrollbar โทนสว่างตามธีมแอป — thumb เทามน เห็นชัด จับลากง่าย */
+  * {
+    scrollbar-color: #94a3b8 transparent; /* Firefox: thumb / track */
+  }
   ::-webkit-scrollbar {
     width: 10px;
     height: 10px;
   }
   ::-webkit-scrollbar-track {
-    background: #0b1220;
+    background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background: #1f2c44;
-    border-radius: 6px;
+    background: #94a3b8; /* slate-400 ตัดกับพื้นขาว */
+    border-radius: 9999px;
+    border: 2px solid transparent; /* ขอบใส → thumb ดูลอยจาก track */
+    background-clip: content-box;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: #334155;
+    background: #64748b; /* slate-500 */
+    background-clip: content-box;
   }
 }
 
