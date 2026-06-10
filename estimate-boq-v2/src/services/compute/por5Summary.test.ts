@@ -64,6 +64,28 @@ describe('por5Summary', () => {
     expect(res.constructionCostBaht).toBe(7_489_861);
     expect(res.approxAmount).toBe(7_489_000);
   });
+
+  it('baseline สพฐ. 212ล เต็มสาย: 14,489,053.08 × 1.2612 → 18,273,593 / 18,273,000 / area 2088 → avgPerSqm raw', () => {
+    const res = por5Summary(14_489_053.08, 1.2612, 0, {
+      buildingAreaSqm: 2088,
+    });
+    expect(res.constructionCost).toBeCloseTo(18_273_593.744496, 4);
+    expect(res.constructionCostBaht).toBe(18_273_593);
+    expect(res.approxAmount).toBe(18_273_000);
+    expect(res.approxAmountText).toBe(
+      'สิบแปดล้านสองแสนเจ็ดหมื่นสามพันบาทถ้วน',
+    );
+    // avgPerSqm = 18,273,000 / 2088 = 8,751.4367816...  (เก็บ raw)
+    expect(res.avgPerSqm).toBeCloseTo(18_273_000 / 2088, 6);
+    expect(res.avgPerSqm).toBeCloseTo(8_751.4368, 4);
+  });
+
+  it('avgPerSqm undefined เมื่อไม่ส่ง area หรือ area ≤ 0', () => {
+    const r1 = por5Summary(100_000, 1.3);
+    expect(r1.avgPerSqm).toBeUndefined();
+    const r2 = por5Summary(100_000, 1.3, 0, { buildingAreaSqm: 0 });
+    expect(r2.avgPerSqm).toBeUndefined();
+  });
 });
 
 describe('bahtText (Thai number reading)', () => {

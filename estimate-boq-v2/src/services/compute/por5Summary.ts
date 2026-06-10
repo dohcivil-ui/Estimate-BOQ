@@ -22,6 +22,8 @@ export interface Por5Config {
   approxStep?: number;
   /** วิธีปัดเงินประมาณ: 'floor' (default — "ปัดเศษทิ้ง") | 'round' */
   approxMode?: 'floor' | 'round';
+  /** พื้นที่อาคาร (ตร.ม.) — ถ้าส่งมาจะคำนวณ avgPerSqm = approxAmount / area */
+  buildingAreaSqm?: number;
 }
 
 export interface Por5Result {
@@ -37,6 +39,11 @@ export interface Por5Result {
   approxAmount: number;
   /** เงินประมาณตัวอักษรไทย — ลงท้าย "บาทถ้วน" */
   approxAmountText: string;
+  /**
+   * ราคาเฉลี่ยต่อ ตร.ม. (= approxAmount / buildingAreaSqm) — มีค่าเมื่อส่ง buildingAreaSqm
+   * เก็บค่าดิบไม่ปัด · หลักฐาน Excel สพฐ. เก็บ raw (เช่น 11498.11320754717) · ปัดที่ display เท่านั้น
+   */
+  avgPerSqm?: number;
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -49,7 +56,7 @@ const roundBaht = (x: number): number => Math.round(x);
 
 /**
  * คำนวณ ปร.5
- * @param directCost  ส่วนที่ 1 ค่าก่อสร้าง × Factor F
+ * @param directCost  ส่วนที่ 1 ค่างานต้นทุน (ก่อนคูณ F)
  * @param factorF     Factor F ที่ caller resolve มา (effectiveFactorF เสมอ)
  * @param specialCost ส่วนที่ 2 ค่าใช้จ่ายพิเศษ (default 0) — ไม่คูณ F
  *                    อ้างเอกสารหลักเกณฑ์ "ส่วนที่ 3 การสรุปค่าก่อสร้างทั้งหมด":
@@ -76,6 +83,11 @@ export function por5Summary(
       ? Math.round(constructionCostBaht / approxStep) * approxStep
       : Math.floor(constructionCostBaht / approxStep + EPS) * approxStep;
   const approxAmountText = bahtText(approxAmount);
+  // ราคาเฉลี่ยต่อ ตร.ม. — raw (ไม่ปัด · ปัดที่ display เท่านั้น)
+  const avgPerSqm =
+    config.buildingAreaSqm && config.buildingAreaSqm > 0
+      ? approxAmount / config.buildingAreaSqm
+      : undefined;
   return {
     directCost,
     factorF,
@@ -83,6 +95,7 @@ export function por5Summary(
     constructionCostBaht,
     approxAmount,
     approxAmountText,
+    avgPerSqm,
   };
 }
 
