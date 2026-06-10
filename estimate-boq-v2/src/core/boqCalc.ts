@@ -15,6 +15,14 @@ const snapTo = (valid: number[], v: number): number =>
  * Factor F ที่ใช้จริง:
  *   - override > 0 → ใช้ค่าที่กรอกเอง
  *   - มิฉะนั้น → lookup จากตาราง CGD 2567 ตามค่างาน (บาท) + เงินล่วงหน้า/เงินประกัน
+ *
+ * round 4 ตำแหน่งทศนิยมหลัง interpolate — มาตรฐาน ปร.5 ราชการเก็บ F = 4dp
+ * หลักฐาน 2 ชุดอิสระ:
+ *   ข) สพฐ. ห้องสมุด: 2,335,640 บาท → 1.3051−(0.0031×335,640/3M) = 1.304753... → 1.3048
+ *      พิสูจน์ 2,335,640 × 1.3048 = 3,047,543.072 ✓
+ *   ก) ตัวอย่างอื่น (สพฐ. รายงาน 1.2612 จากตารางคนละชุด): ระบบนี้ใช้ CGD 2567
+ *      ⇒ 14,489,053.08 บาท → 1.2960+0.8978×(1.2611−1.2960) = 1.264666... → 1.2647
+ *
  * คืนค่าเดียวกับ sheet "Factor F" ใน gov export เพื่อให้ตัวเลขในแอปตรงกับตาราง
  */
 export function effectiveFactorF(
@@ -29,7 +37,8 @@ export function effectiveFactorF(
     snapTo(VALID_ADVANCE, advancePct),
     snapTo(VALID_RETENTION, retentionPct),
   );
-  return f ?? 1;
+  if (f == null) return 1;
+  return Math.round(f * 10000) / 10000;
 }
 
 /**
