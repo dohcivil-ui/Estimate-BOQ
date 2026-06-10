@@ -784,12 +784,39 @@ function boqToRow(
   };
 }
 
+// ── legacy label migration ─────────────────────────────────────────────
+// คำผิดเดิม 'ไม้คร่า/...' (ไม่มี เ) → คำถูก 'ไม้เคร่า/...' — code gen แก้แล้ว
+// แต่ item.name เก่าใน boq_items table freeze ค้าง → normalize ตอน deserialize
+// prefix-match '/' เท่านั้น เพื่อไม่ชน 'ไม้คร่าว' (furring — มี ว สะกด ไม่ตามด้วย '/')
+// ใช้ String.fromCodePoint กัน editor/transport ปะปนตัวเชื่อม (zero-width/combining)
+const LEGACY_KHRA_PREFIX =
+  String.fromCodePoint(0x0e44, 0x0e21, 0x0e49, 0x0e04, 0x0e23, 0x0e48, 0x0e32) +
+  '/'; // 'ไม้คร่า/'
+const CANONICAL_KHREA_PREFIX =
+  String.fromCodePoint(
+    0x0e44,
+    0x0e21,
+    0x0e49,
+    0x0e40,
+    0x0e04,
+    0x0e23,
+    0x0e48,
+    0x0e32,
+  ) + '/'; // 'ไม้เคร่า/'
+
+export function normalizeLegacyItemName(name: string): string {
+  if (name.startsWith(LEGACY_KHRA_PREFIX)) {
+    return CANONICAL_KHREA_PREFIX + name.slice(LEGACY_KHRA_PREFIX.length);
+  }
+  return name;
+}
+
 function rowToBOQItem(row: BOQItemRow): BOQItem {
   const now = new Date().toISOString();
   return {
     id: row.id,
     category: row.category ?? 'อื่นๆ',
-    name: row.name,
+    name: normalizeLegacyItemName(row.name),
     unit: row.unit,
     quantity: row.quantity,
     unitPrice: row.unit_price,
