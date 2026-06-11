@@ -34,7 +34,34 @@ export interface AllowancePolicy {
   derived?: boolean;
 }
 
+/**
+ * Por4Row — dual-column ตามแบบ ปร.4 ราชการ (วัสดุ | ค่าแรง ในแถวเดียว)
+ * - เมื่อ qty ของ material + labor ตรงกัน (เช่น คอนกรีต 15 ลบ.ม. ใช้ทั้งซื้อ+เท) → แถวเดียว 2 คอลัมน์
+ * - qty ต่าง (เช่น ไม้แบบ material 70 ตร.ม. · ค่าแรง 100 ตร.ม.) → 2 แถวแยก
+ * - material-only หรือ labor-only → แถวเดียว (อีกฝั่ง undefined)
+ * - rebar:labor (ค่าผูก/ตัด/ดัดเหล็ก) ฝังลงรายขนาดของ rebar:{size} material → ไม่มีแถวรวมแยก
+ */
 export interface Por4Row {
+  section: string;
+  materialKey?: string;
+  name: string;
+  unit: string;
+  qtyNet: number;
+  allowance?: { pct: number; ref: string };
+  qtyAfterAllowance: number;
+  qtyFinal: number;
+  materialUnitPrice?: number;
+  materialAmount?: number;
+  laborUnitPrice?: number;
+  laborAmount?: number;
+  /** = (materialAmount ?? 0) + (laborAmount ?? 0) */
+  totalAmount: number;
+  sourceItemIds: string[];
+  flags?: string[];
+}
+
+/** internal draft (มี role + unitPrice + amount ระหว่าง pipeline ยังไม่ pair) */
+interface RowDraft {
   section: string;
   materialKey?: string;
   name: string;
@@ -46,6 +73,8 @@ export interface Por4Row {
   role: Role;
   unitPrice: number;
   amount: number;
+  /** ค่าแรงผูกเหล็กที่ฝังลงในแถว rebar:{size} material — มีค่าเฉพาะแถวที่ได้รับการกระจาย */
+  laborSidecar?: { unitPrice: number };
   sourceItemIds: string[];
   flags?: string[];
 }
@@ -288,18 +317,18 @@ export function consolidatePor4(groups: DisciplineGroup[]): Por4Result {
   let formworkPanelM2After = 0;
   let formworkPanelM2Net = 0;
 
-  const tempRows: Por4Row[] = [];
+  const drafts: RowDraft[] = [];
   for (const b of buckets.values()) {
     const policy = getPolicy(b.materialKey);
     const qtyNet = b.qtySum;
-    // consumables: เก็บ tempRow ก่อน ค่า qty/amount จะถูก override ในขั้น re-derive
+    // consumables: เก็บ draft ก่อน ค่า qty/amount จะถูก override ในขั้น re-derive
     const qtyAfterAllowance = policy.derived
       ? qtyNet // placeholder — จะถูก override
       : qtyNet * (1 + policy.pct / 100);
     const qtyFinal = policy.derived ? qtyNet : ceil2dp(qtyAfterAllowance);
     const unitPrice =
       b.priceQtySum > 0 ? b.weightedPriceSum / b.priceQtySum : 0;
-    tempRows.push({
+    drafts.push({
       section: b.section,
       materialKey: b.materialKey,
       name: b.name,
@@ -338,7 +367,7 @@ export function consolidatePor4(groups: DisciplineGroup[]): Por4Result {
   const TIEWIRE_KEY = 'consumable:tiewire';
   const NAILS_KEY = 'consumable:nails';
   const REBAR_LABOR_KEY = 'rebar:labor';
-  for (const row of tempRows) {
+  for (const row of drafts) {
     if (row.materialKey === TIEWIRE_KEY) {
       const derivedAfter = (rebarMaterialKgAfter / 1000) * TIE_WIRE_KG_PER_TON;
       const derivedFromNet = (rebarMaterialKgNet / 1000) * TIE_WIRE_KG_PER_TON;
@@ -378,8 +407,8 @@ export function consolidatePor4(groups: DisciplineGroup[]): Por4Result {
     }
   }
 
-  // unmapped passthrough
-  const unmappedRows: Por4Row[] = unmapped.map((c) => {
+  // unmapped passthrough (draft)
+  const unmappedDrafts: RowDraft[] = unmapped.map((c) => {
     const role: Role = c.item.isMaterial ? 'material' : 'labor';
     const qty = c.item.quantity;
     const qtyFinal = ceil2dp(qty);
@@ -399,7 +428,143 @@ export function consolidatePor4(groups: DisciplineGroup[]): Por4Result {
     };
   });
 
-  const rows = [...tempRows, ...unmappedRows];
-  const directCost = rows.reduce((s, r) => s + r.amount, 0);
+  const allDrafts = [...drafts, ...unmappedDrafts];
+
+  // ── step: distribute rebar:labor → ลง rebar:{size} material rows · ลบแถวรวม
+  distributeRebarLabor(allDrafts);
+
+  // ── step: drafts → Por4Row (dual-column) แล้ว pair material+labor ที่ qty ตรงกัน
+  const singleRows = allDrafts.map(draftToRow);
+  const rows = combineDualColumn(singleRows);
+  const directCost = rows.reduce((s, r) => s + r.totalAmount, 0);
   return { rows, directCost, warnings };
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// helpers: rebar:labor distribute · draft → Por4Row · pair dual-column
+// ═══════════════════════════════════════════════════════════════════════
+
+/** ฝัง rebar:labor (ค่าผูก/ตัด/ดัดเหล็ก) ลงในแต่ละ rebar:{size} material แล้วลบแถวรวม */
+function distributeRebarLabor(drafts: RowDraft[]): void {
+  const rebarLaborIdx = drafts.findIndex(
+    (d) => d.materialKey === 'rebar:labor',
+  );
+  if (rebarLaborIdx < 0) return;
+  const rebarLabor = drafts[rebarLaborIdx]!;
+  const laborUnitPrice = rebarLabor.unitPrice;
+  for (const d of drafts) {
+    if (d === rebarLabor) continue;
+    if (d.role !== 'material') continue;
+    if (!d.materialKey || !d.materialKey.startsWith('rebar:')) continue;
+    const size = d.materialKey.slice('rebar:'.length);
+    if (!(size in REBAR)) continue; // ยกเว้น rebar:mesh / rebar:labor
+    d.laborSidecar = { unitPrice: laborUnitPrice };
+  }
+  drafts.splice(rebarLaborIdx, 1);
+}
+
+function draftToRow(d: RowDraft): Por4Row {
+  if (d.role === 'material') {
+    const materialAmount = d.amount;
+    const laborUnitPrice = d.laborSidecar?.unitPrice;
+    const laborAmount =
+      laborUnitPrice != null ? d.qtyFinal * laborUnitPrice : undefined;
+    return {
+      section: d.section,
+      materialKey: d.materialKey,
+      name: d.name,
+      unit: d.unit,
+      qtyNet: d.qtyNet,
+      allowance: d.allowance,
+      qtyAfterAllowance: d.qtyAfterAllowance,
+      qtyFinal: d.qtyFinal,
+      materialUnitPrice: d.unitPrice,
+      materialAmount,
+      laborUnitPrice,
+      laborAmount,
+      totalAmount: materialAmount + (laborAmount ?? 0),
+      sourceItemIds: d.sourceItemIds,
+      flags: d.flags,
+    };
+  }
+  // labor-only draft
+  return {
+    section: d.section,
+    materialKey: d.materialKey,
+    name: d.name,
+    unit: d.unit,
+    qtyNet: d.qtyNet,
+    allowance: d.allowance,
+    qtyAfterAllowance: d.qtyAfterAllowance,
+    qtyFinal: d.qtyFinal,
+    laborUnitPrice: d.unitPrice,
+    laborAmount: d.amount,
+    totalAmount: d.amount,
+    sourceItemIds: d.sourceItemIds,
+    flags: d.flags,
+  };
+}
+
+/**
+ * รวม material-only + labor-only เป็นแถวเดียวเมื่อ:
+ *   (section, materialKey, unit, qtyFinal) ตรงกัน
+ * ถ้า qtyFinal ต่างกัน → คงเป็น 2 แถวแยก
+ */
+function combineDualColumn(rows: Por4Row[]): Por4Row[] {
+  const used = new Set<number>();
+  const result: Por4Row[] = [];
+  const isMaterialOnly = (r: Por4Row): boolean =>
+    r.materialUnitPrice != null && r.laborUnitPrice == null;
+  const isLaborOnly = (r: Por4Row): boolean =>
+    r.laborUnitPrice != null && r.materialUnitPrice == null;
+
+  for (let i = 0; i < rows.length; i++) {
+    if (used.has(i)) continue;
+    const a = rows[i]!;
+    // UNMAPPED ไม่ pair (ขาด materialKey หรือ semantic ต่างกัน)
+    if (a.materialKey == null) {
+      result.push(a);
+      used.add(i);
+      continue;
+    }
+    let merged: Por4Row | null = null;
+    for (let j = i + 1; j < rows.length; j++) {
+      if (used.has(j)) continue;
+      const b = rows[j]!;
+      if (b.materialKey == null) continue;
+      if (
+        a.section !== b.section ||
+        a.materialKey !== b.materialKey ||
+        a.unit !== b.unit ||
+        a.qtyFinal !== b.qtyFinal
+      ) {
+        continue;
+      }
+      if (isMaterialOnly(a) && isLaborOnly(b)) {
+        merged = {
+          ...a,
+          laborUnitPrice: b.laborUnitPrice,
+          laborAmount: b.laborAmount,
+          totalAmount: (a.materialAmount ?? 0) + (b.laborAmount ?? 0),
+          sourceItemIds: [...a.sourceItemIds, ...b.sourceItemIds],
+        };
+        used.add(j);
+        break;
+      }
+      if (isLaborOnly(a) && isMaterialOnly(b)) {
+        merged = {
+          ...b,
+          laborUnitPrice: a.laborUnitPrice,
+          laborAmount: a.laborAmount,
+          totalAmount: (b.materialAmount ?? 0) + (a.laborAmount ?? 0),
+          sourceItemIds: [...b.sourceItemIds, ...a.sourceItemIds],
+        };
+        used.add(j);
+        break;
+      }
+    }
+    result.push(merged ?? a);
+    used.add(i);
+  }
+  return result;
 }

@@ -1,5 +1,5 @@
 /**
- * Tests สำหรับ consolidatePor4 — ชั้นรวม ปร.4
+ * Tests สำหรับ consolidatePor4 — ชั้นรวม ปร.4 (dual-column)
  * อ้าง REBAR/EXCAVATION_ALLOWANCE_PCT/TIE_WIRE_KG_PER_TON ตรง (ไม่ hardcode)
  */
 import { describe, it, expect } from 'vitest';
@@ -45,8 +45,33 @@ function makeGroup(items: BOQItem[]): DisciplineGroup {
   };
 }
 
-function findRow(rows: Por4Row[], materialKey: string, role: 'material' | 'labor') {
-  return rows.find((r) => r.materialKey === materialKey && r.role === role);
+// dual-column row finders
+function findByKey(rows: Por4Row[], materialKey: string) {
+  return rows.filter((r) => r.materialKey === materialKey);
+}
+function findMaterialOnly(rows: Por4Row[], materialKey: string) {
+  return rows.find(
+    (r) =>
+      r.materialKey === materialKey &&
+      r.materialUnitPrice != null &&
+      r.laborUnitPrice == null,
+  );
+}
+function findLaborOnly(rows: Por4Row[], materialKey: string) {
+  return rows.find(
+    (r) =>
+      r.materialKey === materialKey &&
+      r.laborUnitPrice != null &&
+      r.materialUnitPrice == null,
+  );
+}
+function findDual(rows: Por4Row[], materialKey: string) {
+  return rows.find(
+    (r) =>
+      r.materialKey === materialKey &&
+      r.materialUnitPrice != null &&
+      r.laborUnitPrice != null,
+  );
 }
 
 // ── tests ────────────────────────────────────────────────────────────
@@ -59,15 +84,13 @@ describe('consolidatePor4', () => {
       ]),
     ];
     const res = consolidatePor4(groups);
-    const db12Rows = res.rows.filter(
-      (r) => r.materialKey === 'rebar:DB12' && r.role === 'material',
-    );
+    const db12Rows = findByKey(res.rows, 'rebar:DB12');
     expect(db12Rows.length).toBe(1);
     expect(db12Rows[0]!.qtyNet).toBeCloseTo(100, 6);
     expect(db12Rows[0]!.sourceItemIds.length).toBe(2);
   });
 
-  it('2) role material/labor ไม่รวมกัน (formwork:panel)', () => {
+  it('2) qty ต่าง (formwork:panel mat 70 vs labor 100) → 2 แถวแยก (ไม่ pair)', () => {
     const groups = [
       makeGroup([
         makeItem({
@@ -85,15 +108,17 @@ describe('consolidatePor4', () => {
       ]),
     ];
     const res = consolidatePor4(groups);
-    const mat = findRow(res.rows, 'formwork:panel', 'material');
-    const lab = findRow(res.rows, 'formwork:panel', 'labor');
+    const mat = findMaterialOnly(res.rows, 'formwork:panel');
+    const lab = findLaborOnly(res.rows, 'formwork:panel');
     expect(mat).toBeDefined();
     expect(lab).toBeDefined();
     expect(mat!.qtyNet).toBe(70);
     expect(lab!.qtyNet).toBe(100);
+    // ไม่มี dual row
+    expect(findDual(res.rows, 'formwork:panel')).toBeUndefined();
   });
 
-  it('3) excavation 100 → ×1.30 = 130 → ceil 130 (ใช้ EXCAVATION_ALLOWANCE_PCT ตรง)', () => {
+  it('3) excavation 100 → ×1.30 = 130 (labor-only · ใช้ EXCAVATION_ALLOWANCE_PCT ตรง)', () => {
     const groups = [
       makeGroup([
         makeItem({
@@ -105,29 +130,27 @@ describe('consolidatePor4', () => {
       ]),
     ];
     const res = consolidatePor4(groups);
-    const row = findRow(res.rows, 'earth:excavation', 'labor');
+    const row = findLaborOnly(res.rows, 'earth:excavation');
     expect(row).toBeDefined();
     expect(row!.allowance?.pct).toBe(EXCAVATION_ALLOWANCE_PCT);
-    const expectedAfter = 100 * (1 + EXCAVATION_ALLOWANCE_PCT / 100);
-    expect(row!.qtyAfterAllowance).toBeCloseTo(expectedAfter, 6);
+    expect(row!.qtyAfterAllowance).toBeCloseTo(130, 6);
     expect(row!.qtyFinal).toBe(130);
+    expect(row!.materialUnitPrice).toBeUndefined();
   });
 
-  it('4) rebar DB12 100 กก. → +9% = 109 → ceil 109 (อ้าง REBAR ตรง, epsilon กัน float)', () => {
+  it('4) rebar DB12 100 กก. → +9% = 109 (material-only · epsilon กัน float)', () => {
     const groups = [
       makeGroup([
         makeItem({ name: 'เหล็กเสริม DB12', quantity: 100, unit: 'กก.' }),
       ]),
     ];
     const res = consolidatePor4(groups);
-    const row = findRow(res.rows, 'rebar:DB12', 'material');
+    const row = findMaterialOnly(res.rows, 'rebar:DB12');
     expect(row).toBeDefined();
     expect(row!.allowance?.pct).toBe(REBAR.DB12.wastePct);
-    const expectedAfter = 100 * (1 + REBAR.DB12.wastePct / 100);
-    expect(row!.qtyAfterAllowance).toBeCloseTo(expectedAfter, 6);
-    // 100 × 1.09 = 109.00000000000001 (float) — naive Math.ceil → 110 ผิด
-    // qtyFinal ใช้ epsilon (1e-9) จึงปัดเป็น 109 ตรงสเปก
+    expect(row!.qtyAfterAllowance).toBeCloseTo(109, 6);
     expect(row!.qtyFinal).toBe(109);
+    expect(row!.laborUnitPrice).toBeUndefined();
   });
 
   it('5) wastePct≠0 → warning BOQ_NOT_NET (ไม่ throw)', () => {
@@ -143,8 +166,7 @@ describe('consolidatePor4', () => {
     ];
     const res = consolidatePor4(groups);
     expect(res.warnings.some((w) => w.startsWith('BOQ_NOT_NET'))).toBe(true);
-    // ยังคง classify/merge ตามปกติ (qty เดิม) — ไม่ throw
-    const row = findRow(res.rows, 'rebar:DB12', 'material');
+    const row = findMaterialOnly(res.rows, 'rebar:DB12');
     expect(row).toBeDefined();
     expect(row!.qtyNet).toBe(100);
   });
@@ -161,37 +183,35 @@ describe('consolidatePor4', () => {
       ]),
     ];
     const res = consolidatePor4(groups);
-    const stray = res.rows.find((r) =>
-      r.flags?.includes('UNMAPPED'),
-    );
+    const stray = res.rows.find((r) => r.flags?.includes('UNMAPPED'));
     expect(stray).toBeDefined();
     expect(stray!.name).toBe('วัสดุประหลาดที่ไม่อยู่ใน dictionary');
     expect(stray!.qtyNet).toBe(7);
     expect(stray!.qtyFinal).toBe(7);
     expect(stray!.materialKey).toBeUndefined();
+    expect(stray!.materialUnitPrice).toBe(100);
+    expect(stray!.totalAmount).toBeCloseTo(700, 6);
   });
 
-  it('7) tiewire derive: DB12 1000 กก. → 1090 → 1.09 ตัน × 30 = 32.7 → ceil 33 · drift baseline = net (ไม่เตือน)', () => {
+  it('7) tiewire derive: DB12 1000 กก. → 1090 → 32.7 (ceil 2dp) · drift baseline = net (ไม่เตือน)', () => {
     const groups = [
       makeGroup([
         makeItem({ name: 'เหล็กเสริม DB12', quantity: 1000, unit: 'กก.' }),
-        // ลวดผูกของเดิมใน BOQ (3% ของ net 1000 = 30) — drift เทียบ derivedFromNet (=30) → ไม่เตือน
         makeItem({ name: 'ลวดผูกเหล็ก', quantity: 30, unit: 'กก.' }),
       ]),
     ];
     const res = consolidatePor4(groups);
-    const tw = findRow(res.rows, 'consumable:tiewire', 'material');
+    const tw = findMaterialOnly(res.rows, 'consumable:tiewire');
     expect(tw).toBeDefined();
-    // qtyFinal ยังใช้ derived "หลังเผื่อ" (rebarAfter=1090): (1090/1000)×30 = 32.7
-    // ceil 2dp = 32.7 (ปร.4 สพฐ. ใช้ 2dp ไม่ปัดจำนวนเต็ม)
     const expectedAfter = (1090 / 1000) * TIE_WIRE_KG_PER_TON;
     expect(tw!.qtyAfterAllowance).toBeCloseTo(expectedAfter, 6);
     expect(tw!.qtyFinal).toBeCloseTo(32.7, 6);
-    // baseline เทียบกับ NET (1000/1000×30 = 30) vs BOQ 30 → drift 0% → ไม่มี warning
-    expect(res.warnings.some((w) => w.startsWith('CONSUMABLE_DRIFT'))).toBe(false);
+    expect(res.warnings.some((w) => w.startsWith('CONSUMABLE_DRIFT'))).toBe(
+      false,
+    );
   });
 
-  it('7b) rebar:labor derived จากวัสดุรวมหลังเผื่อ — DB12 1000 → labor qtyFinal = 1090', () => {
+  it('7b) rebar:labor ฝังลง rebar:DB12 (dual-column) — ไม่มีแถว rebar:labor รวม', () => {
     const groups = [
       makeGroup([
         makeItem({
@@ -211,27 +231,30 @@ describe('consolidatePor4', () => {
       ]),
     ];
     const res = consolidatePor4(groups);
-    const lab = findRow(res.rows, 'rebar:labor', 'labor');
-    expect(lab).toBeDefined();
-    // rebarMaterialKgAfter = 1000 × 1.09 = 1090 → ceilInt = 1090
-    expect(lab!.qtyAfterAllowance).toBeCloseTo(1000 * (1 + REBAR.DB12.wastePct / 100), 6);
-    expect(lab!.qtyFinal).toBe(1090);
-    // amount ใช้ qtyFinal × unitPrice
-    expect(lab!.amount).toBeCloseTo(1090 * 2.31, 6);
+    // ไม่มีแถว rebar:labor แยกออกมา
+    expect(findByKey(res.rows, 'rebar:labor').length).toBe(0);
+    // DB12 dual-column row
+    const dual = findDual(res.rows, 'rebar:DB12');
+    expect(dual).toBeDefined();
+    expect(dual!.qtyFinal).toBe(1090);
+    expect(dual!.materialUnitPrice).toBe(28);
+    expect(dual!.laborUnitPrice).toBe(2.31);
+    expect(dual!.materialAmount).toBeCloseTo(1090 * 28, 6);
+    expect(dual!.laborAmount).toBeCloseTo(1090 * 2.31, 6);
+    expect(dual!.totalAmount).toBeCloseTo(1090 * 28 + 1090 * 2.31, 6);
   });
 
   it('7c) CONSUMABLE_DRIFT triggers เมื่อ BOQ ลวดผูก = 5 (ห่าง net 30 มาก)', () => {
     const groups = [
       makeGroup([
         makeItem({ name: 'เหล็กเสริม DB12', quantity: 1000, unit: 'กก.' }),
-        // ลวดผูก BOQ ผิด (เกิน 5% จาก net 30) → ต้องเตือน
         makeItem({ name: 'ลวดผูกเหล็ก', quantity: 5, unit: 'กก.' }),
       ]),
     ];
     const res = consolidatePor4(groups);
-    expect(
-      res.warnings.some((w) => w.startsWith('CONSUMABLE_DRIFT')),
-    ).toBe(true);
+    expect(res.warnings.some((w) => w.startsWith('CONSUMABLE_DRIFT'))).toBe(
+      true,
+    );
   });
 
   it('7d) PRICE_INCONSISTENT: DB12 สอง source ราคา 25 vs 28 → เตือน + weighted avg', () => {
@@ -245,12 +268,12 @@ describe('consolidatePor4', () => {
     expect(res.warnings.some((w) => w.startsWith('PRICE_INCONSISTENT'))).toBe(
       true,
     );
-    const row = findRow(res.rows, 'rebar:DB12', 'material');
-    // weighted = (40×25 + 60×28) / 100 = (1000 + 1680) / 100 = 26.8
-    expect(row!.unitPrice).toBeCloseTo(26.8, 6);
+    const row = findMaterialOnly(res.rows, 'rebar:DB12');
+    // weighted = (40×25 + 60×28) / 100 = 26.8
+    expect(row!.materialUnitPrice).toBeCloseTo(26.8, 6);
   });
 
-  it('8) backfill ไม่เผื่อ (net = final ก่อน ceil)', () => {
+  it('8) backfill ไม่เผื่อ (net = final · labor-only)', () => {
     const groups = [
       makeGroup([
         makeItem({
@@ -262,39 +285,67 @@ describe('consolidatePor4', () => {
       ]),
     ];
     const res = consolidatePor4(groups);
-    const row = findRow(res.rows, 'earth:backfill', 'labor');
+    const row = findLaborOnly(res.rows, 'earth:backfill');
     expect(row).toBeDefined();
-    expect(row!.allowance).toBeUndefined(); // net → no allowance attached
-    expect(row!.qtyAfterAllowance).toBe(50.4); // = qtyNet (ก่อน ceil)
-    expect(row!.qtyFinal).toBeCloseTo(50.4, 6); // ceil 2dp ของ 50.4 = 50.4 (ปร.4 สพฐ. 2dp)
+    expect(row!.allowance).toBeUndefined();
+    expect(row!.qtyAfterAllowance).toBe(50.4);
+    expect(row!.qtyFinal).toBeCloseTo(50.4, 6);
   });
 
-  it('7e) rebar:mesh = net (ไม่เผื่อ) + ไม่เข้าฐาน Σ เหล็ก (ไม่ pollute tiewire)', () => {
+  it('7e) rebar:mesh = net + ไม่เข้าฐาน Σ เหล็ก (ไม่ pollute tiewire)', () => {
     const groups = [
       makeGroup([
-        // ตะแกรงสำเร็จ 50 กก. — net, ไม่เข้าฐานคำนวณลวดผูก
         makeItem({
           name: 'ตะแกรงเหล็ก (wire mesh)',
           quantity: 50,
           unit: 'กก.',
           unitPrice: 30,
         }),
-        // เหล็กจริง DB12 100 กก. — เข้าฐานคำนวณลวดผูก
         makeItem({ name: 'เหล็กเสริม DB12', quantity: 100, unit: 'กก.' }),
       ]),
     ];
     const res = consolidatePor4(groups);
-    const mesh = findRow(res.rows, 'rebar:mesh', 'material');
+    const mesh = findMaterialOnly(res.rows, 'rebar:mesh');
     expect(mesh).toBeDefined();
-    expect(mesh!.allowance).toBeUndefined(); // net → no allowance attached
+    expect(mesh!.allowance).toBeUndefined();
     expect(mesh!.qtyFinal).toBe(50);
-    expect(mesh!.flags).toBeUndefined(); // mapped (ไม่ใช่ UNMAPPED)
-    // tiewire derive ใช้เฉพาะ rebar size จริง (DB12=109 กก. after) ไม่รวม mesh
-    // expected = (109/1000) × 30 = 3.27 → ceil 4
+    expect(mesh!.flags).toBeUndefined();
+    // tiewire derive ใช้เฉพาะ rebar size จริง (DB12=109 หลังเผื่อ) ไม่รวม mesh
     const tw = res.rows.find((r) => r.materialKey === 'consumable:tiewire');
     if (tw) {
       expect(tw.qtyAfterAllowance).toBeCloseTo((109 / 1000) * 30, 6);
     }
+  });
+
+  it('9) คอนกรีต ค.2 15 ลบ.ม. (mat 2050 + labor 289) → dual-column · totalAmount 35,085', () => {
+    const groups = [
+      makeGroup([
+        makeItem({
+          name: 'คอนกรีตฐานราก',
+          quantity: 15,
+          unit: 'ลบ.ม.',
+          isMaterial: true,
+          unitPrice: 2050,
+        }),
+        makeItem({
+          name: 'ค่าเทคอนกรีตฐาน',
+          quantity: 15,
+          unit: 'ลบ.ม.',
+          isMaterial: false,
+          unitPrice: 289,
+        }),
+      ]),
+    ];
+    const res = consolidatePor4(groups);
+    const dual = findDual(res.rows, 'concrete:c2');
+    expect(dual).toBeDefined();
+    expect(dual!.qtyFinal).toBe(15);
+    expect(dual!.materialUnitPrice).toBe(2050);
+    expect(dual!.laborUnitPrice).toBe(289);
+    expect(dual!.materialAmount).toBeCloseTo(30_750, 6);
+    expect(dual!.laborAmount).toBeCloseTo(4_335, 6);
+    expect(dual!.totalAmount).toBeCloseTo(35_085, 6);
+    expect(res.directCost).toBeCloseTo(35_085, 6);
   });
 
   // ── extra sanity checks ────────────────────────────────────────────
