@@ -22,6 +22,16 @@ import {
   TIE_WIRE_KG_PER_TON,
   FORMWORK,
 } from '@/data/cgdAllowance';
+import { laborPresetForRebar } from '@/core/wage809';
+
+export interface ConsolidatePor4Options {
+  /**
+   * Override บาท/ตัน per size (เช่น 'DB12': 3600) — ใช้แทน rate จาก ว.809
+   * ประโยชน์: reproduce เอกสารเก่าที่ใช้บัญชีค่าแรงคนละฉบับ
+   * ไม่ส่ง → ใช้ ว.809 ตาม laborPresetForRebar()
+   */
+  laborRateBySizeTon?: Record<string, number>;
+}
 
 export type Role = 'material' | 'labor';
 
@@ -226,7 +236,10 @@ function sectionFromCategory(category: string): string {
 // ═══════════════════════════════════════════════════════════════════════
 // MAIN: consolidatePor4
 // ═══════════════════════════════════════════════════════════════════════
-export function consolidatePor4(groups: DisciplineGroup[]): Por4Result {
+export function consolidatePor4(
+  groups: DisciplineGroup[],
+  options: ConsolidatePor4Options = {},
+): Por4Result {
   const warnings: string[] = [];
   const classified: Classified[] = [];
 
@@ -431,7 +444,7 @@ export function consolidatePor4(groups: DisciplineGroup[]): Por4Result {
   const allDrafts = [...drafts, ...unmappedDrafts];
 
   // ── step: distribute rebar:labor → ลง rebar:{size} material rows · ลบแถวรวม
-  distributeRebarLabor(allDrafts);
+  distributeRebarLabor(allDrafts, options, warnings);
 
   // ── step: drafts → Por4Row (dual-column) แล้ว pair material+labor ที่ qty ตรงกัน
   const singleRows = allDrafts.map(draftToRow);
@@ -444,22 +457,79 @@ export function consolidatePor4(groups: DisciplineGroup[]): Por4Result {
 // helpers: rebar:labor distribute · draft → Por4Row · pair dual-column
 // ═══════════════════════════════════════════════════════════════════════
 
-/** ฝัง rebar:labor (ค่าผูก/ตัด/ดัดเหล็ก) ลงในแต่ละ rebar:{size} material แล้วลบแถวรวม */
-function distributeRebarLabor(drafts: RowDraft[]): void {
+/**
+ * ฝัง rebar:labor (ค่าผูก/ตัด/ดัดเหล็ก) ลงในแต่ละ rebar:{size} material แล้วลบแถวรวม
+ *
+ * Rate ต่อขนาด (ข1): override → ว.809 (laborPresetForRebar) — บาท/ตัน → /1000 = บ./กก.
+ * Drift check: ถ้า BOQ มี unitPrice > 0 และต่างจาก weighted-avg ที่ใช้จริง > 5% → warning
+ * Audit (ข2): append rebarLabor.sourceItemIds เข้า sourceItemIds ของทุก rebar:{size} ที่รับ
+ */
+function distributeRebarLabor(
+  drafts: RowDraft[],
+  options: ConsolidatePor4Options,
+  warnings: string[],
+): void {
   const rebarLaborIdx = drafts.findIndex(
     (d) => d.materialKey === 'rebar:labor',
   );
   if (rebarLaborIdx < 0) return;
   const rebarLabor = drafts[rebarLaborIdx]!;
-  const laborUnitPrice = rebarLabor.unitPrice;
+  const boqRatePerKg = rebarLabor.unitPrice; // BOQ-supplied (ใช้แค่ drift check)
+
+  // ── หา target rebar:{size} material drafts + คำนวณ rate per size
+  type Target = { draft: RowDraft; size: string; ratePerKg: number };
+  const targets: Target[] = [];
+  let weightedLaborSum = 0;
+  let weightedQtySum = 0;
+
   for (const d of drafts) {
     if (d === rebarLabor) continue;
     if (d.role !== 'material') continue;
     if (!d.materialKey || !d.materialKey.startsWith('rebar:')) continue;
     const size = d.materialKey.slice('rebar:'.length);
     if (!(size in REBAR)) continue; // ยกเว้น rebar:mesh / rebar:labor
-    d.laborSidecar = { unitPrice: laborUnitPrice };
+
+    const overrideTon = options.laborRateBySizeTon?.[size];
+    let ratePerTon: number | undefined;
+    if (overrideTon != null) {
+      ratePerTon = overrideTon;
+    } else {
+      const preset = laborPresetForRebar(size);
+      ratePerTon = preset?.rate;
+    }
+    if (ratePerTon == null) {
+      warnings.push(
+        `REBAR_LABOR_RATE_MISSING: ${size} — ไม่พบ rate ใน ว.809 และไม่มี override → ไม่ฝัง labor ลง size นี้`,
+      );
+      continue;
+    }
+
+    const ratePerKg = ratePerTon / 1000;
+    targets.push({ draft: d, size, ratePerKg });
+    weightedLaborSum += d.qtyFinal * ratePerKg;
+    weightedQtySum += d.qtyFinal;
   }
+
+  // ── drift check (เฉพาะเมื่อ BOQ มี rate ขาเข้า)
+  if (boqRatePerKg > 0 && weightedQtySum > 0) {
+    const weightedAvg = weightedLaborSum / weightedQtySum;
+    const drift = Math.abs(weightedAvg - boqRatePerKg) / boqRatePerKg;
+    if (drift > 0.05) {
+      warnings.push(
+        `REBAR_LABOR_RATE_DRIFT: BOQ=${boqRatePerKg.toFixed(2)} บ./กก. vs ว.809 ถ่วงน้ำหนัก=${weightedAvg.toFixed(2)} บ./กก. (ต่าง ${(drift * 100).toFixed(1)}%)`,
+      );
+    }
+  }
+
+  // ── apply labor + append sourceItemIds (audit trail ข2)
+  for (const t of targets) {
+    t.draft.laborSidecar = { unitPrice: t.ratePerKg };
+    t.draft.sourceItemIds = [
+      ...t.draft.sourceItemIds,
+      ...rebarLabor.sourceItemIds,
+    ];
+  }
+
   drafts.splice(rebarLaborIdx, 1);
 }
 

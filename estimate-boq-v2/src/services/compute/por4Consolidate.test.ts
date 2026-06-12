@@ -211,7 +211,7 @@ describe('consolidatePor4', () => {
     );
   });
 
-  it('7b) rebar:labor ฝังลง rebar:DB12 (dual-column) — ไม่มีแถว rebar:labor รวม', () => {
+  it('7b) rebar:labor ฝังลง rebar:DB12 (dual-column) · rate มาจาก ว.809 ไม่ใช่ BOQ', () => {
     const groups = [
       makeGroup([
         makeItem({
@@ -221,6 +221,145 @@ describe('consolidatePor4', () => {
           isMaterial: true,
           unitPrice: 28,
         }),
+        // BOQ ส่ง 3.9 บ./กก. (= 3,900 บ./ตัน DB12 medium ตรง ว.809) → ไม่เกิด drift
+        makeItem({
+          name: 'ค่าผูก/ตัด/ดัดเหล็ก',
+          quantity: 1000,
+          unit: 'กก.',
+          isMaterial: false,
+          unitPrice: 3.9,
+        }),
+      ]),
+    ];
+    const res = consolidatePor4(groups);
+    expect(findByKey(res.rows, 'rebar:labor').length).toBe(0);
+    const dual = findDual(res.rows, 'rebar:DB12');
+    expect(dual).toBeDefined();
+    expect(dual!.qtyFinal).toBe(1090);
+    expect(dual!.materialUnitPrice).toBe(28);
+    // laborUnitPrice = 3900 (medium ว.809) / 1000 = 3.9 บ./กก.
+    expect(dual!.laborUnitPrice).toBeCloseTo(3.9, 6);
+    expect(dual!.materialAmount).toBeCloseTo(1090 * 28, 6);
+    expect(dual!.laborAmount).toBeCloseTo(1090 * 3.9, 6);
+    expect(dual!.totalAmount).toBeCloseTo(1090 * 28 + 1090 * 3.9, 6);
+    expect(
+      res.warnings.some((w) => w.startsWith('REBAR_LABOR_RATE_DRIFT')),
+    ).toBe(false);
+  });
+
+  it('7f1) RB6 rate ว.809 = 4,900 บ./ตัน → 4.9 บ./กก. · qty 1000 หลังเผื่อ → labor ตามสัดส่วน', () => {
+    const groups = [
+      makeGroup([
+        makeItem({
+          name: 'เหล็กเสริม RB6',
+          quantity: 1000,
+          unit: 'กก.',
+          isMaterial: true,
+          unitPrice: 30,
+        }),
+        // ใส่ aggregate row เพื่อ trigger distribute (rate ตรง small=4.9 → ไม่ drift)
+        makeItem({
+          name: 'ค่าผูก/ตัด/ดัดเหล็ก',
+          quantity: 1000,
+          unit: 'กก.',
+          isMaterial: false,
+          unitPrice: 4.9,
+        }),
+      ]),
+    ];
+    const res = consolidatePor4(groups);
+    const dual = findDual(res.rows, 'rebar:RB6');
+    expect(dual).toBeDefined();
+    // RB6 5% waste → qtyFinal = 1050
+    expect(dual!.qtyFinal).toBe(1050);
+    expect(dual!.laborUnitPrice).toBeCloseTo(4.9, 6);
+    expect(dual!.laborAmount).toBeCloseTo(1050 * 4.9, 6); // = 5145
+  });
+
+  it('7f2) per-size ทำงานจริง: DB12 (medium 3.9) ≠ DB20 (large 3.5) ในแถวเดียวกัน', () => {
+    const groups = [
+      makeGroup([
+        makeItem({
+          name: 'เหล็กเสริม DB12',
+          quantity: 2500,
+          unit: 'กก.',
+          isMaterial: true,
+          unitPrice: 28,
+        }),
+        makeItem({
+          name: 'เหล็กเสริม DB20',
+          quantity: 2000,
+          unit: 'กก.',
+          isMaterial: true,
+          unitPrice: 30,
+        }),
+        // BOQ rate ใส่ค่ากลาง 3.7 (ใกล้ weighted avg) → ไม่ drift
+        makeItem({
+          name: 'ค่าผูก/ตัด/ดัดเหล็ก',
+          quantity: 4500,
+          unit: 'กก.',
+          isMaterial: false,
+          unitPrice: 3.7,
+        }),
+      ]),
+    ];
+    const res = consolidatePor4(groups);
+    const db12 = findDual(res.rows, 'rebar:DB12');
+    const db20 = findDual(res.rows, 'rebar:DB20');
+    expect(db12).toBeDefined();
+    expect(db20).toBeDefined();
+    // DB12 9% waste → qtyFinal=2725 · labor 3.9 บ./กก.
+    expect(db12!.qtyFinal).toBe(2725);
+    expect(db12!.laborUnitPrice).toBeCloseTo(3.9, 6);
+    expect(db12!.laborAmount).toBeCloseTo(2725 * 3.9, 6); // 10627.5
+    // DB20 13% waste → qtyFinal=2260 · labor 3.5 บ./กก.
+    expect(db20!.qtyFinal).toBe(2260);
+    expect(db20!.laborUnitPrice).toBeCloseTo(3.5, 6);
+    expect(db20!.laborAmount).toBeCloseTo(2260 * 3.5, 6); // 7910
+    // พิสูจน์ per-size: 2 ขนาดมี laborUnitPrice ต่างกัน
+    expect(db12!.laborUnitPrice).not.toBe(db20!.laborUnitPrice);
+  });
+
+  it('7f3) override laborRateBySizeTon {DB12: 3600} → DB12 ใช้ 3.6 บ./กก. แทน ว.809', () => {
+    const groups = [
+      makeGroup([
+        makeItem({
+          name: 'เหล็กเสริม DB12',
+          quantity: 2500,
+          unit: 'กก.',
+          isMaterial: true,
+          unitPrice: 28,
+        }),
+        makeItem({
+          name: 'ค่าผูก/ตัด/ดัดเหล็ก',
+          quantity: 2500,
+          unit: 'กก.',
+          isMaterial: false,
+          unitPrice: 3.6,
+        }),
+      ]),
+    ];
+    const res = consolidatePor4(groups, {
+      laborRateBySizeTon: { DB12: 3600 },
+    });
+    const dual = findDual(res.rows, 'rebar:DB12');
+    expect(dual).toBeDefined();
+    expect(dual!.qtyFinal).toBe(2725);
+    expect(dual!.laborUnitPrice).toBeCloseTo(3.6, 6);
+    expect(dual!.laborAmount).toBeCloseTo(2725 * 3.6, 6); // 9810
+  });
+
+  it('7f4) BOQ rate ต่าง >5% → REBAR_LABOR_RATE_DRIFT warning', () => {
+    const groups = [
+      makeGroup([
+        makeItem({
+          name: 'เหล็กเสริม DB12',
+          quantity: 1000,
+          unit: 'กก.',
+          isMaterial: true,
+          unitPrice: 28,
+        }),
+        // BOQ rate 2.31 (เก่า) ห่างจาก ว.809 = 3.9 → drift 68%
         makeItem({
           name: 'ค่าผูก/ตัด/ดัดเหล็ก',
           quantity: 1000,
@@ -231,17 +370,31 @@ describe('consolidatePor4', () => {
       ]),
     ];
     const res = consolidatePor4(groups);
-    // ไม่มีแถว rebar:labor แยกออกมา
-    expect(findByKey(res.rows, 'rebar:labor').length).toBe(0);
-    // DB12 dual-column row
+    expect(
+      res.warnings.some((w) => w.startsWith('REBAR_LABOR_RATE_DRIFT')),
+    ).toBe(true);
+  });
+
+  it('7f5) audit trail: sourceItemIds ของ rebar:DB12 รวม id แถวค่าแรงขาเข้า', () => {
+    const dbItem = makeItem({
+      name: 'เหล็กเสริม DB12',
+      quantity: 1000,
+      unit: 'กก.',
+      isMaterial: true,
+      unitPrice: 28,
+    });
+    const laborItem = makeItem({
+      name: 'ค่าผูก/ตัด/ดัดเหล็ก',
+      quantity: 1000,
+      unit: 'กก.',
+      isMaterial: false,
+      unitPrice: 3.9,
+    });
+    const res = consolidatePor4([makeGroup([dbItem, laborItem])]);
     const dual = findDual(res.rows, 'rebar:DB12');
     expect(dual).toBeDefined();
-    expect(dual!.qtyFinal).toBe(1090);
-    expect(dual!.materialUnitPrice).toBe(28);
-    expect(dual!.laborUnitPrice).toBe(2.31);
-    expect(dual!.materialAmount).toBeCloseTo(1090 * 28, 6);
-    expect(dual!.laborAmount).toBeCloseTo(1090 * 2.31, 6);
-    expect(dual!.totalAmount).toBeCloseTo(1090 * 28 + 1090 * 2.31, 6);
+    expect(dual!.sourceItemIds).toContain(dbItem.id);
+    expect(dual!.sourceItemIds).toContain(laborItem.id);
   });
 
   it('7c) CONSUMABLE_DRIFT triggers เมื่อ BOQ ลวดผูก = 5 (ห่าง net 30 มาก)', () => {
