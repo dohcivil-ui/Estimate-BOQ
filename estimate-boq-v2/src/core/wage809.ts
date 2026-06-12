@@ -49,14 +49,6 @@ export const LABOR_PRESETS_W809: LaborPreset[] = [
     defaultWastePct: 3,
   },
   {
-    id: 'concrete-mix-1story',
-    category: 'งานโครงสร้าง',
-    name: 'คอนกรีตผสมเสร็จ ชั้นเดียว',
-    unit: 'ลบ.ม.',
-    rate: 421,
-    defaultWastePct: 3,
-  },
-  {
     id: 'concrete-pour-walkway',
     category: 'งานโครงสร้าง',
     name: 'เทคอนกรีตผสมเสร็จ — ทางเท้า/ทางระบายน้ำ/ถนนภายใน',

@@ -187,7 +187,7 @@ export function itemToBOQItems(item: AIItem, sourceRef: string): BOQItem[] {
 
     if (item.concrete_m3 != null && item.concrete_m3 > 0) {
       const presetId =
-        item.category === 'ฐานราก' ? 'concrete-rough' : 'concrete-mix-1story';
+        item.category === 'ฐานราก' ? 'concrete-rough' : 'concrete-pour-1story';
       const preset = presetById(presetId);
       if (preset)
         out.push(
