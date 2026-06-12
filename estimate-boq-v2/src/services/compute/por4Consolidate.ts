@@ -380,8 +380,11 @@ export function consolidatePor4(
   const TIEWIRE_KEY = 'consumable:tiewire';
   const NAILS_KEY = 'consumable:nails';
   const REBAR_LABOR_KEY = 'rebar:labor';
+  let sawTiewire = false;
+  let sawNails = false;
   for (const row of drafts) {
     if (row.materialKey === TIEWIRE_KEY) {
+      sawTiewire = true;
       const derivedAfter = (rebarMaterialKgAfter / 1000) * TIE_WIRE_KG_PER_TON;
       const derivedFromNet = (rebarMaterialKgNet / 1000) * TIE_WIRE_KG_PER_TON;
       const oldFinal = row.qtyNet;
@@ -397,6 +400,7 @@ export function consolidatePor4(
       row.qtyFinal = ceil2dp(derivedAfter);
       row.amount = row.qtyFinal * row.unitPrice;
     } else if (row.materialKey === NAILS_KEY) {
+      sawNails = true;
       const derivedAfter = formworkPanelM2After * FORMWORK.nailKgPerSqm;
       const derivedFromNet = formworkPanelM2Net * FORMWORK.nailKgPerSqm;
       const oldFinal = row.qtyNet;
@@ -418,6 +422,18 @@ export function consolidatePor4(
       row.qtyFinal = ceil2dp(derived);
       row.amount = row.qtyFinal * row.unitPrice;
     }
+  }
+
+  // CONSUMABLE_MISSING: มีฐานวัสดุแต่ BOQ ขาเข้าไม่มีแถว consumable → por4 ไม่ fabricate (ปรัชญา re-derive แทนค่า) จึงเตือนให้เพิ่มแถวใน BOQ
+  if (rebarMaterialKgAfter > 0 && !sawTiewire) {
+    warnings.push(
+      `CONSUMABLE_MISSING: ไม่พบแถว "ลวดผูกเหล็ก" ใน BOQ ขาเข้า ทั้งที่มีเหล็กเสริม ${rebarMaterialKgAfter.toFixed(2)} กก. (หลังเผื่อ) — por4 ไม่สร้างแถวให้เอง เพิ่มแถวลวดผูกใน BOQ แล้วระบบจะ re-derive ปริมาณให้ (${TIE_WIRE_KG_PER_TON} กก./ตัน)`,
+    );
+  }
+  if (formworkPanelM2After > 0 && !sawNails) {
+    warnings.push(
+      `CONSUMABLE_MISSING: ไม่พบแถว "ตะปู" ใน BOQ ขาเข้า ทั้งที่มีไม้แบบ ${formworkPanelM2After.toFixed(2)} ตร.ม. (หลังเผื่อ) — por4 ไม่สร้างแถวให้เอง เพิ่มแถวตะปูใน BOQ แล้วระบบจะ re-derive ปริมาณให้ (${FORMWORK.nailKgPerSqm} กก./ตร.ม.)`,
+    );
   }
 
   // unmapped passthrough (draft)

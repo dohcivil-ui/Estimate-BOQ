@@ -455,6 +455,7 @@ describe('consolidatePor4', () => {
           unitPrice: 30,
         }),
         makeItem({ name: 'เหล็กเสริม DB12', quantity: 100, unit: 'กก.' }),
+        makeItem({ name: 'ลวดผูกเหล็ก', quantity: 3, unit: 'กก.', unitPrice: 40 }),
       ]),
     ];
     const res = consolidatePor4(groups);
@@ -465,9 +466,26 @@ describe('consolidatePor4', () => {
     expect(mesh!.flags).toBeUndefined();
     // tiewire derive ใช้เฉพาะ rebar size จริง (DB12=109 หลังเผื่อ) ไม่รวม mesh
     const tw = res.rows.find((r) => r.materialKey === 'consumable:tiewire');
-    if (tw) {
-      expect(tw.qtyAfterAllowance).toBeCloseTo((109 / 1000) * 30, 6);
-    }
+    expect(tw).toBeDefined();
+    expect(tw!.qtyAfterAllowance).toBeCloseTo((109 / 1000) * 30, 6);
+    // มีแถวลวดผูกแล้ว → ไม่เด้ง CONSUMABLE_MISSING
+    expect(res.warnings.some((w) => w.startsWith('CONSUMABLE_MISSING'))).toBe(
+      false,
+    );
+  });
+
+  it('7g) CONSUMABLE_MISSING: มีเหล็กเสริมแต่ BOQ ไม่มีแถวลวดผูก → เตือน (por4 ไม่ fabricate)', () => {
+    const groups = [
+      makeGroup([
+        makeItem({ name: 'เหล็กเสริม DB12', quantity: 100, unit: 'กก.' }),
+      ]),
+    ];
+    const res = consolidatePor4(groups);
+    const tw = res.rows.find((r) => r.materialKey === 'consumable:tiewire');
+    expect(tw).toBeUndefined();
+    expect(
+      res.warnings.some((w) => w.startsWith('CONSUMABLE_MISSING')),
+    ).toBe(true);
   });
 
   it('9) คอนกรีต ค.2 15 ลบ.ม. (mat 2050 + labor 289) → dual-column · totalAmount 35,085', () => {
