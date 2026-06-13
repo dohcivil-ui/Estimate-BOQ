@@ -32,7 +32,7 @@ export interface BoqExportData {
     agency?: string; estimateDate?: string; estimatedBy?: string;
     approver?: string; approverTitle?: string;
   };
-  /** รายการอาคารแยกตาม section.code (1–5 ตาม BUILDING.sections) */
+  /** รายการอาคารแยกตาม section.code (1–12 ตาม BUILDING.sections) */
   buildingItems: Record<number, SectionRow[]>;
   equipmentItems: SectionRow[];
   factorF: {

@@ -7,16 +7,18 @@
  * หลักการ: exporter เขียนเฉพาะ "input cell" (กลุ่ม A) เท่านั้น
  *          formula / chain / format / print / merge / รูป ทั้งหมดอยู่ใน master แล้ว — ห้ามแตะ
  *
- * ที่มาของ mapping: derive จากการ reverse-engineer ไฟล์ต้นฉบับ Attach_BOQ_1.xlsx
+ * ที่มาของ mapping: derive จาก row-map จริงของ boq-master-cgd.xlsx (ฟอร์ม CGD มาตรฐาน)
+ * โครงใหม่: ส่วนที่ 1 = 12 section / 3 กลุ่มงาน — พิสูจน์ recalc แล้ว ปร.6 = 13,938,000 ตรง PDF
+ *   (อาคารเรียน 324 ล./55-ข) · Factor F = CEILING 4dp = 1.2965 · ยอดสุทธิ floor-พัน ทั้ง ปร.5ก/ข
  * ─────────────────────────────────────────────────────────────────────────
  */
 
 /** ลำดับ sheet (ห้ามเปลี่ยนชื่อ — สูตร cross-sheet ผูกกับชื่อ) */
 export const SHEET_ORDER = [
-  'factor F',      // hidden — คำนวณ Factor F (interpolate) + 2 รูป
-  '1.ปร.4',        // สรุป 4(–5) หมวด
-  'ปร4.อาคาร',     // รายละเอียดงานอาคาร (input หลัก)
-  'ปร4.ครุภัณฑ์',  // รายละเอียดครุภัณฑ์
+  'factor F',      // hidden — คำนวณ Factor F (interpolate, CEILING) + 2 รูป
+  '1.ปร.4',        // สรุป 12 section / 3 กลุ่มงาน
+  'ปร4.อาคาร',     // รายละเอียดงานอาคาร = ส่วนที่ 1 ทั้งหมด (input หลัก)
+  'ปร4.ครุภัณฑ์',  // รายละเอียดครุภัณฑ์ = ส่วนที่ 2
   'ปร.5.อาคาร',    // สรุปค่าก่อสร้าง (ปร.5ก)
   'ปร 5.ครุภัณฑ์',  // สรุปครุภัณฑ์ (ปร.5ข)  ← มีช่องว่างในชื่อ
   'ปร.6',          // สรุปราคากลางรวม
@@ -24,8 +26,7 @@ export const SHEET_ORDER = [
 
 /**
  * META — ช่องหัวกระดาษเฉพาะโครงการ (กลุ่ม A: input)
- * exporter เขียน "label + ค่า" ทั้ง string (master เก็บ label prefix ไว้แล้ว)
- * รูปแบบ: [sheet, cell, labelPrefix]  →  เขียน `${labelPrefix}${value}`
+ * แถวหัว (1–6 ของ ปร4.อาคาร / 1–10 ของ 1.ปร.4) ไม่เปลี่ยนตอนรื้อ section → cell เดิม
  */
 export const META_CELLS = {
   projectName: [
@@ -68,27 +69,43 @@ export const META_CELLS = {
 } as const;
 
 /**
- * ปร4.อาคาร — 5 หมวด
- * คอลัมน์: C=ปริมาณ, D=หน่วย, E=ราคาวัสดุ/หน่วย, F=เงินวัสดุ(สูตร),
- *          G=ราคาแรง/หน่วย, H=เงินแรง(สูตร), I=รวม(สูตร)
- * exporter เขียนเฉพาะ C/D/E/G — F/H/I เป็นสูตรใน master (=C*E, =C*G, =F+H)
+ * ปร4.อาคาร — ส่วนที่ 1 ค่างานต้นทุน = 12 section / 3 กลุ่มงาน
+ * คอลัมน์: C=ปริมาณ, D=หน่วย, E=ราคาวัสดุ/หน่วย, F=เงินวัสดุ(สูตร =C*E),
+ *          G=ราคาแรง/หน่วย, H=เงินแรง(สูตร =C*G), I=รวม(สูตร =F+H)
+ * exporter เขียนเฉพาะ C/D/E/G ในช่วง firstItem..lastItem (F/H/I เป็นสูตรใน master)
+ * total ต่อ section = SUM(col firstItem:lastItem) ทั้ง F/H/I (start row ตรงกัน — แก้ quirk เดิม 8 vs 9)
+ *
+ * model B (รื้อถอนแยก range): code1 = รื้อถอน, code2 = โครงสร้างวิศวกรรม 1.2–1.8
+ *   หน้า detail มีบรรทัด display "รวมค่างานโครงสร้างวิศวกรรมทั้งหมด" (row 46) = total(1)+total(2) = 1,262,142
+ *   สรุป 1.ปร.4 อ้าง total(1) และ total(2) ตรง ๆ (ไม่ลบ)
  */
 export const BUILDING = {
   cols: { qty: 'C', unit: 'D', matUnit: 'E', matAmt: 'F', laborUnit: 'G', laborAmt: 'H', total: 'I' },
-  /** header=แถวหัวหมวด, firstItem..lastItem=ช่วงรายการ, total=แถวรวมหมวด (SUM อยู่ใน master) */
+  /** group=กลุ่มงาน 1|2|3 · header=แถวหัว section · firstItem..lastItem=ช่วงรายการ · total=แถวรวม section */
   sections: [
-    { code: 1, name: 'หมวดงานเตรียมพื้นที่และงานรื้อถอน', header: 7,   firstItem: 8,   lastItem: 18,  total: 19 },
-    { code: 2, name: 'หมวดงานโครงสร้างหลังคา',          header: 20,  firstItem: 21,  lastItem: 30,  total: 31 },
-    { code: 3, name: 'หมวดงานสถาปัตยกรรม',              header: 32,  firstItem: 33,  lastItem: 95,  total: 96 },
-    { code: 4, name: 'หมวดงานไฟฟ้า',                    header: 97,  firstItem: 98,  lastItem: 119, total: 120 },
-    { code: 5, name: 'หมวดงานสุขาภิบาล',                header: 121, firstItem: 122, lastItem: 175, total: 176 },
+    { code: 1,  group: 1, name: 'งานรื้อถอน',                                  header: 10,  firstItem: 11,  lastItem: 16,  total: 17 },
+    { code: 2,  group: 1, name: 'งานโครงสร้างวิศวกรรม (1.2–1.8)',              header: 18,  firstItem: 19,  lastItem: 44,  total: 45 },
+    { code: 3,  group: 1, name: 'งานสถาปัตยกรรม',                              header: 47,  firstItem: 48,  lastItem: 137, total: 138 },
+    { code: 4,  group: 1, name: 'งานระบบสุขาภิบาล ดับเพลิง และป้องกันอัคคีภัย', header: 139, firstItem: 140, lastItem: 164, total: 165 },
+    { code: 5,  group: 1, name: 'งานระบบไฟฟ้าและสื่อสาร',                       header: 166, firstItem: 167, lastItem: 186, total: 187 },
+    { code: 6,  group: 1, name: 'งานระบบปรับอากาศและระบายอากาศ',               header: 188, firstItem: 189, lastItem: 196, total: 197 },
+    { code: 7,  group: 1, name: 'งานระบบลิฟท์และบันไดเลื่อน',                   header: 198, firstItem: 199, lastItem: 202, total: 203 },
+    { code: 8,  group: 1, name: 'งานระบบเครื่องกลและระบบพิเศษอื่นๆ',            header: 204, firstItem: 205, lastItem: 208, total: 209 },
+    { code: 9,  group: 2, name: 'งานครุภัณฑ์จัดจ้างหรือสั่งทำ',                 header: 212, firstItem: 213, lastItem: 218, total: 219 },
+    { code: 10, group: 2, name: 'งานตกแต่งภายในอาคาร',                         header: 220, firstItem: 221, lastItem: 224, total: 225 },
+    { code: 11, group: 3, name: 'งานภูมิทัศน์',                                header: 228, firstItem: 229, lastItem: 232, total: 233 },
+    { code: 12, group: 3, name: 'งานผังบริเวณและงานก่อสร้างประกอบอื่นๆ',        header: 234, firstItem: 235, lastItem: 238, total: 239 },
   ],
-  grandTotalRow: 177, // F177=F19+F31+F96+F120+F176 (สูตรใน master)
+  /** แถว display (สูตรใน master — ห้ามเขียนทับ) */
+  structCombinedRow: 46,                          // รวมโครงสร้างวิศวกรรมทั้งหมด = F17+F45
+  groupTotalRows: { 1: 210, 2: 226, 3: 240 },     // รวมค่างานกลุ่มที่ 1/2/3
+  grandTotalRow: 241,                             // รวมค่างานส่วนที่ 1 ทั้งหมด
 } as const;
 
 /**
- * ปร4.ครุภัณฑ์ — คอลัมน์เลื่อน 1 ช่อง
+ * ปร4.ครุภัณฑ์ — ส่วนที่ 2 (single range v1) · คอลัมน์เลื่อน 1 ช่อง
  * D=จำนวน, E=หน่วย, F=ราคาวัสดุ, G=เงินวัสดุ(สูตร), H=ราคาแรง, I=เงินแรง(สูตร), J=รวม(สูตร)
+ * (การแตกเป็น 6 หมวดตาม ปร.4(ข) ทำเป็น display ภายหลัง — ไม่กระทบ chain J18)
  */
 export const EQUIPMENT = {
   cols: { qty: 'D', unit: 'E', matUnit: 'F', matAmt: 'G', laborUnit: 'H', laborAmt: 'I', total: 'J' },
@@ -97,13 +114,11 @@ export const EQUIPMENT = {
 
 /**
  * Factor F — input เงื่อนไข + ช่วงตารางเทียบ (กลุ่ม A)
- * ส่วน interpolate (N26) เป็นสูตร — ห้ามแตะ
+ * ส่วน interpolate (N26 = CEILING(V26,0.0001)) เป็นสูตร — ห้ามแตะ
  */
 export const FACTOR_F = {
-  // เงื่อนไข (สัดส่วน)
   advanceRate: 'factor F!E14',     // เงินล่วงหน้าจ่าย
   retentionRate: 'factor F!E15',   // เงินประกันผลงานหัก
-  // ช่วงตารางเทียบ CGD — เลือกคู่ช่วงให้ครอบค่างานต้นทุนจริง (สำคัญ! ดู README)
   rangeLow: 'factor F!N18',        // B = ค่างานต้นทุนตัวต่ำ
   rangeHigh: 'factor F!N19',       // C = ค่างานต้นทุนตัวสูง
   fLow: 'factor F!N20',            // D = Factor F ของ B
@@ -122,39 +137,52 @@ export const EQUIPMENT_VAT = 'ปร 5.ครุภัณฑ์!G10'; // คร�
 
 /**
  * CHAIN — จุดเชื่อม cross-sheet (กลุ่ม B: สูตรใน master, ห้ามเขียนทับ)
- * เก็บไว้เป็นเอกสารอ้างอิง / ใช้ตรวจสอบว่า master ยังครบ
+ * เก็บเป็นเอกสารอ้างอิง / ใช้ตรวจว่า master ยังครบ · ✅ 3 FLAG ปิดแล้ว
  */
 export const CHAIN_FORMULAS = {
-  'factor F!N9':        "='1.ปร.4'!F18",          // ค่างานต้นทุน → Factor F
-  'factor F!N26':       '=FLOOR(V26,0.0001)',     // Factor F สุดท้าย (interpolate)
-  'ปร.5.อาคาร!D12':     "='1.ปร.4'!F18",          // ค่างานต้นทุน
+  'factor F!N9':        "='1.ปร.4'!F29",          // ค่างานต้นทุน (grand) → Factor F
+  'factor F!N26':       '=CEILING(V26,0.0001)',   // Factor F สุดท้าย ปัดขึ้น 4dp [FLAG1]
+  'ปร.5.อาคาร!D12':     "='1.ปร.4'!F29",          // ค่างานต้นทุน
   'ปร.5.อาคาร!E12':     "='factor F'!N26",        // Factor F
-  'ปร.5.อาคาร!F12':     '=D12*E12',               // ค่าก่อสร้าง
-  'ปร 5.ครุภัณฑ์!H10':   '=E10*(1+G10)',           // ครุภัณฑ์ ×(1+VAT)
-  'ปร.6!F12':           "='ปร.5.อาคาร'!F12",       // ส่วนที่ 1
-  'ปร.6!F13':           "='ปร 5.ครุภัณฑ์'!H20",     // ส่วนที่ 2
-  'ปร.6!F23':           '=SUM(F12:F13)',           // รวม (หมายเหตุ: ไม่รวม F14 ส่วนที่ 3)
-  'ปร.6!B26':           '=BAHTTEXT(F23)',          // ตัวอักษร — ต้อง uppercase, Excel-only
+  'ปร.5.อาคาร!F12':     '=D12*E12',               // ค่าก่อสร้าง (gross)
+  'ปร.5.อาคาร!F18':     '=F12',                   // รวมราคาค่าก่อสร้าง
+  'ปร.5.อาคาร!F19':     '=FLOOR(F12,1000)',       // ยอดสุทธิ ปัดลงหลักพัน [FLAG2]
+  'ปร 5.ครุภัณฑ์!H10':   '=E10*(1+G10)',           // ครุภัณฑ์ ×(1+VAT) (gross)
+  'ปร 5.ครุภัณฑ์!H20':   '=FLOOR(H10,1000)',       // ยอดสุทธิ ปัดลงหลักพัน [FLAG2]
+  'ปร.6!F12':           "='ปร.5.อาคาร'!F19",       // ส่วนที่ 1 (ดึงตัวปัดแล้ว) [FLAG2]
+  'ปร.6!F13':           "='ปร 5.ครุภัณฑ์'!H20",     // ส่วนที่ 2 (ดึงตัวปัดแล้ว) [FLAG2]
+  'ปร.6!F23':           '=SUM(F12:F13)',           // รวมทั้งสิ้น (ไม่รวม F14 ส่วนที่ 3)
+  'ปร.6!B26':           '=BAHTTEXT(F23)',          // ตัวอักษร — Excel-only (LibreOffice = #NAME?, Tier 2 ต้อง exclude)
 } as const;
 
 /**
- * 1.ปร.4 — สรุปหมวด (กลุ่ม B: สูตรใน master)
- * ⚠️ ต้นฉบับสรุปเพียง 4 บรรทัด (r11–r14) และ "ข้ามหมวดไฟฟ้า" (ดึงสุขาภิบาลมาเป็นลำดับ 4)
- *    D18=SUM(D11:D16) มี slot ว่าง r15/r16 รองรับการเพิ่มไฟฟ้าได้
- *    → ดู README หัวข้อ "FLAG: หมวดไฟฟ้า" ก่อนใช้เป็น master ทั่วไป
+ * 1.ปร.4 — สรุป 12 section / 3 กลุ่มงาน (กลุ่ม B: สูตรใน master)
+ * แต่ละ line: D=ref ปร4.อาคาร!F{total} (วัสดุ), E=ref !H{total} (แรง), F==D+E
+ * ✅ ครบทุก section รวมไฟฟ้า (code5) → ไม่มีหมวดตกอีก [FLAG3]
+ * grand F29 → ป้อน factor F!N9 และ ปร.5ก!D12
  */
 export const POR4_SUMMARY = {
-  sumRange: 'D11:D16',
-  rows: [
-    { row: 11, nameRef: "='ปร4.อาคาร'!B7",   matRef: "='ปร4.อาคาร'!F19",  laborRef: "='ปร4.อาคาร'!H19" },
-    { row: 12, nameRef: "='ปร4.อาคาร'!B20",  matRef: "='ปร4.อาคาร'!F31",  laborRef: "='ปร4.อาคาร'!H31" },
-    { row: 13, nameRef: "='ปร4.อาคาร'!B32",  matRef: "='ปร4.อาคาร'!F96",  laborRef: "='ปร4.อาคาร'!H96" },
-    // ⚠️ ต้นฉบับ r14 = สุขาภิบาล (ข้ามไฟฟ้า). master ทั่วไปควรเป็น:
-    //    r14 = ไฟฟ้า  (B97 / F120 / H120)
-    //    r15 = สุขาภิบาล (B121 / F176 / H176)
-    { row: 14, nameRef: "='ปร4.อาคาร'!B121", matRef: "='ปร4.อาคาร'!F176", laborRef: "='ปร4.อาคาร'!H176" },
+  lines: [
+    { code: 1,  row: 12, nameRef: "='ปร4.อาคาร'!B10",  matRef: "='ปร4.อาคาร'!F17",  laborRef: "='ปร4.อาคาร'!H17" },
+    { code: 2,  row: 13, nameRef: "='ปร4.อาคาร'!B18",  matRef: "='ปร4.อาคาร'!F45",  laborRef: "='ปร4.อาคาร'!H45" },
+    { code: 3,  row: 14, nameRef: "='ปร4.อาคาร'!B47",  matRef: "='ปร4.อาคาร'!F138", laborRef: "='ปร4.อาคาร'!H138" },
+    { code: 4,  row: 15, nameRef: "='ปร4.อาคาร'!B139", matRef: "='ปร4.อาคาร'!F165", laborRef: "='ปร4.อาคาร'!H165" },
+    { code: 5,  row: 16, nameRef: "='ปร4.อาคาร'!B166", matRef: "='ปร4.อาคาร'!F187", laborRef: "='ปร4.อาคาร'!H187" },
+    { code: 6,  row: 17, nameRef: "='ปร4.อาคาร'!B188", matRef: "='ปร4.อาคาร'!F197", laborRef: "='ปร4.อาคาร'!H197" },
+    { code: 7,  row: 18, nameRef: "='ปร4.อาคาร'!B198", matRef: "='ปร4.อาคาร'!F203", laborRef: "='ปร4.อาคาร'!H203" },
+    { code: 8,  row: 19, nameRef: "='ปร4.อาคาร'!B204", matRef: "='ปร4.อาคาร'!F209", laborRef: "='ปร4.อาคาร'!H209" },
+    { code: 9,  row: 22, nameRef: "='ปร4.อาคาร'!B212", matRef: "='ปร4.อาคาร'!F219", laborRef: "='ปร4.อาคาร'!H219" },
+    { code: 10, row: 23, nameRef: "='ปร4.อาคาร'!B220", matRef: "='ปร4.อาคาร'!F225", laborRef: "='ปร4.อาคาร'!H225" },
+    { code: 11, row: 26, nameRef: "='ปร4.อาคาร'!B228", matRef: "='ปร4.อาคาร'!F233", laborRef: "='ปร4.อาคาร'!H233" },
+    { code: 12, row: 27, nameRef: "='ปร4.อาคาร'!B234", matRef: "='ปร4.อาคาร'!F239", laborRef: "='ปร4.อาคาร'!H239" },
   ],
-  total: { mat: 'D18', labor: 'E18', sum: 'F18' }, // F18 → ป้อน factor F!N9 และ ปร.5!D12
+  groupTotals: [
+    { group: 1, row: 20, lineRows: [12, 13, 14, 15, 16, 17, 18, 19] },
+    { group: 2, row: 24, lineRows: [22, 23] },
+    { group: 3, row: 28, lineRows: [26, 27] },
+  ],
+  grand: { row: 29, fromGroupRows: [20, 24, 28] }, // F29 = F20+F24+F28
+  total: { mat: 'D29', labor: 'E29', sum: 'F29' },  // F29 → factor F!N9 และ ปร.5ก!D12
 } as const;
 
 /** workbook-level: บังคับ Excel คำนวณ chain ใหม่ตอนเปิด */
