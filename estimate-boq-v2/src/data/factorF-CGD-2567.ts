@@ -417,3 +417,43 @@ export function lookupFactorF(
 
   return brackets[0].factorF;
 }
+
+export interface FactorFRange {
+  rangeLowM: number;   // ค่างานตัวต่ำ (ล้านบาท)
+  rangeHighM: number;  // ค่างานตัวสูง (ล้านบาท)
+  fLow: number;
+  fHigh: number;
+}
+
+/**
+ * หา bracket ที่ lookupFactorF ใช้ interpolate (2 breakpoint + factorF)
+ * → ฝั่ง export ป้อนเข้า master ให้ interpolate เองตรงกัน (advance/retention ต้อง snap มาแล้ว)
+ */
+export function factorFBracket(
+  costMillions: number,
+  advance: number = 0,
+  retention: number = 0,
+): FactorFRange | null {
+  const table = FACTOR_F_TABLES.find(
+    (t) => t.advance === advance && t.retention === retention,
+  );
+  if (!table) return null;
+  const b = table.brackets;
+  // ≤0.5 → คงที่ (F เท่ากัน, ช่วงคนละค่า กัน DIV/0 ใน master)
+  if (costMillions <= b[0].cost) {
+    return { rangeLowM: b[0].cost, rangeHighM: b[1].cost, fLow: b[0].factorF, fHigh: b[0].factorF };
+  }
+  // >500 → คงที่ของ bracket สุดท้าย
+  if (costMillions > 500) {
+    const lo = b[b.length - 2], hi = b[b.length - 1];
+    return { rangeLowM: lo.cost, rangeHighM: hi.cost, fLow: hi.factorF, fHigh: hi.factorF };
+  }
+  // bracket ขนาบ (เงื่อนไขเดียวกับ lookupFactorF)
+  for (let i = 0; i < b.length - 1; i++) {
+    const lo = b[i], hi = b[i + 1];
+    if (costMillions >= lo.cost && costMillions < hi.cost) {
+      return { rangeLowM: lo.cost, rangeHighM: hi.cost, fLow: lo.factorF, fHigh: hi.factorF };
+    }
+  }
+  return { rangeLowM: b[0].cost, rangeHighM: b[1].cost, fLow: b[0].factorF, fHigh: b[0].factorF };
+}

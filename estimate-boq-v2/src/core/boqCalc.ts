@@ -3,7 +3,7 @@
  * ห้าม import React/Konva
  */
 import type { BOQItem } from '@/types/boq';
-import { lookupFactorF } from '@/data/factorF-CGD-2567';
+import { lookupFactorF, factorFBracket } from '@/data/factorF-CGD-2567';
 
 // ค่าที่ตาราง CGD 2567 รองรับ (snap ค่าที่เลือกเข้าหาค่าที่ถูกต้อง)
 const VALID_ADVANCE = [0, 5, 10, 15];
@@ -39,6 +39,38 @@ export function effectiveFactorF(
   );
   if (f == null) return 1;
   return Math.round(f * 10000) / 10000;
+}
+
+export interface FactorFBracketInput {
+  advanceRate: number;   // เศษส่วน (0.05)
+  retentionRate: number; // เศษส่วน
+  rangeLow: number;      // บาท
+  rangeHigh: number;     // บาท
+  fLow: number;
+  fHigh: number;
+}
+
+/**
+ * bracket Factor F สำหรับป้อน master ให้ interpolate เอง → ตรง effectiveFactorF (double-entry)
+ * snap advance/retention เหมือน effectiveFactorF · rate=เศษส่วน, ค่างาน=บาท
+ */
+export function factorFBracketFor(
+  directCost: number,
+  advancePct: number,
+  retentionPct: number,
+): FactorFBracketInput | null {
+  const adv = snapTo(VALID_ADVANCE, advancePct);
+  const ret = snapTo(VALID_RETENTION, retentionPct);
+  const r = factorFBracket(directCost / 1_000_000, adv, ret);
+  if (!r) return null;
+  return {
+    advanceRate: adv / 100,
+    retentionRate: ret / 100,
+    rangeLow: r.rangeLowM * 1_000_000,
+    rangeHigh: r.rangeHighM * 1_000_000,
+    fLow: r.fLow,
+    fHigh: r.fHigh,
+  };
 }
 
 /**
