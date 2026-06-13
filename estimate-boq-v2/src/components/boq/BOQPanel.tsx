@@ -16,6 +16,7 @@ import {
 } from '@/core/boqCalc';
 import { ProjectMetaForm } from './ProjectMetaForm';
 import { BOQTable } from './BOQTable';
+import { Por4Table } from './Por4Table';
 import { AddPresetMenu } from './AddPresetMenu';
 import { AIImportModal } from './AIImportModal';
 import { GPTExportModal } from './GPTExportModal';
@@ -43,6 +44,7 @@ export function BOQPanel() {
   const [showSyncPrices, setShowSyncPrices] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const [view, setView] = useState<'edit' | 'por4'>('edit');
 
   const totals = totalsByKind(items);
   const direct = directCostTotal(items);
@@ -226,9 +228,49 @@ export function BOQPanel() {
         </div>
       )}
 
-      <BOQTable />
+      {/* toggle มุมมอง: แก้ไข BOQ | ปร.4 */}
+      <div className="flex items-center justify-between gap-2" data-print-hide>
+        <div className="inline-flex rounded border border-bg-border bg-bg-raised p-0.5">
+          <button
+            type="button"
+            onClick={() => setView('edit')}
+            className={`rounded px-3 py-1 text-xs transition-colors ${
+              view === 'edit'
+                ? 'bg-accent/20 font-medium text-accent'
+                : 'text-ink-secondary hover:text-ink-primary'
+            }`}
+          >
+            ✏️ แก้ไข BOQ
+          </button>
+          <button
+            type="button"
+            onClick={() => setView('por4')}
+            className={`rounded px-3 py-1 text-xs transition-colors ${
+              view === 'por4'
+                ? 'bg-accent/20 font-medium text-accent'
+                : 'text-ink-secondary hover:text-ink-primary'
+            }`}
+          >
+            📑 ปร.4
+          </button>
+        </div>
+        {view === 'edit' && (
+          <div className="flex items-center gap-3 text-[10px] text-ink-muted">
+            <span className="flex items-center gap-1">
+              <span className="inline-block h-2.5 w-2.5 rounded-sm bg-blue-500/40" />
+              วัสดุ
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="inline-block h-2.5 w-2.5 rounded-sm bg-amber-500/40" />
+              ค่าแรง
+            </span>
+          </div>
+        )}
+      </div>
 
-      {items.length > 0 && (
+      {view === 'edit' ? <BOQTable /> : <Por4Table />}
+
+      {view === 'edit' && items.length > 0 && (
         <div
           className="space-y-1 rounded border border-bg-border bg-bg-raised p-3 text-xs"
           data-print-totals

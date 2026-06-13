@@ -52,7 +52,6 @@ export function BOQTable() {
             <th className="w-14 px-1 py-1.5 text-center">หน่วย</th>
             <th className="w-20 px-1 py-1.5 text-right">ปริมาณ</th>
             <th className="w-20 px-1 py-1.5 text-right">ราคา/หน่วย</th>
-            <th className="w-12 px-1 py-1.5 text-center">ประเภท</th>
             <th className="w-24 px-1 py-1.5 text-right">จำนวนเงิน</th>
             <th className="w-10 px-1 py-1.5 text-center">ที่มา</th>
             <th className="w-6 px-1 py-1.5"></th>
@@ -140,20 +139,6 @@ function BOQRow({
           value={item.unitPrice}
           onCommit={(n) => onUpdate({ unitPrice: n })}
         />
-      </td>
-      <td className="px-1 py-1 text-center">
-        <button
-          type="button"
-          onClick={() => onUpdate({ isMaterial: !item.isMaterial })}
-          className={`rounded px-1 py-0.5 text-[10px] ${
-            item.isMaterial
-              ? 'bg-blue-500/30 text-blue-300'
-              : 'bg-amber-500/30 text-amber-300'
-          }`}
-          title="กดเพื่อสลับวัสดุ/ค่าแรง"
-        >
-          {item.isMaterial ? 'วัสดุ' : 'ค่าแรง'}
-        </button>
       </td>
       <td className="px-1 py-1 text-right font-mono text-ink-primary">
         {formatCurrency(amount)}
