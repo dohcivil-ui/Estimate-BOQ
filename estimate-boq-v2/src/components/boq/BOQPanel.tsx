@@ -23,6 +23,7 @@ import { AIImportModal } from './AIImportModal';
 import { GPTExportModal } from './GPTExportModal';
 import { CreateFromMeasurementsModal } from './CreateFromMeasurementsModal';
 import { SyncPricesModal } from './SyncPricesModal';
+import { GovTemplateExportModal } from './GovTemplateExportModal';
 import { exportBOQToExcel } from '@/services/excelExport';
 import { exportGovBOQ, type GovExportMode } from '@/services/govExcelExport';
 import { printBOQ } from '@/services/printPdf';
@@ -52,6 +53,7 @@ export function BOQPanel() {
   const [showGPTExport, setShowGPTExport] = useState(false);
   const [showCreateFromMeas, setShowCreateFromMeas] = useState(false);
   const [showSyncPrices, setShowSyncPrices] = useState(false);
+  const [showGovTemplate, setShowGovTemplate] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [view, setView] = useState<BOQView>('edit');
@@ -76,8 +78,12 @@ export function BOQPanel() {
     });
   };
 
-  const handleExcel = async (variant: 'classic' | GovExportMode) => {
+  const handleExcel = async (variant: ExcelVariant) => {
     setExportMenuOpen(false);
+    if (variant === 'template') {
+      setShowGovTemplate(true);
+      return;
+    }
     setExporting(true);
     try {
       // ★ ดึงจาก store ปัจจุบันเสมอ (ไม่ใช้ items/meta ที่ค้างจาก render scope)
@@ -296,6 +302,9 @@ export function BOQPanel() {
       {showSyncPrices && (
         <SyncPricesModal onClose={() => setShowSyncPrices(false)} />
       )}
+      {showGovTemplate && (
+        <GovTemplateExportModal onClose={() => setShowGovTemplate(false)} />
+      )}
     </div>
   );
 }
@@ -321,7 +330,7 @@ function TotalsRow({
   );
 }
 
-type ExcelVariant = 'classic' | GovExportMode;
+type ExcelVariant = 'classic' | GovExportMode | 'template';
 
 function ExcelExportDropdown({
   open,
@@ -343,10 +352,15 @@ function ExcelExportDropdown({
     highlight?: boolean;
   }> = [
     {
-      id: 'full',
-      label: '📋 ปร.4 + ปร.5 + ปร.6 + Factor F (ครบชุด)',
-      desc: 'ราคากลางมาตรฐานกรมบัญชีกลาง — 4 sheets พร้อม cross-sheet formula',
+      id: 'template',
+      label: '📋 ปร.4/5/6 (เทมเพลตราชการ + ตรวจสอบ)',
+      desc: 'กรอกลง boq-master.xlsx (7 ชีต) ผ่าน double-entry verify ก่อนดาวน์โหลด',
       highlight: true,
+    },
+    {
+      id: 'full',
+      label: '📋 ปร.4 + ปร.5 + ปร.6 + Factor F (สร้างใหม่ 4 ชีต)',
+      desc: 'ราคากลางมาตรฐานกรมบัญชีกลาง — 4 sheets พร้อม cross-sheet formula',
     },
     {
       id: 'por4',
