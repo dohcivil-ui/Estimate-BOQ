@@ -1,5 +1,6 @@
 /**
- * BOQ table — editable แต่ละ cell (ชื่อ/หน่วย/qty/ราคา/เผื่อ/หมวด/notes)
+ * BOQ table — editable แต่ละ cell (ชื่อ/หน่วย/qty/ราคา/หมวด/notes)
+ * เผื่อ% ไม่แสดงในตารางนี้ — BOQ = net, ค่าเผื่อคิดที่ ปร.4 (field wastePct ยังคงอยู่ใน type/store)
  */
 import { useState } from 'react';
 import { useBOQStore } from '@/stores/boqStore';
@@ -50,7 +51,6 @@ export function BOQTable() {
             <th className="px-1 py-1.5 text-left">รายการ</th>
             <th className="w-14 px-1 py-1.5 text-center">หน่วย</th>
             <th className="w-20 px-1 py-1.5 text-right">ปริมาณ</th>
-            <th className="w-14 px-1 py-1.5 text-right">เผื่อ%</th>
             <th className="w-20 px-1 py-1.5 text-right">ราคา/หน่วย</th>
             <th className="w-12 px-1 py-1.5 text-center">ประเภท</th>
             <th className="w-24 px-1 py-1.5 text-right">จำนวนเงิน</th>
@@ -134,12 +134,6 @@ function BOQRow({
             ×{item.thickness.toFixed(3)} m = {adjQty.toFixed(2)}
           </div>
         )}
-      </td>
-      <td className="px-1 py-1 text-right">
-        <NumberCell
-          value={item.wastePct}
-          onCommit={(n) => onUpdate({ wastePct: n })}
-        />
       </td>
       <td className="px-1 py-1 text-right">
         <NumberCell
