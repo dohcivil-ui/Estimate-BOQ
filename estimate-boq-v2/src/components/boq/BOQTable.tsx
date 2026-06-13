@@ -5,7 +5,14 @@ import { useState } from 'react';
 import { useBOQStore } from '@/stores/boqStore';
 import { useMeasurementStore } from '@/stores/measurementStore';
 import { adjustedQuantity, formatCurrency, rowAmount } from '@/core/boqCalc';
-import type { BOQItem } from '@/types/boq';
+import type { BOQItem, Discipline } from '@/types/boq';
+import { DISCIPLINE_LABELS } from '@/types/ai';
+
+type RowItem = BOQItem & { discipline: Discipline };
+
+/** label หมวด = discipline ของ group (auto) — fallback ค่าดิบถ้าไม่มีใน labels */
+const disciplineLabel = (d: string): string =>
+  (DISCIPLINE_LABELS as Record<string, string>)[d] ?? d;
 
 const SOURCE_LABEL: Record<BOQItem['source'], { text: string; color: string }> = {
   manual: { text: 'มือ', color: 'text-ink-muted' },
@@ -15,7 +22,10 @@ const SOURCE_LABEL: Record<BOQItem['source'], { text: string; color: string }> =
 };
 
 export function BOQTable() {
-  const items = useBOQStore((s) => s.items);
+  const groups = useBOQStore((s) => s.disciplineGroups);
+  const items: RowItem[] = groups.flatMap((g) =>
+    g.items.map((it) => ({ ...it, discipline: g.discipline })),
+  );
   const update = useBOQStore((s) => s.update);
   const remove = useBOQStore((s) => s.remove);
   const selectMeasurement = useMeasurementStore((s) => s.select);
@@ -78,7 +88,7 @@ function BOQRow({
   onRemove,
   onJumpToMeasurement,
 }: {
-  item: BOQItem;
+  item: RowItem;
   idx: number;
   onUpdate: (patch: Partial<BOQItem>) => void;
   onRemove: () => void;
@@ -93,11 +103,12 @@ function BOQRow({
     <tr className={`border-t border-bg-border ${bg} hover:bg-bg-hover`}>
       <td className="px-1 py-1 text-center text-ink-muted">{idx + 1}</td>
       <td className="px-1 py-1">
-        <Cell
-          value={item.category}
-          onCommit={(v) => onUpdate({ category: v })}
-          className="text-ink-secondary"
-        />
+        <span
+          className="block truncate px-1 py-0.5 text-ink-secondary"
+          title={`category: ${item.category}`}
+        >
+          {disciplineLabel(item.discipline)}
+        </span>
       </td>
       <td className="px-1 py-1">
         <Cell
