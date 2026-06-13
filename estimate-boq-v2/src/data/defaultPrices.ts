@@ -16,6 +16,7 @@
  *   - concrete labor = อาคารชั้นเดียว (421) · อาคารหลายชั้น = 522 (ผูกกับ project.floors ภายหลัง)
  */
 import type { PriceKey, UnitPrice } from '@/services/compute/footingCompute';
+import type { MaterialPriceLike } from '@/services/priceResolver';
 import { LABOR_PRESETS_W809 } from '@/core/wage809';
 
 /** ดึง rate ว.809 จาก preset id (single source) */
@@ -32,3 +33,15 @@ export const DEFAULT_PRICES: Partial<Record<PriceKey, UnitPrice>> = {
   formwork_m2: { material: 315, labor: w809('formwork') }, // 163
   rebar_kg: { material: 9.9, labor: w809('rebar-medium') / 1000 }, // 3.9 บ./กก. (3900/ตัน)
 };
+
+/**
+ * MATERIAL_BASELINE — ราคาวัสดุ baseline แบบ name-based (consumable ที่ core ไม่มี PriceKey)
+ *  - ที่มา: ราคากลางอ้างอิง สพฐ. (pr4 CSV)
+ *  - merge ใน syncBoqPrices: ราคาจังหวัด (material_prices/TPSO) ชนะ baseline นี้
+ *  - resolver จับคู่ด้วย name+unit (itemNameMatch) → item ต้องเป็น prefix ของชื่อ row BOQ
+ *  - ไม้เคร่า: เว้นไว้ก่อน — row ออกหน่วย ม. แต่ สพฐ. คิด ลบ.ฟ. (รอ C6 เปลี่ยนหน่วย+ใส่ 285)
+ */
+export const MATERIAL_BASELINE: MaterialPriceLike[] = [
+  { item: 'ลวดผูกเหล็ก', unit: 'กก.', price: 15 },
+  { item: 'ตะปู', unit: 'กก.', price: 15 },
+];

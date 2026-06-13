@@ -14,6 +14,9 @@ import type { BOQItem } from '@/types/boq';
 import type { AdminMaterialPrice } from './adminApi';
 import type { LaborPreset } from '@/core/wage809';
 
+/** ราคาวัสดุขั้นต่ำที่ resolver ใช้ (province AdminMaterialPrice หรือ baseline สพฐ.) */
+export type MaterialPriceLike = Pick<AdminMaterialPrice, 'item' | 'unit' | 'price'>;
+
 /** substring match สองทาง (single source — SyncPricesModal จะ import ตัวนี้) */
 export function itemNameMatch(a: string, b: string): boolean {
   const x = a.trim().toLowerCase();
@@ -28,7 +31,7 @@ export interface PriceUpdate {
 }
 
 export interface ResolveSources {
-  materialPrices: AdminMaterialPrice[];
+  materialPrices: MaterialPriceLike[];
   laborPresets: LaborPreset[];
 }
 
