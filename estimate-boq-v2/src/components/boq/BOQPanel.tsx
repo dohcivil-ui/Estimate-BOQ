@@ -17,6 +17,7 @@ import {
 import { ProjectMetaForm } from './ProjectMetaForm';
 import { BOQTable } from './BOQTable';
 import { Por4Table } from './Por4Table';
+import { Por456View } from './Por456Summary';
 import { AddPresetMenu } from './AddPresetMenu';
 import { AIImportModal } from './AIImportModal';
 import { GPTExportModal } from './GPTExportModal';
@@ -25,6 +26,15 @@ import { SyncPricesModal } from './SyncPricesModal';
 import { exportBOQToExcel } from '@/services/excelExport';
 import { exportGovBOQ, type GovExportMode } from '@/services/govExcelExport';
 import { printBOQ } from '@/services/printPdf';
+
+type BOQView = 'edit' | 'por4' | 'por5' | 'por6';
+
+const VIEW_TABS: Array<{ id: BOQView; label: string }> = [
+  { id: 'edit', label: '✏️ แก้ไข BOQ' },
+  { id: 'por4', label: '📑 ปร.4' },
+  { id: 'por5', label: '📊 ปร.5' },
+  { id: 'por6', label: '📋 ปร.6' },
+];
 
 export function BOQPanel() {
   const items = useBOQStore((s) => s.items);
@@ -44,7 +54,7 @@ export function BOQPanel() {
   const [showSyncPrices, setShowSyncPrices] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
-  const [view, setView] = useState<'edit' | 'por4'>('edit');
+  const [view, setView] = useState<BOQView>('edit');
 
   const totals = totalsByKind(items);
   const direct = directCostTotal(items);
@@ -228,31 +238,23 @@ export function BOQPanel() {
         </div>
       )}
 
-      {/* toggle มุมมอง: แก้ไข BOQ | ปร.4 */}
+      {/* toggle มุมมอง: แก้ไข BOQ | ปร.4 | ปร.5 | ปร.6 */}
       <div className="flex items-center justify-between gap-2" data-print-hide>
-        <div className="inline-flex rounded border border-bg-border bg-bg-raised p-0.5">
-          <button
-            type="button"
-            onClick={() => setView('edit')}
-            className={`rounded px-3 py-1 text-xs transition-colors ${
-              view === 'edit'
-                ? 'bg-accent/20 font-medium text-accent'
-                : 'text-ink-secondary hover:text-ink-primary'
-            }`}
-          >
-            ✏️ แก้ไข BOQ
-          </button>
-          <button
-            type="button"
-            onClick={() => setView('por4')}
-            className={`rounded px-3 py-1 text-xs transition-colors ${
-              view === 'por4'
-                ? 'bg-accent/20 font-medium text-accent'
-                : 'text-ink-secondary hover:text-ink-primary'
-            }`}
-          >
-            📑 ปร.4
-          </button>
+        <div className="inline-flex flex-wrap rounded border border-bg-border bg-bg-raised p-0.5">
+          {VIEW_TABS.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setView(t.id)}
+              className={`rounded px-3 py-1 text-xs transition-colors ${
+                view === t.id
+                  ? 'bg-accent/20 font-medium text-accent'
+                  : 'text-ink-secondary hover:text-ink-primary'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
         </div>
         {view === 'edit' && (
           <div className="flex items-center gap-3 text-[10px] text-ink-muted">
@@ -268,7 +270,10 @@ export function BOQPanel() {
         )}
       </div>
 
-      {view === 'edit' ? <BOQTable /> : <Por4Table />}
+      {view === 'edit' && <BOQTable />}
+      {view === 'por4' && <Por4Table />}
+      {view === 'por5' && <Por456View mode="por5" />}
+      {view === 'por6' && <Por456View mode="por6" />}
 
       {view === 'edit' && items.length > 0 && (
         <div
