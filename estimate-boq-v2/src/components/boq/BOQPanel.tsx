@@ -34,6 +34,8 @@ export function BOQPanel() {
   const canUndo = useBOQStore((s) => s.past.length > 0);
   const canRedo = useBOQStore((s) => s.future.length > 0);
   const measurements = useMeasurementStore((s) => s.measurements);
+  const priceSyncWarnings = useBOQStore((s) => s.priceSyncWarnings);
+  const clearPriceWarnings = useBOQStore((s) => s.setPriceSyncWarnings);
 
   const [showAIImport, setShowAIImport] = useState(false);
   const [showGPTExport, setShowGPTExport] = useState(false);
@@ -197,6 +199,32 @@ export function BOQPanel() {
           )}
         </span>
       </div>
+
+      {priceSyncWarnings.length > 0 && (
+        <div
+          className="rounded border border-warning/40 bg-warning/10 p-2 text-xs text-warning"
+          data-print-hide
+        >
+          <div className="mb-1 flex items-center justify-between">
+            <span className="font-semibold">
+              ⚠️ ราคา/ค่าแรง {priceSyncWarnings.length} รายการต้องตรวจ
+            </span>
+            <button
+              type="button"
+              onClick={() => clearPriceWarnings([])}
+              className="text-warning/70 hover:text-warning"
+              aria-label="ปิด"
+            >
+              ✕
+            </button>
+          </div>
+          <ul className="max-h-32 list-disc space-y-0.5 overflow-y-auto pl-4">
+            {priceSyncWarnings.map((w, i) => (
+              <li key={i}>{w}</li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <BOQTable />
 
