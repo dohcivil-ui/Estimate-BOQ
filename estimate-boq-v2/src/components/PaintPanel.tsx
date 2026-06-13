@@ -24,6 +24,7 @@ import { useAIReferenceStore } from '@/stores/aiReferenceStore';
 import { getMarkColor } from '@/services/markColors';
 import { ocrAt, parseMarks, isOcrReady } from '@/services/labelOcr';
 import { buildBOQ } from '@/services/compute/buildBOQ';
+import { DEFAULT_PRICES } from '@/data/defaultPrices';
 import { importItemsToBoq } from '@/services/aiImportToBoq';
 import { analyzeDimensions, buildReferenceImage } from '@/services/aiAnalyze';
 import { MarkDimsDialog } from '@/components/MarkDimsDialog';
@@ -202,7 +203,7 @@ export function PaintPanel() {
     () =>
       memberInputs.length > 0 &&
       (Object.keys(markDims).length > 0 || grid != null)
-        ? buildBOQ({ extract: [], members: memberInputs, markDims, ...(grid ? { grid } : {}) })
+        ? buildBOQ({ extract: [], members: memberInputs, markDims, prices: DEFAULT_PRICES, ...(grid ? { grid } : {}) })
         : null,
     [memberInputs, markDims, grid],
   );

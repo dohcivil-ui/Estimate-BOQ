@@ -28,6 +28,7 @@ import { buildUserMessage, sendChatMessage } from '@/services/aiChat';
 import { buildTagTally } from '@/services/markParse';
 import { importItemsToBoq } from '@/services/aiImportToBoq';
 import { buildBOQ } from '@/services/compute/buildBOQ';
+import { DEFAULT_PRICES } from '@/data/defaultPrices';
 import {
   DEFAULT_PRESET,
   fillPagePlaceholders,
@@ -341,6 +342,7 @@ function InitialAnalysisBubble({ analysis }: { analysis: AIAnalysis }) {
     const r = buildBOQ({
       extract: result.items ?? [],
       members: members.length > 0 ? members : undefined,
+      prices: DEFAULT_PRICES,
     });
     if (r.warnings.length > 0)
       console.info('[buildBOQ] ⚠️ ต้องยืนยัน:\n' + r.warnings.join('\n'));
