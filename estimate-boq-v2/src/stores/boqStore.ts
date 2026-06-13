@@ -24,6 +24,8 @@ interface BOQState {
   selectedId: string | null;
   past: DisciplineGroup[][];
   future: DisciplineGroup[][];
+  /** คำเตือนจาก syncBoqPrices รอบล่าสุด (โชว์ banner C2b) */
+  priceSyncWarnings: string[];
 
   // ─── reactive (blueprint) ───
   /** AI วิเคราะห์เสร็จ → REPLACE items ของหน้านั้น (ไม่กระทบหน้าอื่น) */
@@ -58,6 +60,8 @@ interface BOQState {
   removeAll: () => void;
   select: (id: string | null) => void;
   reorder: (fromIdx: number, toIdx: number) => void;
+  /** เก็บคำเตือนราคา (เรียกจาก syncBoqPrices) */
+  setPriceSyncWarnings: (warnings: string[]) => void;
 
   undo: () => void;
   redo: () => void;
@@ -122,6 +126,7 @@ export const useBOQStore = create<BOQState>((set, get) => ({
   selectedId: null,
   past: [],
   future: [],
+  priceSyncWarnings: [],
 
   // ──────────────────────────────────────────────────────────────
   // 🔑 AI วิเคราะห์เสร็จ → REPLACE ทั้งหน้า (ลบเก่า ใส่ใหม่ ไม่ append)
@@ -261,6 +266,8 @@ export const useBOQStore = create<BOQState>((set, get) => ({
     }),
 
   select: (id) => set({ selectedId: id }),
+
+  setPriceSyncWarnings: (warnings) => set({ priceSyncWarnings: warnings }),
 
   reorder: (fromIdx, toIdx) =>
     set((s) => {

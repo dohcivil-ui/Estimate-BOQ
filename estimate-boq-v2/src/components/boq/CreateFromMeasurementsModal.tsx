@@ -5,6 +5,7 @@
 import { useMemo, useState } from 'react';
 import { useMeasurementStore } from '@/stores/measurementStore';
 import { useBOQStore } from '@/stores/boqStore';
+import { scheduleSyncBoqPrices } from '@/services/syncBoqPrices';
 import {
   LABOR_PRESETS_W809,
   type LaborPreset,
@@ -77,6 +78,7 @@ export function CreateFromMeasurementsModal({ onClose }: Props) {
       return;
     }
     addMany(newItems);
+    scheduleSyncBoqPrices();
     onClose();
   };
 

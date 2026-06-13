@@ -13,6 +13,7 @@ import type {
 import type { Discipline } from '@/types/boq';
 import { useBOQStore } from '@/stores/boqStore';
 import { itemToBOQItems } from './aiToBoq';
+import { scheduleSyncBoqPrices } from './syncBoqPrices';
 
 /** map AIDiscipline → BOQ Discipline (ตอนนี้ map 1:1 — 4 ตัวตรงกัน) */
 function toBoqDiscipline(d: AIDiscipline): Discipline {
@@ -70,6 +71,7 @@ export function importItemsToBoq(
       .addItemsToPage(opts.pageId, discipline, opts.pageName, boqRows);
   }
 
+  if (created.length > 0) scheduleSyncBoqPrices();
   return { boqIds: created, skippedItems: skipped };
 }
 
