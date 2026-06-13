@@ -39,9 +39,10 @@ export const DEFAULT_PRICES: Partial<Record<PriceKey, UnitPrice>> = {
  *  - ที่มา: ราคากลางอ้างอิง สพฐ. (pr4 CSV)
  *  - merge ใน syncBoqPrices: ราคาจังหวัด (material_prices/TPSO) ชนะ baseline นี้
  *  - resolver จับคู่ด้วย name+unit (itemNameMatch) → item ต้องเป็น prefix ของชื่อ row BOQ
- *  - ไม้เคร่า: เว้นไว้ก่อน — row ออกหน่วย ม. แต่ สพฐ. คิด ลบ.ฟ. (รอ C6 เปลี่ยนหน่วย+ใส่ 285)
+ *  - ไม้เคร่า: หน่วย ลบ.ฟ. (C6 เปลี่ยน buildBOQ ม.→ลบ.ฟ. แล้ว) — สพฐ. 285 บ./ลบ.ฟ.
  */
 export const MATERIAL_BASELINE: MaterialPriceLike[] = [
   { item: 'ลวดผูกเหล็ก', unit: 'กก.', price: 15 },
   { item: 'ตะปู', unit: 'กก.', price: 15 },
+  { item: 'ไม้เคร่า/ตงยึดไม้แบบ', unit: 'ลบ.ฟ.', price: 285 },
 ];

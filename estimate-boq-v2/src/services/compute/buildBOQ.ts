@@ -144,8 +144,8 @@ function footingToItem(
   if (con.tieWire_kg > 0)
     subs.push(sub('ลวดผูกเหล็ก', con.tieWire_kg, 'กก.', 'material'));
   if (con.nails_kg > 0) subs.push(sub('ตะปู', con.nails_kg, 'กก.', 'material'));
-  if (con.waler_m > 0)
-    subs.push(sub('ไม้เคร่า/ตงยึดไม้แบบ', con.waler_m, 'ม.', 'material'));
+  if (con.waler_ft3 > 0)
+    subs.push(sub('ไม้เคร่า/ตงยึดไม้แบบ', con.waler_ft3, 'ลบ.ฟ.', 'material'));
 
   return {
     category: 'ฐานราก',
@@ -183,8 +183,8 @@ function beamToItem(
   if (con.tieWire_kg > 0)
     subs.push(sub('ลวดผูกเหล็ก', con.tieWire_kg, 'กก.', 'material'));
   if (con.nails_kg > 0) subs.push(sub('ตะปู', con.nails_kg, 'กก.', 'material'));
-  if (con.waler_m > 0)
-    subs.push(sub('ไม้เคร่า/ตงยึดไม้แบบ', con.waler_m, 'ม.', 'material'));
+  if (con.waler_ft3 > 0)
+    subs.push(sub('ไม้เคร่า/ตงยึดไม้แบบ', con.waler_ft3, 'ลบ.ฟ.', 'material'));
 
   return {
     category: 'งานคาน',
