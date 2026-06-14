@@ -108,6 +108,29 @@ describe('buildPor456ViewModel', () => {
     expect(vm.por6.total).toBe(vm.por5.approxAmount);
   });
 
+  it('5) golden งานโครงสร้างล้วน: directCost 9,646,704.50 → F ceil 1.2965 → ปร.5 12,506,000 (display = export)', () => {
+    // anchor v1: ยอดอาคาร 9,646,704.50 (อาคารเรียน 324ล./55-ข)
+    // → effectiveFactorF ceil = 1.2965 (ไม่ใช่ round 1.2964)
+    // → constructionCost 12,506,952.38 → floor1000 = 12,506,000 (ตรง govExcelVerify por5kNet)
+    const vm = buildPor456ViewModel({
+      groups: [
+        makeGroup([
+          // UNMAPPED passthrough: qtyFinal=ceil2dp(1)=1, amount=9,646,704.50 → directCost ตรง
+          makeItem({ name: 'รวมต้นทุนอาคาร', quantity: 1, unit: 'รวม', unitPrice: 9_646_704.5 }),
+        ]),
+      ],
+      factorFOverride: 0,
+      advancePct: 0,
+      retentionPct: 0,
+    });
+    expect(vm.por4.directCost).toBeCloseTo(9_646_704.5, 6);
+    expect(vm.factorF).toBe(1.2965);
+    expect(vm.por5.constructionCost).toBeCloseTo(12_506_952.38425, 4);
+    expect(vm.por5.constructionCostBaht).toBe(12_506_952);
+    expect(vm.por5.approxAmount).toBe(12_506_000);
+    expect(vm.por6.total).toBe(12_506_000);
+  });
+
   it('4) ส่ง warnings ของ ปร.4 ทะลุถึง view (เช่น CONSUMABLE_MISSING)', () => {
     // เหล็กเสริมล้วน ไม่มีลวดผูก → ปร.4 เตือน CONSUMABLE_MISSING
     const vm = buildPor456ViewModel({

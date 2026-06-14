@@ -1,14 +1,14 @@
 /**
- * Tests สำหรับ effectiveFactorF — round 4dp หลัง interpolate (ปร.5 ราชการ)
+ * Tests สำหรับ effectiveFactorF — ceil 4dp หลัง interpolate (ปร.5 ราชการ, ตรง master CEILING)
  */
 import { describe, it, expect } from 'vitest';
 import { effectiveFactorF } from './boqCalc';
 
-describe('effectiveFactorF — round 4dp', () => {
+describe('effectiveFactorF — ceil 4dp (ปัดขึ้น ตรง PDF/master)', () => {
   it('baseline ข) สพฐ. ห้องสมุด: 2,335,640 บาท adv=0 ret=0 → 1.3048', () => {
     // bracket 2ล F=1.3051 · bracket 5ล F=1.3020 · step 0.0031
     // ratio = (2.33564 − 2) / 3 = 0.11188 → F = 1.3051 + 0.11188×(−0.0031) = 1.304753172
-    // round 4dp → 1.3048
+    // ceil 4dp → 1.3048 (round ก็ได้ 1.3048 — ค่าเดิมคงอยู่)
     const f = effectiveFactorF(2_335_640, 0, 0, 0);
     expect(f).toBe(1.3048);
     // พิสูจน์: 2,335,640 × 1.3048 = 3,047,543.072
@@ -18,10 +18,18 @@ describe('effectiveFactorF — round 4dp', () => {
   it('baseline ก) 14,489,053.08 บาท adv=0 ret=0 → 1.2647 (CGD 2567 ในระบบ)', () => {
     // bracket 10ล F=1.2960 · bracket 15ล F=1.2611 · step 0.0349
     // ratio = (14.48905308 − 10) / 5 = 0.897810616 → F = 1.2960 + 0.8978×(−0.0349) = 1.264666...
-    // round 4dp → 1.2647
+    // ceil 4dp → 1.2647 (round ก็ได้ 1.2647 — ค่าเดิมคงอยู่)
     // (หมายเหตุ: ผู้ใช้ระบุ 1.2612 จากตารางคนละชุด — ตารางในระบบนี้ CGD 2567 ให้ค่านี้)
     const f = effectiveFactorF(14_489_053.08, 0, 0, 0);
     expect(f).toBe(1.2647);
+  });
+
+  it('golden ceil≠round: 9,646,704.50 บาท adv=0 ret=0 → 1.2965 (อาคารเรียน 324ล./55-ข, ตรง PDF)', () => {
+    // bracket 5ล F=1.3020 · bracket 10ล F=1.2960 · step 0.0060
+    // ratio = (9.6467045 − 5) / 5 = 0.9293409 → raw = 1.3020 − 0.9293409×0.0060 = 1.29642395
+    // ceil 4dp → 1.2965 (round จะได้ 1.2964 ผิด → ต่าง 1,000 บาทใน ปร.5/ปร.6)
+    const f = effectiveFactorF(9_646_704.5, 0, 0, 0);
+    expect(f).toBe(1.2965);
   });
 
   it('property: F ที่ปัดแล้ว = จำนวนเต็ม × 1e-4 (ไม่มีเลขที่ 5+ ทศนิยม)', () => {

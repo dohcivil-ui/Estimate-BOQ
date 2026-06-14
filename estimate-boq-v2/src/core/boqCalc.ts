@@ -16,14 +16,17 @@ const snapTo = (valid: number[], v: number): number =>
  *   - override > 0 → ใช้ค่าที่กรอกเอง
  *   - มิฉะนั้น → lookup จากตาราง CGD 2567 ตามค่างาน (บาท) + เงินล่วงหน้า/เงินประกัน
  *
- * round 4 ตำแหน่งทศนิยมหลัง interpolate — มาตรฐาน ปร.5 ราชการเก็บ F = 4dp
- * หลักฐาน 2 ชุดอิสระ:
- *   ข) สพฐ. ห้องสมุด: 2,335,640 บาท → 1.3051−(0.0031×335,640/3M) = 1.304753... → 1.3048
+ * ceil (ปัดขึ้น) 4 ตำแหน่งทศนิยมหลัง interpolate — ตรงกับ master CGD (CEILING(.,0.0001))
+ * และ PDF ราชการ → ค่า F ในแอป (จอ ปร.5) ตรงกับไฟล์ Excel ที่ export เป๊ะ
+ * (เดิมใช้ round → ต่ำกว่า 1 หลักในบางช่วง เช่น 9,646,704.50 → round 1.2964 vs ceil 1.2965
+ *  ทำให้ ปร.5/ปร.6 ต่างจาก export 1,000 บาท — ยืนยัน ceil โดยตาราง CGD + govExcelVerify)
+ * หลักฐาน 2 ชุดอิสระ (round กับ ceil ให้ค่าเท่ากันทั้งคู่ → ไม่กระทบ seed):
+ *   ข) สพฐ. ห้องสมุด: 2,335,640 บาท → 1.304753... → 1.3048
  *      พิสูจน์ 2,335,640 × 1.3048 = 3,047,543.072 ✓
- *   ก) ตัวอย่างอื่น (สพฐ. รายงาน 1.2612 จากตารางคนละชุด): ระบบนี้ใช้ CGD 2567
- *      ⇒ 14,489,053.08 บาท → 1.2960+0.8978×(1.2611−1.2960) = 1.264666... → 1.2647
+ *   ก) 14,489,053.08 บาท → 1.264666... → 1.2647 (CGD 2567)
  *
  * คืนค่าเดียวกับ sheet "Factor F" ใน gov export เพื่อให้ตัวเลขในแอปตรงกับตาราง
+ * (epsilon -1e-7 กัน float: exact bracket 1.3020 ที่ ×1e4 ได้ 13020.0000…2 ไม่ถูกปัดขึ้นผิดเป็น 1.3021)
  */
 export function effectiveFactorF(
   directCost: number,
@@ -38,7 +41,7 @@ export function effectiveFactorF(
     snapTo(VALID_RETENTION, retentionPct),
   );
   if (f == null) return 1;
-  return Math.round(f * 10000) / 10000;
+  return Math.ceil(f * 10000 - 1e-7) / 10000;
 }
 
 export interface FactorFBracketInput {
