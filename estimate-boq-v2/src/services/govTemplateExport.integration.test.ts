@@ -12,7 +12,10 @@
  */
 import { describe, it, expect } from 'vitest';
 import { readFile } from 'node:fs/promises';
+import { writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import ExcelJS from 'exceljs';
+import JSZip from 'jszip';
 import { buildPor456ViewModel } from './compute/por456ViewModel';
 import { factorFBracketFor } from '@/core/boqCalc';
 import { buildExportData } from './export/buildExportData';
@@ -20,6 +23,7 @@ import { verifyBoqInput } from './export/govExcelVerify';
 import { fillBoqTemplate } from './export/govExcelExport';
 import { stripUnsupportedParts } from './govTemplateExport';
 import type { BOQItem, DisciplineGroup } from '@/types/boq';
+import type { Por4Result, Por4Row } from './compute/por4Consolidate';
 
 const TEMPLATE = 'src/assets/templates/boq-master-cgd.xlsx';
 
@@ -112,5 +116,97 @@ describe('govTemplateExport — fill template ราชการจริง (�
 
     // meta: ชื่องาน (prefix 'งานก่อสร้าง  ' + ค่า)
     expect(String(ws.getCell('A3').value ?? '')).toContain('อาคารทดสอบ');
+  });
+});
+
+// ── helper: สร้าง Por4Row ครบ field (buildExportData ใช้ name/qtyFinal/unit/ราคา/materialKey/section/totalAmount) ──
+function por4Row(
+  p: Partial<Por4Row> & { name: string; materialKey: string },
+): Por4Row {
+  const qtyFinal = p.qtyFinal ?? 1;
+  const mU = p.materialUnitPrice;
+  const lU = p.laborUnitPrice;
+  const mA = mU != null ? qtyFinal * mU : undefined;
+  const lA = lU != null ? qtyFinal * lU : undefined;
+  return {
+    section: p.section ?? '1.1',
+    materialKey: p.materialKey,
+    name: p.name,
+    unit: p.unit ?? 'ลบ.ม.',
+    qtyNet: qtyFinal,
+    qtyAfterAllowance: qtyFinal,
+    qtyFinal,
+    materialUnitPrice: mU,
+    materialAmount: mA,
+    laborUnitPrice: lU,
+    laborAmount: lA,
+    totalAmount: (mA ?? 0) + (lA ?? 0),
+    sourceItemIds: [],
+  };
+}
+
+describe('[verify] structural fill → dump xlsx', () => {
+  // รายการงานโครงสร้างจริง ครอบทุก target section (materialKey ตรง cgdSectionMap)
+  //   1.2 = earth:* / sand:* / concrete:lean · 1.4 = formwork:* · 1.5 = concrete:* · 1.6 = rebar:*
+  const rows: Por4Row[] = [
+    por4Row({ name: 'ดินขุดหลุมฐานราก', materialKey: 'earth:excavation', unit: 'ลบ.ม.', qtyFinal: 130, laborUnitPrice: 181 }),
+    por4Row({ name: 'ทรายหยาบรองพื้น', materialKey: 'sand:bedding', unit: 'ลบ.ม.', qtyFinal: 12.5, materialUnitPrice: 250 }),
+    por4Row({ name: 'คอนกรีตหยาบรองก้นหลุม', materialKey: 'concrete:lean', unit: 'ลบ.ม.', qtyFinal: 5, materialUnitPrice: 1800 }),
+    por4Row({ name: 'ไม้แบบหล่อคอนกรีต', materialKey: 'formwork:panel', unit: 'ตร.ม.', qtyFinal: 80, materialUnitPrice: 285, laborUnitPrice: 163 }),
+    por4Row({ name: 'คอนกรีตฐานราก', materialKey: 'concrete:c2', unit: 'ลบ.ม.', qtyFinal: 45, materialUnitPrice: 2050, laborUnitPrice: 421 }),
+    por4Row({ name: 'เหล็กเสริม DB12', materialKey: 'rebar:DB12', unit: 'กก.', qtyFinal: 3200, materialUnitPrice: 9.9 }),
+  ];
+  const directCost = rows.reduce((s, r) => s + r.totalAmount, 0);
+  const por4: Por4Result = { rows, directCost, warnings: [] };
+
+  const bracket = factorFBracketFor(directCost, 0, 0)!;
+  const { data, warnings } = buildExportData({
+    por4,
+    meta: { projectName: 'อาคารทดสอบโครงสร้าง', location: 'อ.เมือง', province: 'สกลนคร' },
+    factorF: bracket,
+    conditions: { loanInterest: 0.07, vat: 0.07, equipmentVat: 0.07 },
+  });
+
+  it('buildExportData: ทุกรายการลง code 2 (1.2/1.4/1.5/1.6) ไม่มี UNMAPPED + reconcile ตรง', () => {
+    expect(warnings.filter((w) => w.startsWith('UNMAPPED_CGD'))).toHaveLength(0);
+    expect(warnings.filter((w) => w.startsWith('EXPORT_RECONCILE'))).toHaveLength(0);
+    const subs = (data.buildingItems[2] ?? [])
+      .filter((r) => r.type === 'sub')
+      .map((r) => (r.type === 'sub' ? r.name : ''));
+    expect(subs.some((s) => s.startsWith('1.2'))).toBe(true);
+    expect(subs.some((s) => s.startsWith('1.4'))).toBe(true);
+    expect(subs.some((s) => s.startsWith('1.5'))).toBe(true);
+    expect(subs.some((s) => s.startsWith('1.6'))).toBe(true);
+  });
+
+  it('fill → dump _verify-output.xlsx + assert orphan rel (drawings/externalLink)', async () => {
+    const raw = await readFile(TEMPLATE);
+    const stripped = await stripUnsupportedParts(
+      raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength),
+    );
+    const out = await fillBoqTemplate(stripped, data);
+
+    // โหลดได้ (ExcelJS ไม่ throw) + ดัมพ์ไฟล์ไว้ตรวจด้วยตา
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(out);
+    expect(wb.getWorksheet('ปร4.อาคาร')).toBeDefined();
+
+    const outPath = resolve('_verify-output.xlsx');
+    writeFileSync(outPath, new Uint8Array(out));
+    console.info(`[verify] dump: ${outPath}`);
+
+    // ── assertion orphan-rel: output ต้องไม่มี rel ค้างของรูป/external link ──
+    const zip = await JSZip.loadAsync(out);
+    for (const name of Object.keys(zip.files)) {
+      if (/^xl\/worksheets\/_rels\/sheet\d+\.xml\.rels$/.test(name)) {
+        const xml = await zip.files[name]!.async('string');
+        expect(xml, `${name} มี orphan rel ../drawings/`).not.toContain('../drawings/');
+      }
+    }
+    const wbRels = zip.file('xl/_rels/workbook.xml.rels');
+    if (wbRels) {
+      const xml = await wbRels.async('string');
+      expect(xml, 'workbook.xml.rels มี orphan externalLink').not.toContain('externalLink');
+    }
   });
 });

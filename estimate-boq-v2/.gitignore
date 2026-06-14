@@ -23,6 +23,9 @@ pnpm-debug.log*
 # build artifacts
 *.tsbuildinfo
 
+# verify export dump (local only)
+_verify-output.xlsx
+
 # supabase CLI temp
 supabase/.temp/
 
