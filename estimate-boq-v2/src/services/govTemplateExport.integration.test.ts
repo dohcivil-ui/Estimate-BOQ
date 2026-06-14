@@ -21,7 +21,7 @@ import { factorFBracketFor } from '@/core/boqCalc';
 import { buildExportData } from './export/buildExportData';
 import { verifyBoqInput } from './export/govExcelVerify';
 import { fillBoqTemplate } from './export/govExcelExport';
-import { stripUnsupportedParts } from './govTemplateExport';
+import { stripUnsupportedParts, reorderSheetPrChildren } from './govTemplateExport';
 import type { BOQItem, DisciplineGroup } from '@/types/boq';
 import type { Por4Result, Por4Row } from './compute/por4Consolidate';
 
@@ -184,12 +184,15 @@ describe('[verify] structural fill → dump xlsx', () => {
     const stripped = await stripUnsupportedParts(
       raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength),
     );
-    const out = await fillBoqTemplate(stripped, data);
+    const filled = await fillBoqTemplate(stripped, data);
+    const out = await reorderSheetPrChildren(filled);
 
     // โหลดได้ (ExcelJS ไม่ throw) + ดัมพ์ไฟล์ไว้ตรวจด้วยตา
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.load(out);
     expect(wb.getWorksheet('ปร4.อาคาร')).toBeDefined();
+    expect(wb.getWorksheet('ปร.6')).toBeDefined();
+    expect(wb.getWorksheet('ปร 5.ครุภัณฑ์')).toBeDefined();
 
     const outPath = resolve('_verify-output.xlsx');
     writeFileSync(outPath, new Uint8Array(out));
@@ -201,6 +204,20 @@ describe('[verify] structural fill → dump xlsx', () => {
       if (/^xl\/worksheets\/_rels\/sheet\d+\.xml\.rels$/.test(name)) {
         const xml = await zip.files[name]!.async('string');
         expect(xml, `${name} มี orphan rel ../drawings/`).not.toContain('../drawings/');
+      }
+      if (/^xl\/worksheets\/sheet\d+\.xml$/.test(name)) {
+        const xml = await zip.files[name]!.async('string');
+        const sp = xml.match(/<sheetPr\b[^>]*>[\s\S]*?<\/sheetPr>/)?.[0];
+        if (sp) {
+          const iOutline = sp.indexOf('<outlinePr');
+          const iPageSetup = sp.indexOf('<pageSetUpPr');
+          if (iOutline !== -1 && iPageSetup !== -1) {
+            expect(
+              iOutline,
+              `${name}: <outlinePr> ต้องมาก่อน <pageSetUpPr> (CT_SheetPr sequence)`,
+            ).toBeLessThan(iPageSetup);
+          }
+        }
       }
     }
     const wbRels = zip.file('xl/_rels/workbook.xml.rels');

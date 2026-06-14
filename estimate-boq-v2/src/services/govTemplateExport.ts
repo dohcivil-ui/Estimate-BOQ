@@ -146,6 +146,52 @@ export async function stripUnsupportedParts(buffer: ArrayBuffer): Promise<ArrayB
   return zip.generateAsync({ type: 'arraybuffer' });
 }
 
+const SHEET_PR_ORDER = ['tabColor', 'outlinePr', 'pageSetUpPr'] as const;
+
+function sheetPrTagRe(tag: string): RegExp {
+  return new RegExp(`<${tag}\\b[^>]*?(?:/>|>[\\s\\S]*?</${tag}>)`);
+}
+
+/**
+ * จัดลำดับ child ใน <sheetPr> ให้ตรง OOXML CT_SheetPr: tabColor → outlinePr → pageSetUpPr
+ * ExcelJS 4.4.0 เขียน pageSetUpPr ก่อน outlinePr (ผิด schema) → Excel ลบ ปร.6/ครุภัณฑ์
+ */
+export async function reorderSheetPrChildren(buffer: ArrayBuffer): Promise<ArrayBuffer> {
+  const zip = await JSZip.loadAsync(buffer);
+  let touched = false;
+  for (const name of Object.keys(zip.files)) {
+    if (!/^xl\/worksheets\/sheet\d+\.xml$/.test(name)) continue;
+    const xml = await zip.files[name]!.async('string');
+    const next = xml.replace(
+      /<sheetPr\b([^>]*)>([\s\S]*?)<\/sheetPr>/g,
+      (_full: string, attrs: string, inner: string): string => {
+        const picked: Record<string, string> = {};
+        let rest = inner;
+        for (const tag of SHEET_PR_ORDER) {
+          const m = rest.match(sheetPrTagRe(tag));
+          if (m) {
+            picked[tag] = m[0];
+            rest = rest.replace(sheetPrTagRe(tag), '');
+          }
+        }
+        rest = rest.trim();
+        const ordered =
+          rest +
+          (picked.tabColor ?? '') +
+          (picked.outlinePr ?? '') +
+          (picked.pageSetUpPr ?? '');
+        return `<sheetPr${attrs}>${ordered}</sheetPr>`;
+      },
+    );
+    if (next !== xml) {
+      zip.file(name, next);
+      touched = true;
+    }
+  }
+  if (!touched) return buffer;
+  return zip.generateAsync({ type: 'arraybuffer' });
+}
+
 /**
  * โหลด master template + กรอกข้อมูล + ดาวน์โหลด (async)
  * เรียกหลังผู้ใช้ยืนยัน (prep.ok === true เท่านั้น)
@@ -162,7 +208,9 @@ export async function downloadGovTemplate(
   const masterBuffer = await stripUnsupportedParts(raw);
 
   const { fillBoqTemplate } = await import('@/services/export/govExcelExport');
-  const out = await fillBoqTemplate(masterBuffer, data);
+  const filled = await fillBoqTemplate(masterBuffer, data);
+  // FIX: ExcelJS 4.4.0 เขียน <sheetPr> child ผิดลำดับ → Excel ลบ ปร.6/ครุภัณฑ์
+  const out = await reorderSheetPrChildren(filled);
 
   const blob = new Blob([out], {
     type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
