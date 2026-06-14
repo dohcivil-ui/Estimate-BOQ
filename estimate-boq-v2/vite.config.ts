@@ -3,6 +3,9 @@ import react from '@vitejs/plugin-react';
 import { fileURLToPath, URL } from 'node:url';
 
 export default defineConfig({
+  // deploy ใต้ subpath /estimate/ บน doh-thai.com
+  // asset ทั้งหมด (pdf.worker, template xlsx ที่ import ?url) จะถูก prefix อัตโนมัติ
+  base: '/estimate/',
   plugins: [react()],
   resolve: {
     alias: {
