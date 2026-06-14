@@ -23,6 +23,19 @@ export function LoginPage() {
 
   return (
     <div className="flex h-screen w-screen items-center justify-center bg-bg-base p-6">
+      <a
+        href="/"
+        style={{
+          position: 'fixed', top: 16, left: 16, zIndex: 50,
+          display: 'inline-flex', alignItems: 'center', gap: 6,
+          padding: '8px 14px', fontSize: 14, fontWeight: 500,
+          color: '#374151', background: 'rgba(255,255,255,0.95)',
+          border: '1px solid #e5e7eb', borderRadius: 8,
+          textDecoration: 'none', boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+        }}
+      >
+        <span aria-hidden>←</span> กลับหน้าหลัก
+      </a>
       <div className="w-full max-w-md rounded-lg border border-bg-border bg-bg-panel p-8 shadow-2xl">
         <div className="mb-6 text-center">
           <h1 className="mb-1 text-2xl font-bold text-ink-primary">
