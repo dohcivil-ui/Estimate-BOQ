@@ -22,9 +22,9 @@ import {
   type VerifyIssue,
 } from '@/services/export/govExcelVerify';
 import type { BoqExportData } from '@/services/export/govExcelExport';
-
-/** path ของ master template (เสิร์ฟจาก public/ — เคารพ base path ตอน deploy /estimate/) */
-const MASTER_URL = `${import.meta.env.BASE_URL}boq-master.xlsx`;
+import JSZip from 'jszip';
+// master template ราชการ 7 ชีต (โหลดเป็น asset ผ่าน Vite — เคารพ base path ตอน deploy)
+import boqMasterUrl from '@/assets/templates/boq-master-cgd.xlsx?url';
 
 export interface GovTemplatePrep {
   /** พร้อมดาวน์โหลดไหม (ไม่มี error จาก verify และมี bracket Factor F) */
@@ -112,6 +112,41 @@ export function prepareGovTemplateExport(input: GovTemplateInput): GovTemplatePr
 }
 
 /**
+ * ถอด drawings/media/externalLinks ออกจาก master ก่อน load
+ * ─────────────────────────────────────────────────────────────────────────
+ * ExcelJS 4.4.0 reconcile รูป/external link ไม่ได้ (`Cannot read … 'anchors'`)
+ * รูปอยู่บนชีต "factor F" (ซ่อน) เท่านั้น → ถอดออกไม่กระทบฟอร์มพิมพ์ ปร.4/5/6
+ * + ลบ orphan reference (<drawing/> ในชีต, <externalReferences> ใน workbook) กัน load error
+ */
+export async function stripUnsupportedParts(buffer: ArrayBuffer): Promise<ArrayBuffer> {
+  const zip = await JSZip.loadAsync(buffer);
+  let touched = false;
+  for (const name of Object.keys(zip.files)) {
+    if (/^xl\/(drawings|media|externalLinks)\//.test(name)) {
+      zip.remove(name);
+      touched = true;
+    }
+  }
+  if (!touched) return buffer;
+
+  const scrub = async (path: string, patterns: RegExp[]): Promise<void> => {
+    const f = zip.file(path);
+    if (!f) return;
+    let xml = await f.async('string');
+    for (const re of patterns) xml = xml.replace(re, '');
+    zip.file(path, xml);
+  };
+  for (const path of Object.keys(zip.files)) {
+    if (/^xl\/worksheets\/sheet\d+\.xml$/.test(path)) {
+      await scrub(path, [/<drawing[^>]*\/>/g]);
+    }
+  }
+  await scrub('xl/workbook.xml', [/<externalReferences>[\s\S]*?<\/externalReferences>/g]);
+
+  return zip.generateAsync({ type: 'arraybuffer' });
+}
+
+/**
  * โหลด master template + กรอกข้อมูล + ดาวน์โหลด (async)
  * เรียกหลังผู้ใช้ยืนยัน (prep.ok === true เท่านั้น)
  */
@@ -119,13 +154,12 @@ export async function downloadGovTemplate(
   data: BoqExportData,
   fileName: string,
 ): Promise<void> {
-  const res = await fetch(MASTER_URL);
+  const res = await fetch(boqMasterUrl);
   if (!res.ok) {
-    throw new Error(
-      `โหลด template ไม่สำเร็จ (${res.status}) — วางไฟล์ boq-master.xlsx ไว้ที่ public/ ก่อน (path: ${MASTER_URL})`,
-    );
+    throw new Error(`โหลด template ไม่สำเร็จ (${res.status}) — path: ${boqMasterUrl}`);
   }
-  const masterBuffer = await res.arrayBuffer();
+  const raw = await res.arrayBuffer();
+  const masterBuffer = await stripUnsupportedParts(raw);
 
   const { fillBoqTemplate } = await import('@/services/export/govExcelExport');
   const out = await fillBoqTemplate(masterBuffer, data);

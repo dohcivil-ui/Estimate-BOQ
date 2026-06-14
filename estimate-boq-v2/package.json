@@ -19,6 +19,7 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",
     "exceljs": "^4.4.0",
+    "jszip": "^3.10.1",
     "konva": "^9.3.16",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^4.6.82",
