@@ -42,3 +42,25 @@ describe('guards', () => {
     expect(verifyBoqInput(d).issues.some(x => x.code === 'FACTORF_BRACKET')).toBe(true);
   });
 });
+
+describe('Factor F flat clamp (ว.499)', () => {
+  // ≤0.5M: factorFBracketFor คืน {rangeLow:500000, rangeHigh:1000000, fLow=fHigh=1.3091}
+  it('ต้นทุน <500k → ไม่ throw FACTORF_BRACKET + factorF=1.3091', () => {
+    const d = structuredClone(ref);
+    d.buildingItems[1] = [{ type: 'item', name: 'รวม', qty: 1, unit: 'รวม', matUnit: 58000, laborUnit: 0 }];
+    d.factorF = { advanceRate: 0, retentionRate: 0, rangeLow: 500000, rangeHigh: 1000000, fLow: 1.3091, fHigh: 1.3091 };
+    const r = verifyBoqInput(d);
+    expect(r.issues.some(x => x.code === 'FACTORF_BRACKET')).toBe(false);
+    expect(r.expect.factorFCeil).toBe(1.3091);
+  });
+  // >500M: bracket สุดท้าย {rangeLow:500000000, rangeHigh:9999000000, fLow=fHigh=1.1805}
+  // (ขอบบนแทบไม่ trip guard จริงเพราะ rangeHigh=9999M — เทสต์นี้ยืนยันค่า clamp = 1.1805 เป็นหลัก)
+  it('ต้นทุน >500M → ไม่ throw + factorF=1.1805', () => {
+    const d = structuredClone(ref);
+    d.buildingItems[1] = [{ type: 'item', name: 'รวม', qty: 1, unit: 'รวม', matUnit: 600000000, laborUnit: 0 }];
+    d.factorF = { advanceRate: 0, retentionRate: 0, rangeLow: 500000000, rangeHigh: 9999000000, fLow: 1.1805, fHigh: 1.1805 };
+    const r = verifyBoqInput(d);
+    expect(r.issues.some(x => x.code === 'FACTORF_BRACKET')).toBe(false);
+    expect(r.expect.factorFCeil).toBe(1.1805);
+  });
+});

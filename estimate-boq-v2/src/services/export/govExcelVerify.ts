@@ -102,7 +102,10 @@ export function verifyBoqInput(data: BoqExportData, opts: VerifyOptions = {}): V
   const f = data.factorF;
   if (!(f.rangeLow < f.rangeHigh))
     issues.push({ level: 'error', code: 'FACTORF_RANGE', where: 'factorF', msg: `rangeLow ${f.rangeLow} ต้อง < rangeHigh ${f.rangeHigh}` });
-  if (buildingNet < f.rangeLow || buildingNet > f.rangeHigh)
+  // flat clamp (ว.499: ≤0.5M หรือ >500M): fLow===fHigh → สูตร master ให้ค่าคงที่ extrapolate ไม่ได้ จึงข้าม guard
+  // (กัน false-positive ตอนต้นทุน <500k ที่ bracket rangeLow ถูก snap เป็น 500,000)
+  const isFlatClamp = f.fLow === f.fHigh;
+  if (!isFlatClamp && (buildingNet < f.rangeLow || buildingNet > f.rangeHigh))
     issues.push({ level: 'error', code: 'FACTORF_BRACKET', where: 'factorF', msg: `ค่างานต้นทุน ${buildingNet.toLocaleString()} อยู่นอกช่วง [${f.rangeLow.toLocaleString()}, ${f.rangeHigh.toLocaleString()}] → interpolate กลายเป็น extrapolate` });
 
   // interpolate ตรงสูตร master: D − ((D−E)(A−B))/(C−B)
