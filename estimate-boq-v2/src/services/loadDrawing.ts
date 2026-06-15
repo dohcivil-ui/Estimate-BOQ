@@ -7,14 +7,12 @@
  * Local-only ใน Step 2.2 — ไม่อัปโหลด Storage (จะทำ Step 2.6)
  */
 import * as pdfjs from 'pdfjs-dist';
-import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+import { ensurePdfWorker } from './pdfWorker';
 import type {
   DrawingFile,
   DrawingPage,
   ImportResult,
 } from '@/types/drawing';
-
-pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
 const RENDER_SCALE = 2; // @2x = สมดุลความคมชัด vs memory
 const THUMB_WIDTH = 160;
@@ -65,6 +63,7 @@ async function renderPdf(
   ids?: ImportIdOverride,
 ): Promise<ImportResult> {
   const buf = await file.arrayBuffer();
+  await ensurePdfWorker();
   const doc = await pdfjs.getDocument({ data: buf }).promise;
 
   const fileId = ids?.fileId ?? crypto.randomUUID();

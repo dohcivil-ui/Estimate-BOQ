@@ -11,9 +11,7 @@
  * ⚠️ util ชั่วคราว — ลบทิ้งได้หลังตัดสินวิธี snap
  */
 import * as pdfjs from 'pdfjs-dist';
-import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
-
-pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+import { ensurePdfWorker } from './pdfWorker';
 
 export interface PdfProbePage {
   page: number;
@@ -49,6 +47,7 @@ function verdictFor(paths: number, images: number): PdfProbePage['verdict'] {
 /** probe ทุกหน้าของไฟล์ PDF + console.log สรุป */
 export async function probePdfVectorRaster(file: File): Promise<PdfProbePage[]> {
   const buf = await file.arrayBuffer();
+  await ensurePdfWorker();
   const doc = await pdfjs.getDocument({ data: buf }).promise;
   const out: PdfProbePage[] = [];
 
